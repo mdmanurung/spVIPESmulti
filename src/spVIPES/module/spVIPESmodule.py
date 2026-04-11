@@ -4,6 +4,7 @@ from typing import Literal, Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
+import zuko.flows
 from scvi import REGISTRY_KEYS
 from scvi.distributions import NegativeBinomialMixture
 from scvi.module.base import BaseModuleClass, LossOutput, auto_move_data
@@ -97,6 +98,15 @@ class spVIPESmodule(BaseModuleClass):
         groups_modality_var_indices: Optional[dict] = None,
         modality_likelihoods: Optional[dict[str, str]] = None,
         modality_names: Optional[list[str]] = None,
+        # Normalizing flow prior parameters
+        use_nf_prior: bool = False,
+        nf_type: Literal["NSF", "MAF"] = "NSF",
+        nf_transforms: int = 3,
+        nf_bins: int = 8,
+        nf_target: Literal["shared", "private", "both"] = "shared",
+        # Cycle consistency loss parameters
+        use_cycle_consistency: bool = False,
+        cycle_consistency_weight: float = 2.0,
     ):
         """
         Initialize the spVIPES variational autoencoder module.
@@ -224,6 +234,24 @@ class spVIPESmodule(BaseModuleClass):
         self.use_labels = use_labels
         self.n_labels = n_labels
         self.pair_data = pair_data
+
+        # Normalizing flow prior
+        self.use_nf_prior = use_nf_prior
+        self.nf_target = nf_target
+        if use_nf_prior:
+            flow_cls = zuko.flows.NSF if nf_type == "NSF" else zuko.flows.MAF
+            flow_kwargs = {"transforms": nf_transforms}
+            if nf_type == "NSF":
+                flow_kwargs["bins"] = nf_bins
+
+            if nf_target in ("shared", "both"):
+                self.flow_prior_shared = flow_cls(features=n_dimensions_shared, context=0, **flow_kwargs)
+            if nf_target in ("private", "both"):
+                self.flow_prior_private = flow_cls(features=n_dimensions_private, context=0, **flow_kwargs)
+
+        # Cycle consistency loss
+        self.use_cycle_consistency = use_cycle_consistency
+        self.cycle_consistency_weight = cycle_consistency_weight
 
     def _cluster_based_poe(
         self, shared_stats: dict, batch_transport_plans: dict[int, torch.Tensor], processed_labels: list[torch.Tensor]
@@ -715,6 +743,61 @@ class spVIPESmodule(BaseModuleClass):
         logvars_joint = torch.log(logvars_joint)
         return mus_joint, logvars_joint
 
+    def _nf_kl(self, qz, z, target: str):
+        """Compute KL divergence using normalizing flow prior via Monte Carlo.
+
+        KL(q(z|x) || p_flow(z)) ≈ log q(z|x) - log p_flow(z)
+
+        Parameters
+        ----------
+        qz : Normal
+            Posterior distribution q(z|x).
+        z : torch.Tensor
+            Samples from q(z|x).
+        target : str
+            Which flow to use: "shared" or "private".
+
+        Returns
+        -------
+        torch.Tensor
+            KL divergence per sample, shape (batch_size,).
+        """
+        if target == "shared":
+            flow_dist = self.flow_prior_shared()
+        else:
+            flow_dist = self.flow_prior_private()
+        log_qz = qz.log_prob(z).sum(dim=-1)  # sum over latent dims
+        log_pz = flow_dist.log_prob(z)  # flow gives scalar per sample
+        return log_qz - log_pz
+
+    @staticmethod
+    def _cycle_consistency_loss(z_original, z_cycled):
+        """Compute standardized MSE cycle consistency loss (sysVI-style).
+
+        MSE is computed on jointly-standardized latent representations
+        to prevent the model from trivializing the loss by shrinking latents.
+
+        Parameters
+        ----------
+        z_original : torch.Tensor
+            Latent means from original encoding, shape (batch_size, latent_dim).
+        z_cycled : torch.Tensor
+            Latent means from cycle encoding, shape (batch_size, latent_dim).
+
+        Returns
+        -------
+        torch.Tensor
+            Per-sample MSE loss, shape (batch_size,).
+        """
+        z_concat = torch.cat([z_original, z_cycled], dim=0)
+        means = z_concat.mean(dim=0, keepdim=True)
+        stds = z_concat.std(dim=0, keepdim=True).clamp(min=1e-6)
+
+        z_orig_std = (z_original - means) / stds
+        z_cycle_std = (z_cycled - means) / stds
+
+        return torch.nn.functional.mse_loss(z_orig_std, z_cycle_std, reduction="none").sum(dim=1)
+
     def _label_based_poe(self, shared_stats: dict, label_group: dict):
         """Label-based PoE for N >= 2 groups.
 
@@ -983,7 +1066,7 @@ class spVIPESmodule(BaseModuleClass):
         generative_outputs,
         kl_weight: float = 1.0,
     ):
-        """Loss function."""
+        """Loss function with optional NF prior KL and cycle consistency."""
         if self.is_multimodal:
             return self._loss_multimodal(tensors_by_group, inference_outputs, generative_outputs, kl_weight)
 
@@ -1003,24 +1086,27 @@ class spVIPESmodule(BaseModuleClass):
             # Reconstruction loss
             recon_loss = -generative_outputs["private_poe"][str(g)]["px"].log_prob(x[g]).sum(-1)
 
-            # KL divergences
+            # KL divergence — private latent
             qz_private = inference_outputs["private_stats"][g]["qz"]
-            kl_private = kl(
-                qz_private,
-                Normal(
-                    torch.zeros_like(inference_outputs["private_stats"][g]["log_z"]),
-                    torch.ones_like(inference_outputs["private_stats"][g]["log_z"]),
-                ),
-            ).sum(dim=1)
+            z_private = inference_outputs["private_stats"][g]["log_z"]
+            if self.use_nf_prior and self.nf_target in ("private", "both"):
+                kl_private = self._nf_kl(qz_private, z_private, "private")
+            else:
+                kl_private = kl(
+                    qz_private,
+                    Normal(torch.zeros_like(z_private), torch.ones_like(z_private)),
+                ).sum(dim=1)
 
+            # KL divergence — shared (PoE) latent
             qz_poe = inference_outputs["poe_stats"][g]["logtheta_qz"]
-            kl_poe = kl(
-                qz_poe,
-                Normal(
-                    torch.zeros_like(inference_outputs["poe_stats"][g]["logtheta_log_z"]),
-                    torch.ones_like(inference_outputs["poe_stats"][g]["logtheta_log_z"]),
-                ),
-            ).sum(dim=1)
+            z_poe = inference_outputs["poe_stats"][g]["logtheta_log_z"]
+            if self.use_nf_prior and self.nf_target in ("shared", "both"):
+                kl_poe = self._nf_kl(qz_poe, z_poe, "shared")
+            else:
+                kl_poe = kl(
+                    qz_poe,
+                    Normal(torch.zeros_like(z_poe), torch.ones_like(z_poe)),
+                ).sum(dim=1)
 
             extra_metrics[f"kl_divergence_private_group_{g}"] = kl_private.mean()
             extra_metrics[f"kl_divergence_poe_group_{g}"] = kl_poe.mean()
@@ -1030,6 +1116,56 @@ class spVIPESmodule(BaseModuleClass):
 
             group_loss = recon_loss + kl_weight * kl_private + kl_weight * kl_poe
             total_loss = group_loss if total_loss is None else total_loss + group_loss
+
+        # Cycle consistency loss: for each group, decode shared PoE latent
+        # through a randomly selected different group's decoder, then re-encode
+        # and minimize distance between original and cycled shared latent.
+        if self.use_cycle_consistency and n_groups >= 2 and not self.is_multimodal:
+            cycle_loss_total = torch.zeros(1, device=total_loss.device)
+            batch_index = [group[REGISTRY_KEYS.BATCH_KEY] for group in tensors_by_group]
+
+            for g in range(n_groups):
+                # Pick a different group for cycle
+                g_other = (g + 1) % n_groups
+                z_shared_original = inference_outputs["poe_stats"][g]["logtheta_log_z"]
+
+                # Combine with group g's private latent for decoding through g_other's decoder
+                z_private_g = inference_outputs["private_stats"][g]["log_z"]
+                z_combined = torch.cat((z_private_g, z_shared_original), dim=-1)
+
+                # Decode through the other group's decoder
+                decoder_other = self.decoders[g_other]
+                batch_other = batch_index[g_other]
+                # Truncate/pad batch to match sizes
+                min_size = min(z_combined.shape[0], batch_other.shape[0])
+                px_scale_private, px_scale_shared, px_rate_private, px_rate_shared, px_mixing, px_scale = decoder_other(
+                    self.dispersion,
+                    z_combined[:min_size, self.n_dimensions_shared : self.n_dimensions_private + self.n_dimensions_shared],
+                    z_combined[:min_size, : self.n_dimensions_shared],
+                    torch.log(x[g_other][:min_size].sum(1).clamp(min=1)).unsqueeze(1),
+                    batch_other[:min_size],
+                )
+                # Use the shared reconstruction rate as the cycle input
+                x_cycle = px_rate_shared
+
+                # Re-encode through the other group's shared encoder
+                if self.log_variational_inference:
+                    x_cycle_enc = torch.log(1 + x_cycle)
+                else:
+                    x_cycle_enc = x_cycle
+                shared_encoder_other = self.encoders[g_other]["shared"]
+                cycle_stats = shared_encoder_other(x_cycle_enc, g_other, batch_other[:min_size])
+                z_shared_cycled = cycle_stats["logtheta_loc"]
+
+                # Standardized MSE
+                cycle_loss = self._cycle_consistency_loss(
+                    z_shared_original[:min_size], z_shared_cycled
+                )
+                cycle_loss_total = cycle_loss_total + cycle_loss.mean()
+                extra_metrics[f"cycle_loss_group_{g}"] = cycle_loss.mean()
+
+            total_loss = total_loss + self.cycle_consistency_weight * cycle_loss_total
+            extra_metrics["cycle_loss"] = cycle_loss_total / n_groups
 
         loss = torch.mean(total_loss)
 

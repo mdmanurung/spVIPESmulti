@@ -229,6 +229,12 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
         n_dimensions_shared: int = 25,
         n_dimensions_private: int = 10,
         dropout_rate: float = 0.1,
+        use_nf_prior: bool = False,
+        nf_type: str = "NSF",
+        nf_transforms: int = 3,
+        nf_target: str = "shared",
+        use_cycle_consistency: bool = False,
+        cycle_consistency_weight: float = 2.0,
         **model_kwargs,
     ):
         super().__init__(adata)
@@ -285,13 +291,20 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
             groups_modality_var_indices=groups_modality_var_indices,
             modality_likelihoods=modality_likelihoods,
             modality_names=modality_names,
+            use_nf_prior=use_nf_prior,
+            nf_type=nf_type,
+            nf_transforms=nf_transforms,
+            nf_target=nf_target,
+            use_cycle_consistency=use_cycle_consistency,
+            cycle_consistency_weight=cycle_consistency_weight,
             **model_kwargs,
         )
 
         is_multimodal = groups_modality_lengths is not None
         self._model_summary_string = (
             "spVIPES Model with the following params: \nn_hidden: {}, n_dimensions_shared: {}, "
-            "n_dimensions_private: {}, dropout_rate: {}, transport_plan: {}, multimodal: {}"
+            "n_dimensions_private: {}, dropout_rate: {}, transport_plan: {}, multimodal: {}, "
+            "nf_prior: {}, cycle_consistency: {}"
         ).format(
             n_hidden,
             n_dimensions_shared,
@@ -299,6 +312,8 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
             dropout_rate,
             "Provided" if transport_plan is not None else "Not provided",
             "Yes" if is_multimodal else "No",
+            f"{nf_type}({nf_transforms} transforms, target={nf_target})" if use_nf_prior else "No",
+            f"Yes (weight={cycle_consistency_weight})" if use_cycle_consistency else "No",
         )
         self.init_params_ = self._get_init_params(locals())
 
