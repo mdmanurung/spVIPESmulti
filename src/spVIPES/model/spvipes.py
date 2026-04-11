@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 def process_transport_plan(transport_plan, adata, groups_key):
     """
     Process the transport plan using cluster labels to create a common set of clusters between datasets.
+    Only supports exactly 2 groups.
 
     Parameters
     ----------
@@ -42,6 +43,14 @@ def process_transport_plan(transport_plan, adata, groups_key):
         Array of processed cluster labels for all cells.
     """
     transport_plan = np.nan_to_num(transport_plan, nan=0.0)
+
+    # Extract the groups - only 2 groups supported for transport plan processing
+    groups = adata.obs[groups_key].unique()
+    if len(groups) != 2:
+        raise ValueError(
+            f"Transport plan processing only supports exactly 2 groups, got {len(groups)}. "
+            "Use label-based PoE for more than 2 groups."
+        )
 
     # Extract the groups
     groups = adata.obs[groups_key].unique()
@@ -251,6 +260,12 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
         use_labels = "labels" in self.adata_manager.data_registry
         n_labels = self.summary_stats.n_labels if use_labels else None
 
+        # Multimodal parameters (if available)
+        groups_modality_lengths = adata.uns.get("groups_modality_lengths")
+        groups_modality_var_indices = adata.uns.get("groups_modality_var_indices")
+        modality_likelihoods = adata.uns.get("modality_likelihoods")
+        modality_names = adata.uns.get("modality_names")
+
         self.module = spVIPESmodule(
             groups_lengths=groups_lengths,
             groups_obs_names=groups_obs_names,
@@ -266,17 +281,24 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
             n_dimensions_shared=n_dimensions_shared,
             n_dimensions_private=n_dimensions_private,
             dropout_rate=dropout_rate,
+            groups_modality_lengths=groups_modality_lengths,
+            groups_modality_var_indices=groups_modality_var_indices,
+            modality_likelihoods=modality_likelihoods,
+            modality_names=modality_names,
             **model_kwargs,
         )
 
+        is_multimodal = groups_modality_lengths is not None
         self._model_summary_string = (
-            "spVIPES Model with the following params: \nn_hidden: {}, n_dimensions_shared: {}, n_dimensions_private: {}, dropout_rate: {}, transport_plan: {}"
+            "spVIPES Model with the following params: \nn_hidden: {}, n_dimensions_shared: {}, "
+            "n_dimensions_private: {}, dropout_rate: {}, transport_plan: {}, multimodal: {}"
         ).format(
             n_hidden,
             n_dimensions_shared,
             n_dimensions_private,
             dropout_rate,
             "Provided" if transport_plan is not None else "Not provided",
+            "Yes" if is_multimodal else "No",
         )
         self.init_params_ = self._get_init_params(locals())
 
@@ -293,6 +315,7 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
         label_key: Optional[str] = None,
         batch_key: Optional[str] = None,
         layer: Optional[str] = None,
+        modality_likelihoods: Optional[dict[str, str]] = None,
         **kwargs,
     ) -> None:
         """
@@ -323,6 +346,10 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
             Key in `adata.obs` for batch information to enable batch effect correction.
         layer : str, optional
             Key in `adata.layers` to use for the expression data. If None, uses `adata.X`.
+        modality_likelihoods : dict[str, str], optional
+            Mapping from modality name to likelihood type for multimodal data.
+            Supported values: ``"nb"`` (NegativeBinomial) and ``"gaussian"``.
+            If ``None``, single-modality mode with NB likelihood (backward compatible).
         **kwargs
             Additional keyword arguments passed to the parent setup method.
 
@@ -415,6 +442,11 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
         else:
             print("⚠️  No transport plan or labels configured - you may need one for integration")
 
+        # Store multimodal configuration if provided
+        if modality_likelihoods is not None:
+            adata.uns["modality_likelihoods"] = modality_likelihoods
+            print(f"✓ Multimodal: Configured with likelihoods {modality_likelihoods}")
+
         print("=" * 45)
 
         adata_manager = AnnDataManager(fields=anndata_fields, setup_method_args=setup_method_args)
@@ -463,36 +495,17 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
         Low-dimensional topic for each cell.
         """
         adata = self._validate_anndata(adata)
-        n_groups_1, n_groups_2 = (len(group) for group in group_indices_list)
+        n_groups = len(group_indices_list)
+        n_per_group = [len(group) for group in group_indices_list]
 
         # Automatically determine drop_last based on PoE type if not specified
         if drop_last is None:
-            # Prioritize label-based PoE (drop_last=False) when labels are available
             if self.module.use_labels and "labels" in self.adata_manager.data_registry:
-                print("Using label-based PoE with drop_last=False")
-                drop_last = False  # Label-based PoE can handle unequal batches
+                drop_last = False
             elif self.module.use_transport_plan and self.module.pair_data:
-                print("Using paired PoE with drop_last=False (will use special handling)")
-                drop_last = False  # Use special handling to preserve all cells
+                drop_last = False
             else:
-                print("Using cluster-based PoE with drop_last=False")
-                drop_last = False  # Cluster-based PoE can handle unequal batches
-        else:
-            print(f"User specified drop_last={drop_last}")
-
-        print(f"Input cells: Group 1: {n_groups_1}, Group 2: {n_groups_2}")
-        print(f"Using pair_data: {self.module.pair_data}")
-        print(f"Using transport plan: {self.module.use_transport_plan}")
-        print(f"Using labels: {self.module.use_labels}")
-
-        # Determine which PoE will actually be used
-        if self.module.use_labels and "labels" in self.adata_manager.data_registry:
-            print("Will use: Label-based PoE")
-        elif self.module.use_transport_plan:
-            if self.module.pair_data:
-                print("Will use: Paired PoE")
-            else:
-                print("Will use: Cluster-based PoE")
+                drop_last = False
 
         # For paired PoE with drop_last=False, use cycling to handle unequal group sizes
         use_cycling = (
@@ -501,14 +514,12 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
             and not drop_last
             and not (self.module.use_labels and "labels" in self.adata_manager.data_registry)
         )
-        print(f"Use cycling approach: {use_cycling}")
 
         if use_cycling:
-            print("Using cycling approach for paired PoE with drop_last=False")
             results = self._process_all_cells_with_cycling(
                 group_indices_list, normalized, give_mean, mc_samples, batch_size
             )
-            return self._format_results(results, n_groups_1, n_groups_2)
+            return self._format_results(results, n_per_group)
 
         # Standard processing
         scdl = ConcatDataLoader(
@@ -519,135 +530,167 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
             batch_size=batch_size,
         )
 
-        results = self._process_batches(scdl, normalized, give_mean, mc_samples)
-        final_results = self._format_results(results, n_groups_1, n_groups_2)
+        results = self._process_batches(scdl, normalized, give_mean, mc_samples, n_groups)
+        return self._format_results(results, n_per_group)
 
-        return final_results
+    def _process_batches(self, dataloader, normalized, give_mean, mc_samples, n_groups=None):
+        """Process batches and return intermediate results for N groups."""
+        if n_groups is None:
+            # Infer from first batch
+            for tensors_by_group in dataloader:
+                n_groups = len(tensors_by_group)
+                break
+            else:
+                raise ValueError("Dataloader is empty")
+            # Re-create dataloader since we consumed the first batch
+            # Instead, we just set n_groups from the dataloader's own data
+            # This is a fallback; callers should pass n_groups explicitly
 
-    def _process_batches(self, dataloader, normalized, give_mean, mc_samples):
-        """Process batches and return intermediate results."""
-        groups_1_latent_shared = []
-        groups_2_latent_shared = []
-        groups_1_latent = []
-        groups_2_latent = []
-        groups_1_original_indices = []
-        groups_2_original_indices = []
+        latent_shared = {g: [] for g in range(n_groups)}
+        latent_private = {g: [] for g in range(n_groups)}
+        original_indices = {g: [] for g in range(n_groups)}
+
+        # For multimodal: per-(group, modality) private latents
+        is_multimodal = self.module.is_multimodal
+        latent_private_multimodal = {} if is_multimodal else None
+        if is_multimodal:
+            for g in range(n_groups):
+                for mod in self.module.group_modalities[g]:
+                    latent_private_multimodal[(g, mod)] = []
 
         for tensors_by_group in dataloader:
             inference_inputs = self.module._get_inference_input(tensors_by_group)
             outputs = self.module.inference(**inference_inputs)
-            _, _, _, poe_qz_groups_1, poe_log_z_groups_1, poe_theta_groups_1 = outputs["poe_stats"][0].values()
-            _, _, _, poe_qz_groups_2, poe_log_z_groups_2, poe_theta_groups_2 = outputs["poe_stats"][1].values()
 
-            if not normalized:
-                groups_1_latent_shared += [poe_log_z_groups_1.cpu()]
-                groups_2_latent_shared += [poe_log_z_groups_2.cpu()]
+            for g in range(n_groups):
+                # Shared (PoE) latent
+                poe_log_z = outputs["poe_stats"][g]["logtheta_log_z"]
+                if not normalized:
+                    latent_shared[g].append(poe_log_z.cpu())
 
-            _, _, _, groups_1_private_log_z, groups_1_private_theta, groups_1_private_qz = outputs["private_stats"][
-                0
-            ].values()
-            _, _, _, groups_2_private_log_z, groups_2_private_theta, groups_2_private_qz = outputs["private_stats"][
-                1
-            ].values()
-            if not normalized:
-                groups_1_latent += [groups_1_private_log_z.cpu()]
-                groups_2_latent += [groups_2_private_log_z.cpu()]
-            else:
-                if give_mean:
-                    groups_1_samples = groups_1_private_qz.sample([mc_samples])
-                    groups_2_samples = groups_2_private_qz.sample([mc_samples])
-                    theta_groups_1 = torch.nn.functional.softmax(groups_1_samples, dim=-1)
-                    theta_groups_1 = theta_groups_1.mean(dim=0)
-                    theta_groups_2 = torch.nn.functional.softmax(groups_2_samples, dim=-1)
-                    theta_groups_2 = theta_groups_2.mean(dim=0)
-                groups_1_latent += [theta_groups_1.cpu()]
-                groups_2_latent += [theta_groups_2.cpu()]
+                # Private latent (group-level)
+                private_log_z = outputs["private_stats"][g]["log_z"]
+                private_qz = outputs["private_stats"][g]["qz"]
+                if not normalized:
+                    latent_private[g].append(private_log_z.cpu())
+                else:
+                    if give_mean:
+                        samples = private_qz.sample([mc_samples])
+                        theta = torch.nn.functional.softmax(samples, dim=-1).mean(dim=0)
+                    else:
+                        theta = outputs["private_stats"][g]["theta"]
+                    latent_private[g].append(theta.cpu())
 
-            groups_1_original_indices += [tensors_by_group[0]["indices"].cpu()]
-            groups_2_original_indices += [tensors_by_group[1]["indices"].cpu()]
+                original_indices[g].append(tensors_by_group[g]["indices"].cpu())
 
-        return {
-            "groups_1_latent_shared": groups_1_latent_shared,
-            "groups_2_latent_shared": groups_2_latent_shared,
-            "groups_1_latent": groups_1_latent,
-            "groups_2_latent": groups_2_latent,
-            "groups_1_original_indices": groups_1_original_indices,
-            "groups_2_original_indices": groups_2_original_indices,
+                # Multimodal: collect per-modality private latents
+                if is_multimodal and "per_modality_private" in outputs:
+                    for mod in self.module.group_modalities[g]:
+                        mod_private = outputs["per_modality_private"].get((g, mod))
+                        if mod_private is not None:
+                            if not normalized:
+                                latent_private_multimodal[(g, mod)].append(mod_private["log_z"].cpu())
+                            else:
+                                mod_qz = mod_private["qz"]
+                                if give_mean:
+                                    samples = mod_qz.sample([mc_samples])
+                                    theta = torch.nn.functional.softmax(samples, dim=-1).mean(dim=0)
+                                else:
+                                    theta = mod_private["theta"]
+                                latent_private_multimodal[(g, mod)].append(theta.cpu())
+
+        result = {
+            "latent_shared": latent_shared,
+            "latent_private": latent_private,
+            "original_indices": original_indices,
         }
+        if is_multimodal:
+            result["latent_private_multimodal"] = latent_private_multimodal
+        return result
 
     def _process_all_cells_with_cycling(self, group_indices_list, normalized, give_mean, mc_samples, batch_size):
         """Process all cells using cycling approach to handle unequal group sizes."""
-        # Find minimum and maximum group sizes
-        min_group_size = min(len(group_indices_list[0]), len(group_indices_list[1]))
-        max_group_size = max(len(group_indices_list[0]), len(group_indices_list[1]))
+        n_groups = len(group_indices_list)
+        group_sizes = [len(indices) for indices in group_indices_list]
+        min_group_size = min(group_sizes)
+        max_group_size = max(group_sizes)
 
         if min_group_size == 0:
             raise ValueError("One of the groups is empty")
 
-        # Initialize results
         results = {
-            "groups_1_latent_shared": [],
-            "groups_2_latent_shared": [],
-            "groups_1_latent": [],
-            "groups_2_latent": [],
-            "groups_1_original_indices": [],
-            "groups_2_original_indices": [],
+            "latent_shared": {g: [] for g in range(n_groups)},
+            "latent_private": {g: [] for g in range(n_groups)},
+            "original_indices": {g: [] for g in range(n_groups)},
         }
 
-        # Process all cells by cycling through in chunks of min_group_size
         for start_idx in range(0, max_group_size, min_group_size):
-            # Get chunk indices, cycling through the smaller group as needed
-            chunk_indices_1 = []
-            chunk_indices_2 = []
+            chunk_indices = []
+            for g in range(n_groups):
+                group_chunk = []
+                for i in range(min_group_size):
+                    idx = (start_idx + i) % len(group_indices_list[g])
+                    group_chunk.append(group_indices_list[g][idx])
+                chunk_indices.append(group_chunk)
 
-            for i in range(min_group_size):
-                # Use modulo to cycle through indices if one group is smaller
-                idx1 = (start_idx + i) % len(group_indices_list[0])
-                idx2 = (start_idx + i) % len(group_indices_list[1])
-                chunk_indices_1.append(group_indices_list[0][idx1])
-                chunk_indices_2.append(group_indices_list[1][idx2])
-
-            # Create dataloader for this chunk
             chunk_scdl = ConcatDataLoader(
                 self.adata_manager,
-                indices_list=[chunk_indices_1, chunk_indices_2],
+                indices_list=chunk_indices,
                 shuffle=False,
                 drop_last=False,
                 batch_size=batch_size,
             )
 
-            # Process this chunk
-            chunk_results = self._process_batches(chunk_scdl, normalized, give_mean, mc_samples)
+            chunk_results = self._process_batches(chunk_scdl, normalized, give_mean, mc_samples, n_groups)
 
-            # Add chunk results to overall results
             for key in results:
-                results[key].extend(chunk_results[key])
+                for g in range(n_groups):
+                    results[key][g].extend(chunk_results[key][g])
 
         return results
 
-    def _format_results(self, results, n_groups_1, n_groups_2):
-        """Format the final results dictionary."""
-        groups_2_original_indices = torch.cat(results["groups_2_original_indices"]).numpy().flatten()[:n_groups_2]
+    def _format_results(self, results, n_per_group):
+        """Format the final results dictionary for N groups."""
+        n_groups = len(n_per_group)
 
-        groups_1_latent = torch.cat(results["groups_1_latent"]).numpy()[:n_groups_1]
-        groups_2_latent = torch.cat(results["groups_2_latent"]).numpy()[:n_groups_2]
-        groups_1_latent_shared = torch.cat(results["groups_1_latent_shared"]).numpy()[:n_groups_1]
-        groups_2_latent_shared = torch.cat(results["groups_2_latent_shared"]).numpy()[:n_groups_2]
+        latent_private = {}
+        latent_shared = {}
+        latent_private_reordered = {}
+        latent_shared_reordered = {}
 
-        latent_private = {0: groups_1_latent, 1: groups_2_latent}
-        latent_shared = {0: groups_1_latent_shared, 1: groups_2_latent_shared}
-        latent_private_reordered = {0: groups_1_latent, 1: groups_2_latent[np.argsort(groups_2_original_indices)]}
-        latent_shared_reordered = {
-            0: groups_1_latent_shared,
-            1: groups_2_latent_shared[np.argsort(groups_2_original_indices)],
-        }
+        for g in range(n_groups):
+            n_g = n_per_group[g]
+            g_private = torch.cat(results["latent_private"][g]).numpy()[:n_g]
+            g_shared = torch.cat(results["latent_shared"][g]).numpy()[:n_g]
+            g_indices = torch.cat(results["original_indices"][g]).numpy().flatten()[:n_g]
 
-        return {
+            latent_private[g] = g_private
+            latent_shared[g] = g_shared
+            latent_private_reordered[g] = g_private[np.argsort(g_indices)]
+            latent_shared_reordered[g] = g_shared[np.argsort(g_indices)]
+
+        output = {
             "shared": latent_shared,
             "private": latent_private,
             "shared_reordered": latent_shared_reordered,
             "private_reordered": latent_private_reordered,
         }
+
+        # Add per-(group, modality) private latents if multimodal
+        if "latent_private_multimodal" in results:
+            private_multimodal = {}
+            private_multimodal_reordered = {}
+            for (g, mod), tensors in results["latent_private_multimodal"].items():
+                if tensors:
+                    n_g = n_per_group[g]
+                    g_mod_private = torch.cat(tensors).numpy()[:n_g]
+                    g_indices = torch.cat(results["original_indices"][g]).numpy().flatten()[:n_g]
+                    private_multimodal[(g, mod)] = g_mod_private
+                    private_multimodal_reordered[(g, mod)] = g_mod_private[np.argsort(g_indices)]
+            output["private_multimodal"] = private_multimodal
+            output["private_multimodal_reordered"] = private_multimodal_reordered
+
+        return output
 
     def get_loadings(self) -> dict:
         """Extract per-gene weights in the linear decoder.

@@ -2,6 +2,7 @@ from typing import Optional, Union
 
 import anndata as ad
 import numpy as np
+from scipy.sparse import issparse
 
 
 def prepare_adatas(
@@ -21,7 +22,7 @@ def prepare_adatas(
     adatas : dict[str, AnnData]
         Dictionary mapping group names (strings) to their corresponding AnnData objects.
         Each AnnData contains single-cell expression data for one group/dataset.
-        Currently supports exactly 2 groups.
+        Requires at least 2 groups.
     layers : list[list[str or None]], optional
         Specification of which layers to use from each AnnData object. Currently
         not implemented in the function body.
@@ -44,7 +45,7 @@ def prepare_adatas(
     Raises
     ------
     ValueError
-        If more or fewer than 2 groups are provided (current limitation).
+        If fewer than 2 groups are provided.
 
     Notes
     -----
@@ -91,8 +92,8 @@ def prepare_adatas(
     groups_lengths = {}
     groups_var_names = {}  # Changed to dictionary
     groups_mapping = {}
-    if len(adatas) != 2:
-        raise ValueError("Currently only 2 groups are supported")
+    if len(adatas) < 2:
+        raise ValueError("At least 2 groups are required")
 
     for i, (groups, adata) in enumerate(adatas.items()):
         if adata is not None:
@@ -127,6 +128,180 @@ def prepare_adatas(
     # Create indices column
     indices = []
     for _, group_indices in zip(adatas.keys(), multigroups_adata.uns["groups_obs_indices"]):
+        group_size = len(group_indices)
+        indices.extend(np.arange(group_size, dtype=np.int32))
+    multigroups_adata.obs["indices"] = indices
+
+    return multigroups_adata
+
+
+def prepare_multimodal_adatas(
+    adatas: dict[str, dict[str, ad.AnnData]],
+    modality_likelihoods: Optional[dict[str, str]] = None,
+):
+    """
+    Prepare and concatenate multimodal AnnData objects for spVIPES integration.
+
+    Each group can have one or more modalities (e.g., RNA, protein, ATAC).
+    All data is concatenated into a single AnnData with metadata tracking
+    per-group, per-modality feature indices.
+
+    Parameters
+    ----------
+    adatas : dict[str, dict[str, AnnData]]
+        Nested dictionary: outer keys are group names, inner keys are modality names,
+        values are AnnData objects. E.g.::
+
+            {
+                "treatment": {"rna": adata_rna_treat, "protein": adata_prot_treat},
+                "control": {"rna": adata_rna_ctrl, "protein": adata_prot_ctrl},
+            }
+
+        Requires at least 2 groups. All groups must share at least one modality.
+        Cells (observations) must be the same within each group across modalities.
+    modality_likelihoods : dict[str, str], optional
+        Mapping from modality name to likelihood type. Supported values:
+        ``"nb"`` (NegativeBinomial for count data) and ``"gaussian"``
+        (for log-normalized data). If ``None``, all modalities default to ``"nb"``.
+
+    Returns
+    -------
+    AnnData
+        Concatenated AnnData object with multimodal metadata in ``.uns``:
+
+        - **is_multimodal** : ``True``
+        - **modality_names** : list of modality names
+        - **modality_likelihoods** : dict mapping modality → likelihood type
+        - **groups_modality_lengths** : ``{group_idx: {modality: n_features}}``
+        - **groups_modality_var_indices** : ``{group_idx: {modality: var_index_array}}``
+        - **groups_lengths** : ``{group_idx: total_n_features}`` (sum across modalities)
+        - **groups_var_indices** : list of var index arrays per group
+        - **groups_obs_indices** : list of obs index arrays per group
+        - **groups_obs_names** : list of obs names per group
+        - **groups_var_names** : dict of var names per group
+        - **groups_mapping** : dict mapping group index → group name
+
+    Raises
+    ------
+    ValueError
+        If fewer than 2 groups, or groups share no common modality.
+    """
+    if len(adatas) < 2:
+        raise ValueError("At least 2 groups are required")
+
+    group_names = list(adatas.keys())
+    all_modalities = set()
+    group_modalities = {}
+    for group_name, mod_dict in adatas.items():
+        mods = set(mod_dict.keys())
+        if not mods:
+            raise ValueError(f"Group '{group_name}' has no modalities")
+        group_modalities[group_name] = mods
+        all_modalities |= mods
+
+    # Verify at least one shared modality
+    shared_modalities = set.intersection(*group_modalities.values())
+    if not shared_modalities:
+        raise ValueError("Groups must share at least one modality")
+
+    modality_names = sorted(all_modalities)
+
+    # Set default likelihoods
+    if modality_likelihoods is None:
+        modality_likelihoods = {m: "nb" for m in modality_names}
+    else:
+        for m in modality_names:
+            if m not in modality_likelihoods:
+                modality_likelihoods[m] = "nb"
+
+    # Validate likelihood values
+    valid_likelihoods = {"nb", "gaussian"}
+    for m, lk in modality_likelihoods.items():
+        if lk not in valid_likelihoods:
+            raise ValueError(f"Unsupported likelihood '{lk}' for modality '{m}'. Must be one of {valid_likelihoods}")
+
+    # Build per-group combined AnnData (concatenating modalities along var axis)
+    combined_adatas = {}
+    groups_obs_names = []
+    groups_mapping = {}
+    groups_lengths = {}
+    groups_var_names = {}
+    groups_modality_lengths = {}
+    # Track var name prefixes for modality-level indices after final concatenation
+    group_modality_var_prefixes = {}
+
+    for i, group_name in enumerate(group_names):
+        groups_mapping[i] = group_name
+        mod_dict = adatas[group_name]
+        mod_adatas = []
+        groups_modality_lengths[i] = {}
+        group_modality_var_prefixes[i] = {}
+
+        # Get the shared obs (cells) from first modality
+        first_mod = next(iter(mod_dict.values()))
+        groups_obs_names.append(first_mod.obs_names)
+
+        for modality in modality_names:
+            if modality not in mod_dict:
+                continue
+            mod_adata = mod_dict[modality].copy()
+            n_features = mod_adata.n_vars
+            groups_modality_lengths[i][modality] = n_features
+
+            # Prefix var names: {group}_{modality}_{original_var_name}
+            prefix = f"{group_name}_{modality}_"
+            mod_adata.var_names = prefix + mod_adata.var_names
+            group_modality_var_prefixes[i][modality] = prefix
+            mod_adatas.append(mod_adata)
+
+        # Concatenate modalities within this group (along var axis)
+        if len(mod_adatas) == 1:
+            group_adata = mod_adatas[0]
+        else:
+            group_adata = ad.concat(mod_adatas, axis=1, merge="same")
+
+        group_adata.obs["groups"] = group_name
+        groups_lengths[i] = group_adata.n_vars
+        groups_var_names[group_name] = group_adata.var_names
+        combined_adatas[group_name] = group_adata
+
+    # Concatenate all groups (along obs axis, outer join on vars)
+    multigroups_adata = ad.concat(combined_adatas, join="outer", label="groups", index_unique="-")
+
+    # Compute group-level var and obs indices
+    multigroups_adata.uns["groups_var_indices"] = [
+        np.where(multigroups_adata.var_names.str.startswith(f"{group_names[i]}_"))[0]
+        for i in range(len(group_names))
+    ]
+    multigroups_adata.uns["groups_obs_indices"] = [
+        np.where(multigroups_adata.obs["groups"].str.startswith(group_names[i]))[0]
+        for i in range(len(group_names))
+    ]
+
+    # Compute per-group, per-modality var indices in the concatenated adata
+    groups_modality_var_indices = {}
+    for i, group_name in enumerate(group_names):
+        groups_modality_var_indices[i] = {}
+        for modality in modality_names:
+            prefix = group_modality_var_prefixes[i].get(modality)
+            if prefix is not None:
+                indices = np.where(multigroups_adata.var_names.str.startswith(prefix))[0]
+                groups_modality_var_indices[i][modality] = indices
+
+    # Store all metadata
+    multigroups_adata.uns["is_multimodal"] = True
+    multigroups_adata.uns["modality_names"] = modality_names
+    multigroups_adata.uns["modality_likelihoods"] = modality_likelihoods
+    multigroups_adata.uns["groups_modality_lengths"] = groups_modality_lengths
+    multigroups_adata.uns["groups_modality_var_indices"] = groups_modality_var_indices
+    multigroups_adata.uns["groups_obs_names"] = groups_obs_names
+    multigroups_adata.uns["groups_lengths"] = groups_lengths
+    multigroups_adata.uns["groups_var_names"] = groups_var_names
+    multigroups_adata.uns["groups_mapping"] = groups_mapping
+
+    # Create indices column (within-group cell indices)
+    indices = []
+    for _, group_indices in zip(group_names, multigroups_adata.uns["groups_obs_indices"]):
         group_size = len(group_indices)
         indices.extend(np.arange(group_size, dtype=np.int32))
     multigroups_adata.obs["indices"] = indices

@@ -92,6 +92,11 @@ class spVIPESmodule(BaseModuleClass):
         log_variational_inference: bool = True,
         log_variational_generative: bool = True,
         dispersion: Literal["gene", "gene-batch", "gene-cell"] = "gene",
+        # Multimodal parameters
+        groups_modality_lengths: Optional[dict] = None,
+        groups_modality_var_indices: Optional[dict] = None,
+        modality_likelihoods: Optional[dict[str, str]] = None,
+        modality_names: Optional[list[str]] = None,
     ):
         """
         Initialize the spVIPES variational autoencoder module.
@@ -108,16 +113,15 @@ class spVIPESmodule(BaseModuleClass):
         separate encoders and decoders for each group while sharing the latent space
         structure for integration.
 
-        The dispersion parameter controls how the negative binomial distribution variance
-        is modeled, with gene-level being the most common choice for single-cell data.
+        For multimodal data, provide ``groups_modality_lengths``, ``groups_modality_var_indices``,
+        ``modality_likelihoods``, and ``modality_names``. Each (group, modality) pair gets
+        its own encoder and decoder, with a two-level PoE: intra-group across modalities,
+        then inter-group.
         """
         super().__init__()
         self.n_dimensions_shared = n_dimensions_shared
         self.n_dimensions_private = n_dimensions_private
         self.n_batch = n_batch
-        self.px_r = torch.nn.ParameterList(
-            [torch.nn.Parameter(torch.randn(length)) for length in groups_lengths.values()]
-        )
         self.input_dims = groups_lengths
         self.groups_barcodes = groups_obs_names
         self.groups_genes = groups_var_names
@@ -129,50 +133,90 @@ class spVIPESmodule(BaseModuleClass):
         self.dispersion = dispersion
         self.log_variational_inference = log_variational_inference
         self.log_variational_generative = log_variational_generative
-        # cat_list includes both batch ids and cat_covs
+
+        # Multimodal configuration
+        self.is_multimodal = groups_modality_lengths is not None
+        self.groups_modality_lengths = groups_modality_lengths
+        self.groups_modality_var_indices = groups_modality_var_indices
+        self.modality_likelihoods = modality_likelihoods or {}
+        self.modality_names = modality_names or []
+        # Track which modalities each group has
+        if self.is_multimodal:
+            self.group_modalities = {g: list(mod_dict.keys()) for g, mod_dict in groups_modality_lengths.items()}
+        else:
+            self.group_modalities = None
+
         cat_list = [n_batch] if n_batch > 0 else None
-        self.encoders = {
-            groups: {
-                "shared": Encoder(
-                    x_dim,
-                    n_dimensions_shared,
-                    hidden=n_hidden,
-                    dropout=dropout_rate,
-                    n_cat_list=cat_list,
-                    groups=groups,
-                ),
-                "private": Encoder(
-                    x_dim,
-                    n_dimensions_private,
-                    hidden=n_hidden,
-                    dropout=dropout_rate,
-                    n_cat_list=cat_list,
-                    groups=groups,
-                ),
-            }
-            for groups, x_dim in self.input_dims.items()
-        }
 
-        # n_input_decoder = n_dimensions_shared + n_dimensions_private
-        self.decoders = {
-            groups: LinearDecoderSPVIPE(
-                n_dimensions_private,
-                n_dimensions_shared,
-                x_dim,
-                # hidden=n_hidden,
-                n_cat_list=cat_list,
-                use_batch_norm=True,
-                use_layer_norm=False,
-                bias=False,
+        if self.is_multimodal:
+            # Multimodal mode: per-(group, modality) encoders and decoders
+            self.px_r = torch.nn.ParameterDict()
+            self.encoders = {}
+            self.decoders = {}
+
+            for group, mod_dict in groups_modality_lengths.items():
+                for modality, n_features in mod_dict.items():
+                    key = f"{group}_{modality}"
+                    self.px_r[key] = torch.nn.Parameter(torch.randn(n_features))
+
+                    self.encoders[(group, modality)] = {
+                        "shared": Encoder(
+                            n_features, n_dimensions_shared,
+                            hidden=n_hidden, dropout=dropout_rate,
+                            n_cat_list=cat_list, groups=group,
+                        ),
+                        "private": Encoder(
+                            n_features, n_dimensions_private,
+                            hidden=n_hidden, dropout=dropout_rate,
+                            n_cat_list=cat_list, groups=group,
+                        ),
+                    }
+                    self.decoders[(group, modality)] = LinearDecoderSPVIPE(
+                        n_dimensions_private, n_dimensions_shared, n_features,
+                        n_cat_list=cat_list, use_batch_norm=True,
+                        use_layer_norm=False, bias=False,
+                    )
+
+            # Register sub-modules
+            for (group, modality), enc_dict in self.encoders.items():
+                self.add_module(f"encoder_{group}_{modality}_shared", enc_dict["shared"])
+                self.add_module(f"encoder_{group}_{modality}_private", enc_dict["private"])
+            for (group, modality), dec in self.decoders.items():
+                self.add_module(f"decoder_{group}_{modality}", dec)
+        else:
+            # Single-modality mode (backward compatible)
+            self.px_r = torch.nn.ParameterList(
+                [torch.nn.Parameter(torch.randn(length)) for length in groups_lengths.values()]
             )
-            for groups, x_dim in self.input_dims.items()
-        }
+            self.encoders = {
+                groups: {
+                    "shared": Encoder(
+                        x_dim, n_dimensions_shared,
+                        hidden=n_hidden, dropout=dropout_rate,
+                        n_cat_list=cat_list, groups=groups,
+                    ),
+                    "private": Encoder(
+                        x_dim, n_dimensions_private,
+                        hidden=n_hidden, dropout=dropout_rate,
+                        n_cat_list=cat_list, groups=groups,
+                    ),
+                }
+                for groups, x_dim in self.input_dims.items()
+            }
+            self.decoders = {
+                groups: LinearDecoderSPVIPE(
+                    n_dimensions_private, n_dimensions_shared, x_dim,
+                    n_cat_list=cat_list, use_batch_norm=True,
+                    use_layer_norm=False, bias=False,
+                )
+                for groups, x_dim in self.input_dims.items()
+            }
 
-        # register sub-modules
-        for (groups, values_encoder), (_, values_decoder) in zip(self.encoders.items(), self.decoders.items()):
-            self.add_module(f"encoder_{groups}_shared", values_encoder["shared"])
-            self.add_module(f"encoder_{groups}_private", values_encoder["private"])
-            self.add_module(f"decoder_{groups}", values_decoder)
+            # Register sub-modules
+            for (groups, values_encoder), (_, values_decoder) in zip(self.encoders.items(), self.decoders.items()):
+                self.add_module(f"encoder_{groups}_shared", values_encoder["shared"])
+                self.add_module(f"encoder_{groups}_private", values_encoder["private"])
+                self.add_module(f"decoder_{groups}", values_decoder)
 
         # Store the transport plan as an attribute
         self.use_transport_plan = transport_plan is not None
@@ -184,6 +228,11 @@ class spVIPESmodule(BaseModuleClass):
     def _cluster_based_poe(
         self, shared_stats: dict, batch_transport_plans: dict[int, torch.Tensor], processed_labels: list[torch.Tensor]
     ):
+        if len(shared_stats) != 2:
+            raise ValueError(
+                f"Cluster-based PoE only supports exactly 2 groups, got {len(shared_stats)}. "
+                "Use label-based PoE for more than 2 groups."
+            )
         groups_1_stats, groups_2_stats = shared_stats.values()
         groups_1_stats = {
             k: groups_1_stats[k] for k in ["logtheta_loc", "logtheta_logvar", "logtheta_scale"] if k in groups_1_stats
@@ -229,7 +278,7 @@ class spVIPESmodule(BaseModuleClass):
                     component_stats_2[k] = weighted_v
 
                 # Perform PoE
-                poe_stats_per_component[component.item()] = self._poe2({0: component_stats_1, 1: component_stats_2})
+                poe_stats_per_component[component.item()] = self._poe_n({0: component_stats_1, 1: component_stats_2})
             else:
                 # Handle unmatched cells
                 if torch.any(mask_1):
@@ -279,104 +328,69 @@ class spVIPESmodule(BaseModuleClass):
 
         return concat_poe_stats
 
-    def _poe2(self, shared_stats: dict):
-        if len(shared_stats.keys()) > 2:
-            raise ValueError(
-                f"Number of groups passed to `_poe` is {len(shared_stats.keys())}, the only supported value is 2, make sure you passed only 2 groups to `prepare_adatas`"
-            )
+    def _poe_n(self, shared_stats: dict):
+        """Generic N-group Product of Experts.
 
-        groups_1, groups_2 = shared_stats.values()
-        groups_1_size = groups_1["logtheta_logvar"].shape[0]
-        groups_2_size = groups_2["logtheta_logvar"].shape[0]
+        Combines shared statistics from N >= 2 groups using Gaussian PoE.
+        Handles unequal batch sizes by padding with standard normal prior
+        (loc=0, logvar=0 → var=1, precision=1).
 
-        vars_groups_1 = torch.exp(groups_1["logtheta_logvar"])
-        vars_groups_2 = torch.exp(groups_2["logtheta_logvar"])
-        inverse_vars_groups_1 = 1.0 / vars_groups_1
-        inverse_vars_groups_2 = 1.0 / vars_groups_2
+        Parameters
+        ----------
+        shared_stats : dict[int, dict[str, Tensor]]
+            Per-group encoder statistics with keys "logtheta_loc", "logtheta_logvar", "logtheta_scale".
 
-        if inverse_vars_groups_1.shape != inverse_vars_groups_2.shape:
-            if inverse_vars_groups_1.shape[0] < inverse_vars_groups_2.shape[0]:
-                inverse_vars_groups_1_zeros = torch.ones_like(inverse_vars_groups_2)
-                inverse_vars_groups_1_zeros[:groups_1_size] = inverse_vars_groups_1
-                inverse_vars_groups_1 = inverse_vars_groups_1_zeros
-                del inverse_vars_groups_1_zeros
+        Returns
+        -------
+        dict[int, dict[str, Tensor]]
+            Per-group PoE results with keys "logtheta_loc", "logtheta_logvar", "logtheta_scale".
+        """
+        group_keys = sorted(shared_stats.keys())
+        n_groups = len(group_keys)
+        if n_groups < 2:
+            raise ValueError(f"PoE requires at least 2 groups, got {n_groups}")
 
-            else:
-                inverse_vars_groups_2_zeros = torch.ones_like(inverse_vars_groups_1)
-                inverse_vars_groups_2_zeros[:groups_2_size] = inverse_vars_groups_2
-                inverse_vars_groups_2 = inverse_vars_groups_2_zeros
-                del inverse_vars_groups_2_zeros
+        group_sizes = {g: shared_stats[g]["logtheta_logvar"].shape[0] for g in group_keys}
+        max_batch_size = max(group_sizes.values())
+        latent_dim = shared_stats[group_keys[0]]["logtheta_logvar"].shape[1]
+        device = shared_stats[group_keys[0]]["logtheta_logvar"].device
 
-        inverse_vars = torch.stack([inverse_vars_groups_1, inverse_vars_groups_2], dim=1)
+        # Pad each group to max_batch_size and stack
+        # Padding: loc=0, logvar=0 → var=1, 1/var=1 (standard normal prior contribution)
+        padded_locs = []
+        padded_logvars = []
+        for g in group_keys:
+            loc = shared_stats[g]["logtheta_loc"]
+            logvar = shared_stats[g]["logtheta_logvar"]
+            g_size = group_sizes[g]
+            if g_size < max_batch_size:
+                pad_size = max_batch_size - g_size
+                loc = torch.cat([loc, torch.zeros(pad_size, latent_dim, device=device)], dim=0)
+                logvar = torch.cat([logvar, torch.zeros(pad_size, latent_dim, device=device)], dim=0)
+            padded_locs.append(loc)
+            padded_logvars.append(logvar)
 
-        mus_vars_div_groups_1 = groups_1["logtheta_loc"] / vars_groups_1
-        mus_vars_div_groups_2 = groups_2["logtheta_loc"] / vars_groups_2
+        # Stack: shape (N, max_batch, latent_dim)
+        stacked_mus = torch.stack(padded_locs, dim=0)
+        stacked_logvars = torch.stack(padded_logvars, dim=0)
 
-        if mus_vars_div_groups_1.shape != mus_vars_div_groups_2.shape:
-            if mus_vars_div_groups_1.shape[0] < mus_vars_div_groups_2.shape[0]:
-                mus_vars_div_groups_1_zeros = torch.zeros_like(mus_vars_div_groups_2)
-                mus_vars_div_groups_1_zeros[:groups_1_size] = mus_vars_div_groups_1
-                mus_vars_div_groups_1 = mus_vars_div_groups_1_zeros
-                del mus_vars_div_groups_1_zeros
+        # Compute joint PoE
+        mus_joint, logvars_joint = self._product_of_experts(stacked_mus, stacked_logvars)
 
-            else:
-                mus_vars_div_groups_2_zeros = torch.zeros_like(mus_vars_div_groups_1)
-                mus_vars_div_groups_2_zeros[:groups_2_size] = mus_vars_div_groups_2
-                mus_vars_div_groups_2 = mus_vars_div_groups_2_zeros
-                del mus_vars_div_groups_2_zeros
+        # Slice back to each group's original size and build result
+        result = {}
+        for g in group_keys:
+            g_size = group_sizes[g]
+            g_mu = mus_joint[:g_size]
+            g_logvar = logvars_joint[:g_size]
+            g_scale = torch.sqrt(torch.exp(g_logvar))
+            result[g] = {
+                "logtheta_loc": g_mu,
+                "logtheta_logvar": g_logvar,
+                "logtheta_scale": g_scale,
+            }
 
-        mus_vars = torch.stack([mus_vars_div_groups_1, mus_vars_div_groups_2], dim=1)
-
-        if vars_groups_1.shape != vars_groups_2.shape:
-            if vars_groups_1.shape[0] < vars_groups_2.shape[0]:
-                vars_groups_1_zeros = torch.zeros_like(vars_groups_2)
-                vars_groups_1_zeros[:groups_1_size] = vars_groups_1
-                vars_groups_1 = vars_groups_1_zeros
-                del vars_groups_1_zeros
-
-            else:
-                vars_groups_2_zeros = torch.zeros_like(vars_groups_1)
-                vars_groups_2_zeros[:groups_2_size] = vars_groups_2
-                vars_groups_2 = vars_groups_2_zeros
-                del vars_groups_2_zeros
-
-        _vars = torch.stack([vars_groups_1, vars_groups_2], dim=1)
-
-        mus_joint = torch.sum(mus_vars, dim=1)
-        logvars_joint = torch.ones_like(mus_joint)
-        logvars_joint += torch.sum(inverse_vars, dim=1)
-        logvars_joint = 1.0 / logvars_joint
-        mus_joint *= logvars_joint
-        logvars_joint = torch.log(logvars_joint)
-
-        mus_joint_groups_1 = mus_joint[:groups_1_size]
-        mus_joint_groups_2 = mus_joint[:groups_2_size]
-        logvars_joint_groups_1 = logvars_joint[:groups_1_size]
-        logvars_joint_groups_2 = logvars_joint[:groups_2_size]
-
-        # groups_1
-        logtheta_scale_groups_1 = torch.sqrt(torch.exp(logvars_joint_groups_1))
-        qz_shared_groups_1 = Normal(mus_joint_groups_1, logtheta_scale_groups_1)
-        log_z_shared_groups_1 = qz_shared_groups_1.rsample().to("cuda:0" if torch.cuda.is_available() else "cpu")
-        F.softmax(log_z_shared_groups_1, -1)
-        # groups_2
-        logtheta_scale_groups_2 = torch.sqrt(torch.exp(logvars_joint_groups_2))
-        qz_shared_groups_2 = Normal(mus_joint_groups_2, logtheta_scale_groups_2)
-        log_z_shared_groups_2 = qz_shared_groups_2.rsample().to("cuda:0" if torch.cuda.is_available() else "cpu")
-        F.softmax(log_z_shared_groups_2, -1)
-
-        return {
-            0: {
-                "logtheta_loc": mus_joint_groups_1,
-                "logtheta_logvar": logvars_joint_groups_1,
-                "logtheta_scale": logtheta_scale_groups_1,
-            },
-            1: {
-                "logtheta_loc": mus_joint_groups_2,
-                "logtheta_logvar": logvars_joint_groups_2,
-                "logtheta_scale": logtheta_scale_groups_2,
-            },
-        }
+        return result
 
     def _get_inference_input(self, tensors_by_group):
         x = {i: group[REGISTRY_KEYS.X_KEY] for i, group in enumerate(tensors_by_group)}
@@ -420,11 +434,25 @@ class spVIPESmodule(BaseModuleClass):
             "groups": groups,
             "batch_index": batch_index,
         }
+
+        # Pass through multimodal-specific data
+        if "per_modality_private" in inference_outputs:
+            input_dict["per_modality_private"] = inference_outputs["per_modality_private"]
+
         return input_dict
 
     @auto_move_data
     def inference(self, x, batch_index, groups, global_indices, **kwargs):
-        """Runs the encoder model."""
+        """Runs the encoder model.
+
+        In single-modality mode, runs per-group shared/private encoders then inter-group PoE.
+        In multimodal mode, runs per-(group, modality) encoders, then intra-group PoE across
+        modalities, then inter-group PoE.
+        """
+        if self.is_multimodal:
+            return self._inference_multimodal(x, batch_index, groups, global_indices, **kwargs)
+
+        # Single-modality mode (backward compatible)
         x = {
             i: xs[:, self.groups_var_indices[i]] for i, xs in x.items()
         }  # update each groups minibatch with its own gene indices
@@ -471,7 +499,109 @@ class spVIPESmodule(BaseModuleClass):
 
         return outputs
 
+    def _inference_multimodal(self, x, batch_index, groups, global_indices, **kwargs):
+        """Multimodal inference with two-level PoE."""
+        n_groups = len(x)
+
+        # Step 1: Per-(group, modality) encoding
+        per_modality_private = {}  # keyed by (group, modality)
+        per_modality_shared = {}   # keyed by (group, modality)
+        library = {}               # keyed by (group, modality)
+
+        for group in range(n_groups):
+            x_group = x[group]  # full concatenated features for this group
+            batch = batch_index[group]
+
+            for modality in self.group_modalities[group]:
+                # Slice the group's data to this modality's features
+                mod_var_indices = self.groups_modality_var_indices[group][modality]
+                x_mod = x_group[:, mod_var_indices]
+
+                # Modality-specific preprocessing
+                likelihood = self.modality_likelihoods.get(modality, "nb")
+                if likelihood == "nb" and self.log_variational_inference:
+                    x_mod_enc = torch.log(1 + x_mod)
+                else:
+                    x_mod_enc = x_mod  # Gaussian: data already log-normalized
+
+                lib = torch.log(x_mod.sum(1).clamp(min=1)).unsqueeze(1)
+                library[(group, modality)] = lib
+
+                shared_enc = self.encoders[(group, modality)]["shared"]
+                private_enc = self.encoders[(group, modality)]["private"]
+
+                per_modality_shared[(group, modality)] = shared_enc(x_mod_enc, group, batch)
+                per_modality_private[(group, modality)] = private_enc(x_mod_enc, group, batch)
+
+        # Step 2: Intra-group PoE across modalities → per-group shared stats
+        per_group_shared = {}
+        for group in range(n_groups):
+            modalities = self.group_modalities[group]
+            if len(modalities) == 1:
+                # Single modality in this group: use its shared stats directly
+                mod = modalities[0]
+                per_group_shared[group] = per_modality_shared[(group, mod)]
+            else:
+                # Multiple modalities: combine via PoE
+                mod_shared = {}
+                for idx, mod in enumerate(modalities):
+                    stats = per_modality_shared[(group, mod)]
+                    mod_shared[idx] = {
+                        "logtheta_loc": stats["logtheta_loc"],
+                        "logtheta_logvar": stats["logtheta_logvar"],
+                        "logtheta_scale": stats["logtheta_scale"],
+                    }
+                intra_poe = self._poe_n(mod_shared)
+                # Use index 0 result (all modalities have same batch size within a group)
+                intra_mu = intra_poe[0]["logtheta_loc"]
+                intra_logvar = intra_poe[0]["logtheta_logvar"]
+                intra_scale = intra_poe[0]["logtheta_scale"]
+
+                # Build full stats dict compatible with downstream
+                qz = Normal(intra_mu, intra_scale.clamp(min=1e-6))
+                log_z = qz.rsample()
+                theta = F.softmax(log_z, -1)
+                per_group_shared[group] = {
+                    "logtheta_loc": intra_mu,
+                    "logtheta_logvar": intra_logvar,
+                    "logtheta_scale": intra_scale,
+                    "log_z": log_z,
+                    "theta": theta,
+                    "qz": qz,
+                }
+
+        # Step 3: Inter-group PoE (same as single-modality)
+        labels = None
+        if self.use_labels and "labels" in kwargs:
+            labels = dict(enumerate(kwargs["labels"]))
+
+        poe_stats = self._supervised_poe(per_group_shared, None, None, labels)
+
+        # Build output: private_stats keyed by group (use first modality for backward compat)
+        # For multimodal, we also include per-modality private stats
+        private_stats = {}
+        for group in range(n_groups):
+            # Use first modality's private stats as the group-level private
+            first_mod = self.group_modalities[group][0]
+            private_stats[group] = per_modality_private[(group, first_mod)]
+
+        outputs = {
+            "private_stats": private_stats,
+            "shared_stats": per_group_shared,
+            "poe_stats": poe_stats,
+            "library": library,
+            "per_modality_private": per_modality_private,
+            "per_modality_shared": per_modality_shared,
+        }
+
+        return outputs
+
     def _get_batch_transport_plans(self, global_indices):
+        if len(global_indices) != 2:
+            raise ValueError(
+                f"Transport plan-based PoE only supports exactly 2 groups, got {len(global_indices)}. "
+                "Use label-based PoE for more than 2 groups."
+            )
         # Convert to CPU numpy arrays if they're on GPU
         indices1 = global_indices[0].cpu().numpy() if isinstance(global_indices[0], torch.Tensor) else global_indices[0]
         indices2 = global_indices[1].cpu().numpy() if isinstance(global_indices[1], torch.Tensor) else global_indices[1]
@@ -499,7 +629,7 @@ class spVIPESmodule(BaseModuleClass):
                 if processed_labels is None:
                     raise ValueError("Processed labels are required when using transport plan.")
                 # Convert processed_labels list to a dictionary
-                label_group = {0: processed_labels[0], 1: processed_labels[1]}
+                label_group = {i: processed_labels[i] for i in range(len(processed_labels))}
                 return self._cluster_based_poe(shared_stats, batch_transport_plans, label_group)
             else:
                 raise ValueError(
@@ -509,6 +639,11 @@ class spVIPESmodule(BaseModuleClass):
             raise ValueError("Either transport plan or labels must be provided for supervised POE.")
 
     def _paired_poe(self, shared_stats: dict, transport_plan: torch.Tensor):
+        if len(shared_stats) != 2:
+            raise ValueError(
+                f"Paired PoE only supports exactly 2 groups, got {len(shared_stats)}. "
+                "Use label-based PoE for more than 2 groups."
+            )
         groups_1_stats, groups_2_stats = shared_stats.values()
         groups_1_stats = {
             k: groups_1_stats[k] for k in ["logtheta_loc", "logtheta_logvar", "logtheta_scale"] if k in groups_1_stats
@@ -581,170 +716,149 @@ class spVIPESmodule(BaseModuleClass):
         return mus_joint, logvars_joint
 
     def _label_based_poe(self, shared_stats: dict, label_group: dict):
-        groups_1_stats, groups_2_stats = shared_stats.values()
-        groups_1_stats = {
-            k: groups_1_stats[k] for k in ["logtheta_loc", "logtheta_logvar", "logtheta_scale"] if k in groups_1_stats
-        }
-        groups_2_stats = {
-            k: groups_2_stats[k] for k in ["logtheta_loc", "logtheta_logvar", "logtheta_scale"] if k in groups_2_stats
-        }
+        """Label-based PoE for N >= 2 groups.
 
-        groups_1_labels, groups_2_labels = label_group.values()
+        For each cell type label, combines shared encoder statistics from all groups
+        that contain cells of that type using Product of Experts. Groups missing a label
+        contribute an uninformative prior (loc=0, logvar=log(1)=0).
+        """
+        stat_keys = ["logtheta_loc", "logtheta_logvar", "logtheta_scale"]
+        group_keys = sorted(shared_stats.keys())
+        n_groups = len(group_keys)
 
-        groups_1_labels_list = groups_1_labels.flatten().tolist()
-        groups_2_labels_list = groups_2_labels.flatten().tolist()
-        set1 = set(groups_1_labels_list)
-        set2 = set(groups_2_labels_list)
+        # Extract per-group stats and labels
+        per_group_stats = {}
+        per_group_labels = {}
+        for g in group_keys:
+            per_group_stats[g] = {k: shared_stats[g][k] for k in stat_keys if k in shared_stats[g]}
+            per_group_labels[g] = label_group[g]
 
-        common_labels = list(set1.intersection(set2))
+        # Collect all unique labels across all groups and determine which groups have each label
+        label_sets = {g: set(per_group_labels[g].flatten().tolist()) for g in group_keys}
+        all_labels = set()
+        for s in label_sets.values():
+            all_labels |= s
 
+        # For each label, compute PoE across groups that have cells with that label
         poe_stats_per_label = {}
-        for label in common_labels:
-            mask1 = (groups_1_labels == label).squeeze()
-            mask2 = (groups_2_labels == label).squeeze()
-            groups_1_stats_label = {key: value[mask1] for key, value in groups_1_stats.items()}
-            groups_2_stats_label = {key: value[mask2] for key, value in groups_2_stats.items()}
-            poe_stats_label = self._poe2({0: groups_1_stats_label, 1: groups_2_stats_label})
-            poe_stats_per_label[label] = poe_stats_label
+        for label in all_labels:
+            groups_with_label = [g for g in group_keys if label in label_sets[g]]
+            groups_without_label = [g for g in group_keys if label not in label_sets[g]]
 
-        poe_stats = {}
-        for label, value in poe_stats_per_label.items():
-            dataset_tensors = {}
-            for group, tensors in value.items():
-                tensor_dict = {}
-                for tensor_key, tensor in tensors.items():
-                    if tensor_key in tensor_dict:
-                        tensor_dict[tensor_key] = torch.cat([tensor_dict[tensor_key], tensor], dim=0)
+            # Build stats dict for _poe_n: groups with label contribute real stats,
+            # groups without contribute uninformative prior
+            label_stats_for_poe = {}
+            for g in groups_with_label:
+                mask = (per_group_labels[g] == label).squeeze()
+                label_stats_for_poe[g] = {key: value[mask] for key, value in per_group_stats[g].items()}
+
+            if len(groups_with_label) >= 2:
+                # Enough groups for PoE — also add uninformative priors for missing groups
+                for g in groups_without_label:
+                    ref_g = groups_with_label[0]
+                    n_cells = label_stats_for_poe[ref_g]["logtheta_loc"].shape[0]
+                    latent_dim = label_stats_for_poe[ref_g]["logtheta_loc"].shape[1]
+                    device = label_stats_for_poe[ref_g]["logtheta_loc"].device
+                    label_stats_for_poe[g] = {
+                        "logtheta_loc": torch.zeros(n_cells, latent_dim, device=device),
+                        "logtheta_logvar": torch.zeros(n_cells, latent_dim, device=device),
+                        "logtheta_scale": torch.ones(n_cells, latent_dim, device=device),
+                    }
+
+                poe_result = self._poe_n(label_stats_for_poe)
+
+                # For groups without this label, replace result with empty tensors
+                for g in groups_without_label:
+                    latent_dim = poe_result[groups_with_label[0]]["logtheta_loc"].shape[1]
+                    device = poe_result[groups_with_label[0]]["logtheta_loc"].device
+                    poe_result[g] = {
+                        k: torch.empty((0, latent_dim), device=device) for k in stat_keys
+                    }
+
+                poe_stats_per_label[label] = poe_result
+            else:
+                # Only one group has this label — combine with uninformative prior
+                g_with = groups_with_label[0]
+                real_stats = label_stats_for_poe[g_with]
+                n_cells = real_stats["logtheta_loc"].shape[0]
+                latent_dim = real_stats["logtheta_loc"].shape[1]
+                device = real_stats["logtheta_loc"].device
+
+                # Create a dummy second group for the PoE (uninformative prior)
+                dummy_key = -1  # temporary key not in group_keys
+                dummy_stats = {
+                    "logtheta_loc": torch.zeros(n_cells, latent_dim, device=device),
+                    "logtheta_logvar": torch.zeros(n_cells, latent_dim, device=device),
+                    "logtheta_scale": torch.ones(n_cells, latent_dim, device=device),
+                }
+                poe_result = self._poe_n({g_with: real_stats, dummy_key: dummy_stats})
+
+                # Build final result: only the group with the label gets real stats
+                final_result = {}
+                for g in group_keys:
+                    if g == g_with:
+                        final_result[g] = poe_result[g_with]
                     else:
-                        tensor_dict[tensor_key] = tensor
-                dataset_tensors[group] = tensor_dict
-            poe_stats[label] = dataset_tensors
+                        final_result[g] = {k: torch.empty((0, latent_dim), device=device) for k in stat_keys}
+                poe_stats_per_label[label] = final_result
 
-        unique_labels1 = torch.unique(groups_1_labels)
-        unique_labels2 = torch.unique(groups_2_labels)
+        # Reassemble: for each group, fill output tensors in original cell order
+        # Determine device from first group's stats
+        ref_device = per_group_stats[group_keys[0]]["logtheta_loc"].device
+        latent_dim = per_group_stats[group_keys[0]]["logtheta_loc"].shape[1]
 
-        non_common_labels1 = unique_labels1[~torch.isin(unique_labels1, unique_labels2)]
-        non_common_labels2 = unique_labels2[~torch.isin(unique_labels2, unique_labels1)]
+        concat_poe_stats = {}
+        for g in group_keys:
+            n_cells = per_group_stats[g]["logtheta_loc"].shape[0]
+            group_output = {k: torch.empty(n_cells, latent_dim, dtype=torch.float32, device=ref_device) for k in stat_keys}
 
-        for label in non_common_labels1:
-            poe_stats[label.item()] = {}
-            mask1 = (groups_1_labels == label).squeeze()
-            groups_1_stats_label = {key: value[mask1] for key, value in groups_1_stats.items()}
-            groups_2_stats_label = {
-                "logtheta_loc": torch.zeros_like(groups_1_stats_label["logtheta_loc"]),
-                "logtheta_logvar": torch.ones_like(groups_1_stats_label["logtheta_logvar"]),
-            }
-            poe_stats_label = self._poe2({0: groups_1_stats_label, 1: groups_2_stats_label})
-            poe_stats_label[1] = {
-                "logtheta_loc": torch.empty((0, poe_stats_label[0]["logtheta_loc"].shape[1])),
-                "logtheta_logvar": torch.empty((0, poe_stats_label[0]["logtheta_logvar"].shape[1])),
-                "logtheta_scale": torch.empty((0, poe_stats_label[0]["logtheta_scale"].shape[1])),
-            }
-            poe_stats[label.item()] = poe_stats_label
+            label_count = {}
+            for i, label_tensor in enumerate(per_group_labels[g]):
+                label = label_tensor.item()
+                count = label_count.get(label, 0)
+                label_count[label] = count + 1
+                poe_g_stats = poe_stats_per_label[label][g]
+                tensor_index = count % poe_g_stats["logtheta_loc"].size(0)
+                for k in stat_keys:
+                    group_output[k][i] = poe_g_stats[k][tensor_index]
 
-        for label in non_common_labels2:
-            poe_stats[label.item()] = {}
-            mask2 = (groups_2_labels == label).squeeze()
-            groups_2_stats_label = {key: value[mask2] for key, value in groups_2_stats.items()}
-            groups_1_stats_label = {
-                "logtheta_loc": torch.zeros_like(groups_2_stats_label["logtheta_loc"]),
-                "logtheta_logvar": torch.ones_like(groups_2_stats_label["logtheta_logvar"]),
-            }
-            poe_stats_label = self._poe2({0: groups_1_stats_label, 1: groups_2_stats_label})
-            poe_stats_label[0] = {
-                "logtheta_loc": torch.empty((0, poe_stats_label[1]["logtheta_loc"].shape[1])),
-                "logtheta_logvar": torch.empty((0, poe_stats_label[1]["logtheta_logvar"].shape[1])),
-                "logtheta_scale": torch.empty((0, poe_stats_label[1]["logtheta_scale"].shape[1])),
-            }
-            poe_stats[label.item()] = poe_stats_label
+            concat_poe_stats[g] = group_output
 
-        groups_1_output = {
-            "logtheta_loc": torch.empty(
-                groups_1_stats["logtheta_loc"].shape[0], groups_1_stats["logtheta_loc"].shape[1], dtype=torch.float32
-            ),
-            "logtheta_logvar": torch.empty(
-                groups_1_stats["logtheta_loc"].shape[0], groups_1_stats["logtheta_loc"].shape[1], dtype=torch.float32
-            ),
-            "logtheta_scale": torch.empty(
-                groups_1_stats["logtheta_loc"].shape[0], groups_1_stats["logtheta_loc"].shape[1], dtype=torch.float32
-            ),
-        }
-
-        groups_2_output = {
-            "logtheta_loc": torch.empty(
-                groups_2_stats["logtheta_loc"].shape[0], groups_2_stats["logtheta_loc"].shape[1], dtype=torch.float32
-            ),
-            "logtheta_logvar": torch.empty(
-                groups_2_stats["logtheta_loc"].shape[0], groups_2_stats["logtheta_loc"].shape[1], dtype=torch.float32
-            ),
-            "logtheta_scale": torch.empty(
-                groups_2_stats["logtheta_loc"].shape[0], groups_2_stats["logtheta_loc"].shape[1], dtype=torch.float32
-            ),
-        }
-
-        label_count = {}
-        for i, label in enumerate(groups_1_labels):
-            count = label_count.get(label.item(), 0)
-            label_count[label.item()] = count + 1
-            tensor_index = count % poe_stats[label.item()][0]["logtheta_loc"].size(0)
-            groups_1_output["logtheta_loc"][i] = poe_stats[label.item()][0]["logtheta_loc"][tensor_index, :]
-            groups_1_output["logtheta_logvar"][i] = poe_stats[label.item()][0]["logtheta_logvar"][tensor_index, :]
-            groups_1_output["logtheta_scale"][i] = poe_stats[label.item()][0]["logtheta_scale"][tensor_index, :]
-
-        label_count = {}
-        for i, label in enumerate(groups_2_labels):
-            count = label_count.get(label.item(), 0)
-            label_count[label.item()] = count + 1
-            tensor_index = count % poe_stats[label.item()][1]["logtheta_loc"].size(0)
-            groups_2_output["logtheta_loc"][i] = poe_stats[label.item()][1]["logtheta_loc"][tensor_index, :]
-            groups_2_output["logtheta_logvar"][i] = poe_stats[label.item()][1]["logtheta_logvar"][tensor_index, :]
-            groups_2_output["logtheta_scale"][i] = poe_stats[label.item()][1]["logtheta_scale"][tensor_index, :]
-
-        concat_poe_stats = {0: groups_1_output, 1: groups_2_output}
-
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        for key, value in concat_poe_stats.items():
-            for sub_key, tensor in value.items():
-                concat_poe_stats[key][sub_key] = tensor.to(device)
-
-        for group in [0, 1]:
-            concat_poe_stats[group]["logtheta_qz"] = Normal(
-                concat_poe_stats[group]["logtheta_loc"], concat_poe_stats[group]["logtheta_scale"]
+        # Compute qz, log_z, theta for each group
+        for g in group_keys:
+            concat_poe_stats[g]["logtheta_qz"] = Normal(
+                concat_poe_stats[g]["logtheta_loc"], concat_poe_stats[g]["logtheta_scale"].clamp(min=1e-6)
             )
-            concat_poe_stats[group]["logtheta_log_z"] = concat_poe_stats[group]["logtheta_qz"].rsample().to(device)
-            concat_poe_stats[group]["logtheta_theta"] = F.softmax(concat_poe_stats[group]["logtheta_log_z"], -1)
+            concat_poe_stats[g]["logtheta_log_z"] = concat_poe_stats[g]["logtheta_qz"].rsample()
+            concat_poe_stats[g]["logtheta_theta"] = F.softmax(concat_poe_stats[g]["logtheta_log_z"], -1)
 
         return concat_poe_stats
 
     @auto_move_data
-    def generative(self, private_stats, shared_stats, poe_stats, library, groups, batch_index):
+    def generative(self, private_stats, shared_stats, poe_stats, library, groups, batch_index, **kwargs):
         """Runs the generative model."""
-        if (len(private_stats.items()) > 2) or (len(shared_stats.items()) > 2):
-            raise ValueError(
-                f"Number of groups passed to `generative` is shared:{len(shared_stats.keys())}, private:{len(private_stats.keys())}, the only supported value is 2, make sure you passed only 2 groups to `prepare_adatas`"
+        if self.is_multimodal:
+            return self._generative_multimodal(
+                private_stats, shared_stats, poe_stats, library, groups, batch_index, **kwargs
             )
-        _, _, _, groups_1_private_log_z, groups_1_private_theta, _ = private_stats[0].values()
-        _, _, _, groups_2_private_log_z, groups_2_private_theta, _ = private_stats[1].values()
-        _, _, _, _, groups_1_poe_log_z, groups_1_poe_theta = poe_stats[0].values()
-        _, _, _, _, groups_2_poe_log_z, groups_2_poe_theta = poe_stats[1].values()
 
-        # private1-poe groups_1 -> reconstruct data from groups_1 (Decoder_0)
-        groups_1_private_poe_log_z = torch.cat((groups_1_private_log_z, groups_1_poe_log_z), dim=-1)
-        groups_1_private_poe_theta = torch.cat((groups_1_private_theta, groups_1_poe_theta), dim=-1)
+        n_groups = len(private_stats)
 
-        # private1-poe groups_1 -> reconstruct data from groups_1 (Decoder_0)
-        groups_2_private_poe_log_z = torch.cat((groups_2_private_log_z, groups_2_poe_log_z), dim=-1)
-        groups_2_private_poe_theta = torch.cat((groups_2_private_theta, groups_2_poe_theta), dim=-1)
+        # Concatenate private and PoE latents for each group
+        private_poe = {}
+        for group in range(n_groups):
+            private_log_z = private_stats[group]["log_z"]
+            private_theta = private_stats[group]["theta"]
+            poe_log_z = poe_stats[group]["logtheta_log_z"]
+            poe_theta = poe_stats[group]["logtheta_theta"]
+            private_poe[group] = {
+                "log_z": torch.cat((private_log_z, poe_log_z), dim=-1),
+                "theta": torch.cat((private_theta, poe_theta), dim=-1),
+            }
 
-        private_poe = {
-            0: {"log_z": groups_1_private_poe_log_z, "theta": groups_1_private_poe_theta},
-            1: {"log_z": groups_2_private_poe_log_z, "theta": groups_2_private_poe_theta},
-        }
+        shared_stats_out = {}
 
-        shared_stats = {}
-
-        poe_stats = {}
+        poe_stats_out = {}
         for (group, stats), batch in zip(private_poe.items(), batch_index):
             key = str(group)
             decoder = self.decoders[group]
@@ -755,10 +869,10 @@ class spVIPESmodule(BaseModuleClass):
                 library[group],
                 batch,
             )
-            px_r = torch.exp(self.px_r[group])  # TO-DO specify px_r per groups
+            px_r = torch.exp(self.px_r[group])
             px = NegativeBinomialMixture(mu1=px_rate_private, mu2=px_rate_shared, theta1=px_r, mixture_logits=px_mixing)
             pz = Normal(torch.zeros_like(stats["log_z"]), torch.ones_like(stats["log_z"]))
-            poe_stats[key] = {
+            poe_stats_out[key] = {
                 "px_scale_private": px_scale_private,
                 "px_scale_shared": px_scale_shared,
                 "px_rate_private": px_rate_private,
@@ -767,7 +881,63 @@ class spVIPESmodule(BaseModuleClass):
                 "pz": pz,
             }
 
-        outputs = {"private_shared": shared_stats, "private_poe": poe_stats}
+        outputs = {"private_shared": shared_stats_out, "private_poe": poe_stats_out}
+        return outputs
+
+    def _generative_multimodal(self, private_stats, shared_stats, poe_stats, library, groups, batch_index, **kwargs):
+        """Multimodal generative model: per-(group, modality) decoding."""
+        from spVIPES.module.utils import build_likelihood
+
+        per_modality_private = kwargs.get("per_modality_private", {})
+        n_groups = len(poe_stats)
+
+        poe_stats_out = {}
+        for group in range(n_groups):
+            batch = batch_index[group]
+            poe_log_z = poe_stats[group]["logtheta_log_z"]
+            poe_theta = poe_stats[group]["logtheta_theta"]
+
+            for modality in self.group_modalities[group]:
+                # Get modality-specific private latent
+                if (group, modality) in per_modality_private:
+                    mod_private = per_modality_private[(group, modality)]
+                else:
+                    mod_private = private_stats[group]
+
+                private_log_z = mod_private["log_z"]
+                private_theta = mod_private["theta"]
+
+                # Concatenate private + shared PoE
+                combined_log_z = torch.cat((private_log_z, poe_log_z), dim=-1)
+
+                decoder = self.decoders[(group, modality)]
+                mod_library = library.get((group, modality), library.get(group))
+
+                px_scale_private, px_scale_shared, px_rate_private, px_rate_shared, px_mixing, px_scale = decoder(
+                    self.dispersion,
+                    combined_log_z[:, self.n_dimensions_shared : self.n_dimensions_private + self.n_dimensions_shared],
+                    combined_log_z[:, : self.n_dimensions_shared],
+                    mod_library,
+                    batch,
+                )
+
+                px_r_key = f"{group}_{modality}"
+                px_r = torch.exp(self.px_r[px_r_key])
+                likelihood_type = self.modality_likelihoods.get(modality, "nb")
+                px = build_likelihood(likelihood_type, px_rate_private, px_rate_shared, px_r, px_mixing, px_scale)
+                pz = Normal(torch.zeros_like(combined_log_z), torch.ones_like(combined_log_z))
+
+                key = f"{group}_{modality}"
+                poe_stats_out[key] = {
+                    "px_scale_private": px_scale_private,
+                    "px_scale_shared": px_scale_shared,
+                    "px_rate_private": px_rate_private,
+                    "px_rate_shared": px_rate_shared,
+                    "px": px,
+                    "pz": pz,
+                }
+
+        outputs = {"private_shared": {}, "private_poe": poe_stats_out}
         return outputs
 
     @torch.inference_mode()
@@ -814,86 +984,126 @@ class spVIPESmodule(BaseModuleClass):
         kl_weight: float = 1.0,
     ):
         """Loss function."""
+        if self.is_multimodal:
+            return self._loss_multimodal(tensors_by_group, inference_outputs, generative_outputs, kl_weight)
+
         x = {int(k): group[REGISTRY_KEYS.X_KEY] for group in tensors_by_group for k in np.unique(group["groups"].cpu())}
         x = {i: xs[:, self.groups_var_indices[i]] for i, xs in x.items()}
 
         if self.log_variational_generative:
             x = {i: torch.log(1 + xs) for i, xs in x.items()}  # logvariational
 
-        reconstruction_loss_groups_1_poe = -generative_outputs["private_poe"]["0"]["px"].log_prob(x[0]).sum(-1)
-        reconstruction_loss_groups_2_poe = -generative_outputs["private_poe"]["1"]["px"].log_prob(x[1]).sum(-1)
+        n_groups = len(x)
+        extra_metrics = {}
+        reconst_losses = {}
+        kl_local = {}
+        total_loss = None
 
-        # distributions approx
-        qz_private_groups_1 = inference_outputs["private_stats"][0][
-            "qz"
-        ]  # (batch_size, shared_dimensions + private_dimensions)
-        qz_private_groups_2 = inference_outputs["private_stats"][1][
-            "qz"
-        ]  # (batch_size, shared_dimensions + private_dimensions)
-        qz_poe_groups_1 = inference_outputs["poe_stats"][0][
-            "logtheta_qz"
-        ]  # (batch_size, shared_dimensions + private_dimensions)
-        qz_poe_groups_2 = inference_outputs["poe_stats"][1][
-            "logtheta_qz"
-        ]  # (batch_size, shared_dimensions + private_dimensions)
+        for g in range(n_groups):
+            # Reconstruction loss
+            recon_loss = -generative_outputs["private_poe"][str(g)]["px"].log_prob(x[g]).sum(-1)
 
-        # kl
-        kl_divergence_private_groups_1 = kl(
-            qz_private_groups_1,
-            Normal(
-                torch.zeros_like(inference_outputs["private_stats"][0]["log_z"]),
-                torch.ones_like(inference_outputs["private_stats"][0]["log_z"]),
-            ),
-        ).sum(dim=1)
-        kl_divergence_private_groups_2 = kl(
-            qz_private_groups_2,
-            Normal(
-                torch.zeros_like(inference_outputs["private_stats"][1]["log_z"]),
-                torch.ones_like(inference_outputs["private_stats"][1]["log_z"]),
-            ),
-        ).sum(dim=1)
-        kl_divergence_poe_groups_1 = kl(
-            qz_poe_groups_1,
-            Normal(
-                torch.zeros_like(inference_outputs["poe_stats"][0]["logtheta_log_z"]),
-                torch.ones_like(inference_outputs["poe_stats"][0]["logtheta_log_z"]),
-            ),
-        ).sum(dim=1)
-        kl_divergence_poe_groups_2 = kl(
-            qz_poe_groups_2,
-            Normal(
-                torch.zeros_like(inference_outputs["poe_stats"][1]["logtheta_log_z"]),
-                torch.ones_like(inference_outputs["poe_stats"][1]["logtheta_log_z"]),
-            ),
-        ).sum(dim=1)
+            # KL divergences
+            qz_private = inference_outputs["private_stats"][g]["qz"]
+            kl_private = kl(
+                qz_private,
+                Normal(
+                    torch.zeros_like(inference_outputs["private_stats"][g]["log_z"]),
+                    torch.ones_like(inference_outputs["private_stats"][g]["log_z"]),
+                ),
+            ).sum(dim=1)
 
-        extra_metrics = {
-            "kl_divergence_private_groups_1": kl_divergence_private_groups_1.mean(),
-            "kl_divergence_poe_groups_1": kl_divergence_poe_groups_1.mean(),
-            "kl_divergence_private_groups_2": kl_divergence_private_groups_2.mean(),
-            "kl_divergence_poe_groups_2": kl_divergence_poe_groups_2.mean(),
-        }
-        reconst_losses = {
-            "reconst_loss_groups_1_poe": reconstruction_loss_groups_1_poe,
-            "reconst_loss_groups_2_poe": reconstruction_loss_groups_2_poe,
-        }
-        kl_local = {
-            "kl_divergence_groups_1_private": kl_divergence_private_groups_1,
-            "kl_divergence_groups_1_poe": kl_divergence_poe_groups_1,
-            "kl_divergence_groups_2_private": kl_divergence_private_groups_2,
-            "kl_divergence_groups_2_poe": kl_divergence_poe_groups_2,
-        }
-        loss = torch.mean(
-            reconstruction_loss_groups_1_poe
-            + reconstruction_loss_groups_2_poe
-            + kl_weight * (kl_divergence_private_groups_1)
-            + kl_weight * kl_divergence_poe_groups_1
-            + kl_weight * (kl_divergence_private_groups_2)
-            + kl_weight * kl_divergence_poe_groups_2
-        )
+            qz_poe = inference_outputs["poe_stats"][g]["logtheta_qz"]
+            kl_poe = kl(
+                qz_poe,
+                Normal(
+                    torch.zeros_like(inference_outputs["poe_stats"][g]["logtheta_log_z"]),
+                    torch.ones_like(inference_outputs["poe_stats"][g]["logtheta_log_z"]),
+                ),
+            ).sum(dim=1)
+
+            extra_metrics[f"kl_divergence_private_group_{g}"] = kl_private.mean()
+            extra_metrics[f"kl_divergence_poe_group_{g}"] = kl_poe.mean()
+            reconst_losses[f"reconst_loss_group_{g}_poe"] = recon_loss
+            kl_local[f"kl_divergence_group_{g}_private"] = kl_private
+            kl_local[f"kl_divergence_group_{g}_poe"] = kl_poe
+
+            group_loss = recon_loss + kl_weight * kl_private + kl_weight * kl_poe
+            total_loss = group_loss if total_loss is None else total_loss + group_loss
+
+        loss = torch.mean(total_loss)
 
         output = LossOutput(
             loss=loss, reconstruction_loss=reconst_losses, kl_local=kl_local, extra_metrics=extra_metrics
         )
 
         return output
+
+    def _loss_multimodal(self, tensors_by_group, inference_outputs, generative_outputs, kl_weight):
+        """Multimodal loss: sum over groups and modalities."""
+        x = {int(k): group[REGISTRY_KEYS.X_KEY] for group in tensors_by_group for k in np.unique(group["groups"].cpu())}
+
+        n_groups = len(x)
+        extra_metrics = {}
+        reconst_losses = {}
+        kl_local = {}
+        total_loss = None
+
+        per_modality_private = inference_outputs.get("per_modality_private", {})
+
+        for g in range(n_groups):
+            x_group = x[g]
+
+            # Per-modality reconstruction losses
+            for modality in self.group_modalities[g]:
+                key = f"{g}_{modality}"
+                gen_stats = generative_outputs["private_poe"][key]
+
+                # Get modality-specific target data
+                mod_var_indices = self.groups_modality_var_indices[g][modality]
+                x_mod = x_group[:, mod_var_indices]
+
+                likelihood_type = self.modality_likelihoods.get(modality, "nb")
+                if likelihood_type == "nb" and self.log_variational_generative:
+                    x_mod = torch.log(1 + x_mod)
+
+                recon_loss = -gen_stats["px"].log_prob(x_mod).sum(-1)
+                reconst_losses[f"reconst_loss_group_{g}_{modality}"] = recon_loss
+
+                # Per-modality private KL (if available)
+                if (g, modality) in per_modality_private:
+                    qz_mod_private = per_modality_private[(g, modality)]["qz"]
+                    kl_mod_private = kl(
+                        qz_mod_private,
+                        Normal(
+                            torch.zeros_like(per_modality_private[(g, modality)]["log_z"]),
+                            torch.ones_like(per_modality_private[(g, modality)]["log_z"]),
+                        ),
+                    ).sum(dim=1)
+                    kl_local[f"kl_divergence_group_{g}_{modality}_private"] = kl_mod_private
+                    extra_metrics[f"kl_divergence_private_group_{g}_{modality}"] = kl_mod_private.mean()
+                else:
+                    kl_mod_private = torch.zeros(x_mod.shape[0], device=x_mod.device)
+
+                mod_loss = recon_loss + kl_weight * kl_mod_private
+                total_loss = mod_loss if total_loss is None else total_loss + mod_loss
+
+            # Per-group PoE KL (shared across modalities)
+            qz_poe = inference_outputs["poe_stats"][g]["logtheta_qz"]
+            kl_poe = kl(
+                qz_poe,
+                Normal(
+                    torch.zeros_like(inference_outputs["poe_stats"][g]["logtheta_log_z"]),
+                    torch.ones_like(inference_outputs["poe_stats"][g]["logtheta_log_z"]),
+                ),
+            ).sum(dim=1)
+
+            extra_metrics[f"kl_divergence_poe_group_{g}"] = kl_poe.mean()
+            kl_local[f"kl_divergence_group_{g}_poe"] = kl_poe
+            total_loss = total_loss + kl_weight * kl_poe
+
+        loss = torch.mean(total_loss)
+
+        return LossOutput(
+            loss=loss, reconstruction_loss=reconst_losses, kl_local=kl_local, extra_metrics=extra_metrics
+        )
