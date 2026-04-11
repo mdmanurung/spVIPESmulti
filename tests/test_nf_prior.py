@@ -1,4 +1,4 @@
-"""Tests for Zuko normalizing flow prior and cycle consistency loss."""
+"""Tests for Zuko normalizing flow prior."""
 
 import importlib.util
 import os
@@ -118,73 +118,3 @@ class TestNFPrior:
         nf_kl = log_qz - log_pz
 
         assert standard_kl.shape == nf_kl.shape == (batch_size,)
-
-
-# =============================================================================
-# Test cycle consistency loss
-# =============================================================================
-
-
-class TestCycleConsistencyLoss:
-    """Tests for the sysVI-style cycle consistency loss."""
-
-    @staticmethod
-    def _cycle_consistency_loss(z_original, z_cycled):
-        """Standalone version of the static method for testing."""
-        z_concat = torch.cat([z_original, z_cycled], dim=0)
-        means = z_concat.mean(dim=0, keepdim=True)
-        stds = z_concat.std(dim=0, keepdim=True).clamp(min=1e-6)
-        z_orig_std = (z_original - means) / stds
-        z_cycle_std = (z_cycled - means) / stds
-        return torch.nn.functional.mse_loss(z_orig_std, z_cycle_std, reduction="none").sum(dim=1)
-
-    def test_identical_latents_zero_loss(self):
-        """Identical latents should give zero cycle loss."""
-        z = torch.randn(32, 10)
-        loss = self._cycle_consistency_loss(z, z.clone())
-        assert torch.allclose(loss, torch.zeros_like(loss), atol=1e-6)
-
-    def test_different_latents_positive_loss(self):
-        """Different latents should give positive loss."""
-        z1 = torch.randn(32, 10)
-        z2 = torch.randn(32, 10)
-        loss = self._cycle_consistency_loss(z1, z2)
-        assert (loss > 0).all()
-
-    def test_loss_shape(self):
-        """Loss should be per-sample (batch_size,)."""
-        z1 = torch.randn(16, 25)
-        z2 = torch.randn(16, 25)
-        loss = self._cycle_consistency_loss(z1, z2)
-        assert loss.shape == (16,)
-
-    def test_standardization_prevents_trivial_solution(self):
-        """Scaling both latents by a small constant shouldn't reduce loss."""
-        z1 = torch.randn(32, 10)
-        z2 = z1 + torch.randn(32, 10) * 0.5  # perturbed
-
-        loss_original = self._cycle_consistency_loss(z1, z2)
-        # Scale everything down by 0.01
-        loss_scaled = self._cycle_consistency_loss(z1 * 0.01, z2 * 0.01)
-
-        # Standardized MSE should be similar regardless of scale
-        assert torch.allclose(loss_original, loss_scaled, atol=1e-4)
-
-    def test_loss_is_symmetric(self):
-        """cycle_loss(a, b) == cycle_loss(b, a)."""
-        z1 = torch.randn(32, 10)
-        z2 = torch.randn(32, 10)
-        loss_ab = self._cycle_consistency_loss(z1, z2)
-        loss_ba = self._cycle_consistency_loss(z2, z1)
-        assert torch.allclose(loss_ab, loss_ba, atol=1e-6)
-
-    def test_loss_gradients_flow(self):
-        """Gradients should flow through the cycle consistency loss."""
-        z1 = torch.randn(32, 10, requires_grad=True)
-        z2 = torch.randn(32, 10, requires_grad=True)
-        loss = self._cycle_consistency_loss(z1, z2).mean()
-        loss.backward()
-        assert z1.grad is not None
-        assert z2.grad is not None
-        assert z1.grad.abs().sum() > 0
-        assert z2.grad.abs().sum() > 0
