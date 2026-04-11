@@ -24,6 +24,7 @@ dependencies = [
     "session-info",
     "scvi-tools==0.20.0",
     "torch",
+    "zuko>=1.0.0",
     "scanpy>=1.9.1",
     "pandas>=1.5.0",
     "numpy>=1.21.0",
