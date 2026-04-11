@@ -1,4 +1,44 @@
 import torch
+from scvi.distributions import NegativeBinomialMixture
+from torch.distributions import Normal
+
+
+def build_likelihood(likelihood_type, px_rate_private, px_rate_shared, px_r, px_mixing, px_scale=None):
+    """Build a likelihood distribution for a given modality.
+
+    Parameters
+    ----------
+    likelihood_type : str
+        Type of likelihood: ``"nb"`` for NegativeBinomialMixture,
+        ``"gaussian"`` for Normal distribution.
+    px_rate_private : torch.Tensor
+        Library-scaled rates from private latent space.
+    px_rate_shared : torch.Tensor
+        Library-scaled rates from shared latent space.
+    px_r : torch.Tensor
+        Dispersion parameter (used for NB only).
+    px_mixing : torch.Tensor
+        Mixing logits for private/shared contribution.
+    px_scale : torch.Tensor, optional
+        Final mixed expression rates (used for Gaussian as mean).
+
+    Returns
+    -------
+    torch.distributions.Distribution
+        The constructed likelihood distribution.
+    """
+    if likelihood_type == "nb":
+        return NegativeBinomialMixture(
+            mu1=px_rate_private, mu2=px_rate_shared, theta1=px_r, mixture_logits=px_mixing
+        )
+    elif likelihood_type == "gaussian":
+        # Use the mixed rate as mean, learn a fixed scale
+        mean = px_rate_shared
+        # Use a learned or fixed scale; here we use a fixed small scale
+        scale = torch.ones_like(mean) * 0.1
+        return Normal(loc=mean, scale=scale)
+    else:
+        raise ValueError(f"Unsupported likelihood type: {likelihood_type}. Must be 'nb' or 'gaussian'.")
 
 
 def get_kl(mu: torch.Tensor, logsigma: torch.Tensor):
