@@ -13,4 +13,5 @@ contributing.md
 references.md
 
 notebooks/example
+notebooks/dialogue_multigroup_vignette
 ```

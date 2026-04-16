@@ -13,3 +13,5 @@ and this project adheres to [Semantic Versioning][].
 ### Added
 
 -   Basic tool, preprocessing and plotting functions
+-   DIALOGUE-style multi-group vignette (`docs/notebooks/dialogue_multigroup_vignette.ipynb`)
+    showcasing N ≥ 2 group integration using `clinical.status` from `pt.dt.dialogue_example()`.
