@@ -82,3 +82,11 @@ and this project adheres to [Semantic Versioning][].
 -   The disentanglement objective is currently single-modality only.
     Multimodal mode (`is_multimodal=True`) bypasses the disentanglement
     block; tracked in `PLANS.md` as P8.
+-   All seven existing notebook vignettes (`Tutorial.ipynb`,
+    `dialogue_multigroup_vignette.ipynb`, `iri_days_vignette.ipynb`,
+    `pbmc_citeseq_tutorial.ipynb`, `cinemaot_nf_vignette.ipynb`,
+    `biolord_comparison_plasmodium_tutorial.ipynb`,
+    `multimodal_nf_tutorial.ipynb`) are updated to demonstrate (or, for
+    multimodal, document the limitation of) the disentanglement objective.
+    `README.md` now includes a dedicated *Disentanglement Objective*
+    section.
