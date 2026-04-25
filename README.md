@@ -15,6 +15,8 @@
 
 spVIPES enables robust integration of multi-group single-cell datasets through a principled shared-private latent space decomposition. The method leverages a Product of Experts (PoE) framework to learn both shared biological signals common across datasets and private representations capturing group-specific variations.
 
+An optional **disentanglement objective** (inspired by CellDISECT and Multi-ContrastiveVAE) can additionally enforce that the shared latent encodes biology — and only biology — while the private latent encodes group-specific variation — and only that. See [Disentanglement Objective](#disentanglement-objective) below.
+
 ### Integration Strategies
 
 spVIPES provides three complementary approaches for dataset alignment:
@@ -161,11 +163,55 @@ model.train(
 )
 ```
 
+## Disentanglement Objective
+
+spVIPES exposes an optional disentanglement objective inspired by **CellDISECT**'s cross-covariate decoupling MLPs and **Multi-ContrastiveVAE**. It is *not* the original Mutual Information Gap metric (Chen et al. 2018) — what we implement is a mix of:
+
+-   **adversarial domain-invariance losses** via gradient reversal (DANN-style)
+-   **supervised classification losses** acting as variational MI lower bounds
+-   an optional **prototype InfoNCE** on the shared latent
+
+These four classifiers + one contrastive term together push:
+
+```
+z_shared  : encode cell-type label,  not group identity
+z_private : encode group identity,   not cell-type label
+```
+
+### Quick start with a preset
+
+```python
+# Default (no disentanglement, fully backward-compatible):
+model = spVIPES.model.spVIPES(adata)
+
+# Full disentanglement objective:
+model = spVIPES.model.spVIPES(adata, disentangle_preset="full")
+
+# Preset + per-component override (ablation):
+model = spVIPES.model.spVIPES(adata, disentangle_preset="full", contrastive_weight=0.0)
+```
+
+Available presets: `"off"` (default), `"full"`, `"shared_only"`, `"private_only"`, `"adversarial_only"`, `"supervised_only"`, `"no_contrastive"`.
+
+### Constraints
+
+-   **Labels required for label-using components.** `disentangle_label_shared_weight`, `disentangle_label_private_weight`, and `contrastive_weight > 0` require `label_key` to be registered with `setup_anndata`. The two group classifiers (`q_group_shared`, `q_group_private`) work without labels — group identity is always known.
+-   **Multimodal not yet supported.** The disentanglement objective is single-modality only. Setting any disentanglement weight on multimodal data raises a `ValueError` at construction.
+
+See [`docs/notebooks/disentangle_ablation.ipynb`](docs/notebooks/disentangle_ablation.ipynb) for a systematic per-component ablation walkthrough.
+
 ## Documentation & Tutorials
 
 📚 **Getting Started**
 
 -   [Basic Tutorial](docs/notebooks/Tutorial.ipynb) — Complete walkthrough of spVIPES functionality
+-   [Disentanglement ablation](docs/notebooks/disentangle_ablation.ipynb) — Per-component ablation of the disentanglement objective on the DIALOGUE dataset
+-   [DIALOGUE multi-group](docs/notebooks/dialogue_multigroup_vignette.ipynb) — N ≥ 2 group integration
+-   [Kidney IRI time-course](docs/notebooks/iri_days_vignette.ipynb) — Three-day post-injury comparison
+-   [PBMC CITE-seq vaccination](docs/notebooks/pbmc_citeseq_tutorial.ipynb) — Three time-point integration
+-   [CINEMA-OT + NF prior](docs/notebooks/cinemaot_nf_vignette.ipynb) — Gaussian vs NSF prior vs disentanglement
+-   [Plasmodium liver-stage](docs/notebooks/biolord_comparison_plasmodium_tutorial.ipynb) — Comparison with biolord
+-   [Multimodal + NF prior](docs/notebooks/multimodal_nf_tutorial.ipynb) — RNA + protein integration
 -   [API Documentation][link-api] — Comprehensive API reference
 
 ## Support & Community
