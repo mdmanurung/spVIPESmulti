@@ -64,6 +64,28 @@ and this project adheres to [Semantic Versioning][].
     ablation workflow. Each component reads as one isolated
     `if self.q_X is not None` branch.
 
+### Fixed
+
+-   **`register_buffer("prototypes", ...)` crash on PyTorch 2.x** in
+    `spVIPESmodule.__init__`. The previous code assigned `self.prototypes = None`
+    before conditionally calling `register_buffer`; on PyTorch >= 2.x this
+    raises `KeyError: "attribute 'prototypes' already exists"` on the second
+    instantiation in the same process. Fix: always call `register_buffer`
+    (with `None` in the off branch) so the attribute is owned by
+    `nn.Module._buffers`. Affects any workflow that builds two `spVIPES`
+    models in the same process (e.g., `scripts/validate_disentanglement.py`,
+    the ablation notebook). (PLANS.md P0, fix 1)
+-   **`IndexError: tensors used as indices must be long, int, byte or bool`**
+    in the contrastive prototype EMA update path
+    (`_compute_disentangle_losses`, component 5). `labels_by_group[g]` is a
+    float tensor (categorical codes from scvi-tools' dataloader); the other
+    label-using branches all `.long()`-cast before use, but the contrastive
+    branch missed the cast and `self.prototypes[g, lbl]` failed on float
+    indices. Fix: cast once per group (`labels_g = labels_by_group[g].long()`)
+    above the `unique()` loop. Unblocks `disentangle_preset='full'`,
+    `'shared_only'`, and `'supervised_only'`, plus any custom config with
+    `contrastive_weight > 0`. (PLANS.md P0, fix 2)
+
 ### Changed
 
 -   Setting any of `disentangle_label_shared_weight`,
