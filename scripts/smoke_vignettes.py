@@ -68,8 +68,8 @@ MAPPING = {
     "multimodal / 3-group / NSF prior on shared / off": [
         "multimodal_nf_tutorial.ipynb",
     ],
-    "multimodal / 3-group / disentangle=full raises ValueError": [
-        "constraint enforced by spVIPES (P8 deferred in PLANS.md)",
+    "multimodal / 3-group / disentangle=full": [
+        "P8: multimodal + disentanglement objective",
     ],
 }
 
@@ -258,8 +258,8 @@ def case_multimodal_3g_nsf_off(adata3, args):
                     disentangle_preset="off")
 
 
-def case_multimodal_disentangle_must_raise(adata3, args):
-    """spVIPES should refuse disentanglement weights together with multimodal data."""
+def case_multimodal_3g_disentangle_full(adata3, args):
+    """P8: multimodal + disentangle_preset='full'. Trains end-to-end."""
     adatas_dict = split_modalities(adata3)
     prepared = spVIPES.data.prepare_multimodal_adatas(
         adatas_dict, modality_likelihoods={"rna": "nb", "protein": "nb"}
@@ -268,12 +268,8 @@ def case_multimodal_disentangle_must_raise(adata3, args):
         prepared, groups_key="groups", label_key="cell_types",
         modality_likelihoods={"rna": "nb", "protein": "nb"},
     )
-    try:
-        spVIPES.model.spVIPES(prepared, disentangle_preset="full",
-                              n_hidden=64, n_dimensions_shared=12, n_dimensions_private=6)
-    except ValueError:
-        return
-    raise AssertionError("Multimodal + disentanglement should have raised ValueError but did not.")
+    build_and_train(prepared, epochs=args.epochs, batch_size=128,
+                    disentangle_preset="full")
 
 
 CASES = [
@@ -284,7 +280,7 @@ CASES = [
     ("single-modality / 3-group / label PoE / off", case_single_3g_label_off, "three_group"),
     ("single-modality / 3-group / label PoE / full", case_single_3g_label_full, "three_group"),
     ("multimodal / 3-group / NSF prior on shared / off", case_multimodal_3g_nsf_off, "three_group"),
-    ("multimodal / 3-group / disentangle=full raises ValueError", case_multimodal_disentangle_must_raise, "three_group"),
+    ("multimodal / 3-group / disentangle=full", case_multimodal_3g_disentangle_full, "three_group"),
 ]
 
 

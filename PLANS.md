@@ -102,28 +102,28 @@ all groups' shared latents toward the reference manifold.
 
 ---
 
-## P8 — Disentanglement support for multimodal mode
+## P8 — Disentanglement support for multimodal mode (DONE)
 
-**Source:** Internal — extension of currently-implemented disentanglement objective
+**Status:** **Done.** The disentanglement objective is now wired into the
+multimodal loss path. Construction-time `ValueError` for multimodal +
+`disentangle_*_weight > 0` removed; `_loss_multimodal` now invokes
+`_compute_disentangle_losses` before returning. See "Added — Multimodal
+disentanglement support" in `CHANGELOG.md` for details.
 
-**What it does:**
-Currently `_loss_multimodal()` returns early before the disentanglement block in `loss()`,
-so disentanglement/contrastive does not apply when `is_multimodal=True`. Extend the disentanglement objective to
-support multimodal data by either adding per-modality classifiers or by
-sharing a single classifier on the joint multimodal shared latent (computed
-via PoE across modalities).
+**Design choice (Option B, with per-modality private extension):**
+Components 1, 2, 5 (shared / contrastive) operate on the post-PoE shared
+latent — modality-agnostic by construction. Components 3, 4 (private) loop
+over each modality's private latent in `_compute_disentangle_losses` (using
+`inference_outputs["per_modality_private"][(g, mod)]`), summing the
+per-modality cross-entropy terms with the same classifier weights. This
+preserves full multimodal information without adding new parameters.
 
-**Why deferred:** Single-modality disentanglement should be benchmarked first to confirm
-empirical gains before adding multimodal complexity.
-
-**Implementation notes:**
-- Option A: per-modality `q_label_*` classifiers, one per (group, modality).
-  More flexible but more parameters.
-- Option B: single classifier on the post-PoE shared latent. Simpler; assumes
-  shared latent is consistent across modalities.
-- Group classifier likely shared across modalities (group ID is one per cell).
-- Add disentanglement block to `_loss_multimodal()` mirroring the single-modality flow,
-  reusing `_compute_disentangle_losses()` by parameterising it on the latent source.
+**Open follow-up:** Empirical benchmark — there is no multimodal
+disentanglement validation script analogous to
+`scripts/validate_disentanglement.py`. The current verification only
+confirms the code runs and produces finite, grad-flowing losses; whether
+multimodal disentanglement actually improves group mixing / label
+preservation in `z_shared` is untested.
 
 ---
 

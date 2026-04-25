@@ -64,6 +64,19 @@ and this project adheres to [Semantic Versioning][].
     ablation workflow. Each component reads as one isolated
     `if self.q_X is not None` branch.
 
+-   **Multimodal disentanglement support** (PLANS.md P8). The disentanglement
+    objective now applies in multimodal mode (`is_multimodal=True`).
+    Components 1 (`q_group_shared`), 2 (`q_label_shared`), and 5 (contrastive
+    prototypes) operate on the post-PoE shared latent — modality-agnostic by
+    construction. Components 3 (`q_group_private`) and 4 (`q_label_private`)
+    loop over each modality's private latent in
+    `_compute_disentangle_losses`, summing the per-modality cross-entropy
+    terms with the same classifier weights (no new parameters).
+    `_loss_multimodal` now invokes `_compute_disentangle_losses` before
+    returning, and the construction-time `ValueError` that previously
+    rejected `disentangle_*_weight > 0` together with multimodal data has
+    been removed.
+
 ### Fixed
 
 -   **`register_buffer("prototypes", ...)` crash on PyTorch 2.x** in
@@ -93,22 +106,12 @@ and this project adheres to [Semantic Versioning][].
     `use_labels=True` now raises `ValueError` at construction time with a
     clear message. Group classifiers (`q_group_shared`, `q_group_private`)
     continue to work without labels — group identity is always known.
--   Setting any `disentangle_*_weight` or `contrastive_weight > 0` together
-    with multimodal data (`is_multimodal=True`) now raises `ValueError` at
-    model construction. Previously this combination silently bypassed the
-    disentanglement losses. Multimodal disentanglement support is tracked as
-    P8 in `PLANS.md`.
-
 ### Notes
 
--   The disentanglement objective is currently single-modality only.
-    Multimodal mode (`is_multimodal=True`) bypasses the disentanglement
-    block; tracked in `PLANS.md` as P8.
 -   All seven existing notebook vignettes (`Tutorial.ipynb`,
     `dialogue_multigroup_vignette.ipynb`, `iri_days_vignette.ipynb`,
     `pbmc_citeseq_tutorial.ipynb`, `cinemaot_nf_vignette.ipynb`,
     `biolord_comparison_plasmodium_tutorial.ipynb`,
-    `multimodal_nf_tutorial.ipynb`) are updated to demonstrate (or, for
-    multimodal, document the limitation of) the disentanglement objective.
-    `README.md` now includes a dedicated *Disentanglement Objective*
-    section.
+    `multimodal_nf_tutorial.ipynb`) are updated to demonstrate the
+    disentanglement objective. `README.md` now includes a dedicated
+    *Disentanglement Objective* section.
