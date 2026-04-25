@@ -81,6 +81,31 @@ all groups' shared latents toward the reference manifold.
 
 ---
 
+## P8 — MIG support for multimodal mode
+
+**Source:** Internal — extension of currently-implemented MIG objective
+
+**What it does:**
+Currently `_loss_multimodal()` returns early before the MIG block in `loss()`,
+so MIG/contrastive does not apply when `is_multimodal=True`. Extend MIG to
+support multimodal data by either adding per-modality classifiers or by
+sharing a single classifier on the joint multimodal shared latent (computed
+via PoE across modalities).
+
+**Why deferred:** Single-modality MIG should be benchmarked first to confirm
+empirical gains before adding multimodal complexity.
+
+**Implementation notes:**
+- Option A: per-modality `q_label_*` classifiers, one per (group, modality).
+  More flexible but more parameters.
+- Option B: single classifier on the post-PoE shared latent. Simpler; assumes
+  shared latent is consistent across modalities.
+- Group classifier likely shared across modalities (group ID is one per cell).
+- Add MIG block to `_loss_multimodal()` mirroring the single-modality flow,
+  reusing `_compute_mig_losses()` by parameterising it on the latent source.
+
+---
+
 ## Verification checklist (for all deferred plans)
 
 When implementing any plan above, validate against the existing simulated benchmark:

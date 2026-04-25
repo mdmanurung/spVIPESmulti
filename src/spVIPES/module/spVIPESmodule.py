@@ -255,7 +255,24 @@ class spVIPESmodule(BaseModuleClass):
             if nf_target in ("private", "both"):
                 self.flow_prior_private = flow_cls(features=n_dimensions_private, context=0, **flow_kwargs)
 
-        # MIG objective: 4 auxiliary classifiers (CellDISECT-style)
+        # MIG objective: 4 auxiliary classifiers (CellDISECT-style).
+        # Group classifiers (q_group_*) require only group identity (always known).
+        # Label classifiers and contrastive require use_labels=True.
+        _label_required = (
+            ("mig_label_shared_weight", mig_label_shared_weight),
+            ("mig_label_private_weight", mig_label_private_weight),
+            ("contrastive_weight", contrastive_weight),
+        )
+        _violations = [name for name, w in _label_required if w > 0]
+        if _violations and not use_labels:
+            raise ValueError(
+                f"The following MIG/contrastive weights require use_labels=True "
+                f"(label-based PoE): {_violations}. Either provide a label_key "
+                f"in setup_anndata() or set those weights to 0.0. Group classifiers "
+                f"(q_group_shared, q_group_private) do not require labels and "
+                f"remain enabled."
+            )
+
         n_groups = len(groups_lengths)
         self.mig_group_shared_weight = mig_group_shared_weight
         self.mig_label_shared_weight = mig_label_shared_weight
@@ -1072,6 +1089,135 @@ class spVIPESmodule(BaseModuleClass):
 
         return loadings
 
+    def _compute_mig_losses(self, inference_outputs, tensors_by_group, n_groups, extra_metrics):
+        """Compute MIG and contrastive losses (sum of all enabled, weighted terms).
+
+        Each component is independently controlled by its weight at construction
+        time — set the corresponding ``mig_*_weight`` to 0 to ablate that
+        component (the network is then never created, no forward/backward cost).
+
+        Returns
+        -------
+        torch.Tensor or float
+            Scalar tensor sum of all enabled, weighted MIG terms. Returns the
+            literal ``0.0`` when nothing is enabled, so the caller can write
+            ``total_loss = total_loss + self._compute_mig_losses(...)``
+            unconditionally.
+        """
+        # Quick exit when no MIG component is enabled
+        enabled = (
+            self.q_group_shared, self.q_label_shared,
+            self.q_group_private, self.q_label_private, self.prototypes,
+        )
+        if all(x is None for x in enabled):
+            return 0.0
+
+        # Labels are needed only by the label-using components
+        needs_labels = (
+            self.q_label_shared is not None
+            or self.q_label_private is not None
+            or self.prototypes is not None
+        )
+        labels_by_group = None
+        if needs_labels:
+            labels_by_group = {
+                int(k): grp["labels"].flatten()
+                for grp in tensors_by_group
+                for k in np.unique(grp["groups"].cpu())
+            }
+
+        mig_total = 0.0
+
+        # Component 1 (q_group_shared): adversarial group erasure on z_shared
+        if self.q_group_shared is not None:
+            loss_val = sum(
+                F.cross_entropy(
+                    self.q_group_shared(gradient_reversal(
+                        inference_outputs["poe_stats"][g]["logtheta_log_z"]
+                    )),
+                    torch.full(
+                        (inference_outputs["poe_stats"][g]["logtheta_log_z"].size(0),),
+                        g, dtype=torch.long,
+                        device=inference_outputs["poe_stats"][g]["logtheta_log_z"].device,
+                    ),
+                )
+                for g in range(n_groups)
+            )
+            mig_total = mig_total + self.mig_group_shared_weight * loss_val
+            extra_metrics["mig_group_shared_loss"] = loss_val / n_groups
+
+        # Component 2 (q_label_shared): supervised label preservation on z_shared
+        if self.q_label_shared is not None:
+            loss_val = sum(
+                F.cross_entropy(
+                    self.q_label_shared(inference_outputs["poe_stats"][g]["logtheta_log_z"]),
+                    labels_by_group[g].long(),
+                )
+                for g in range(n_groups)
+            )
+            mig_total = mig_total + self.mig_label_shared_weight * loss_val
+            extra_metrics["mig_label_shared_loss"] = loss_val / n_groups
+
+        # Component 3 (q_group_private): supervised group preservation on z_private
+        if self.q_group_private is not None:
+            loss_val = sum(
+                F.cross_entropy(
+                    self.q_group_private(inference_outputs["private_stats"][g]["log_z"]),
+                    torch.full(
+                        (inference_outputs["private_stats"][g]["log_z"].size(0),),
+                        g, dtype=torch.long,
+                        device=inference_outputs["private_stats"][g]["log_z"].device,
+                    ),
+                )
+                for g in range(n_groups)
+            )
+            mig_total = mig_total + self.mig_group_private_weight * loss_val
+            extra_metrics["mig_group_private_loss"] = loss_val / n_groups
+
+        # Component 4 (q_label_private): adversarial label erasure on z_private
+        if self.q_label_private is not None:
+            loss_val = sum(
+                F.cross_entropy(
+                    self.q_label_private(gradient_reversal(
+                        inference_outputs["private_stats"][g]["log_z"]
+                    )),
+                    labels_by_group[g].long(),
+                )
+                for g in range(n_groups)
+            )
+            mig_total = mig_total + self.mig_label_private_weight * loss_val
+            extra_metrics["mig_label_private_loss"] = loss_val / n_groups
+
+        # Component 5 (contrastive): InfoNCE on z_shared via EMA prototypes
+        if self.prototypes is not None:
+            with torch.no_grad():
+                for g in range(n_groups):
+                    z = inference_outputs["poe_stats"][g]["logtheta_log_z"].detach()
+                    for lbl in labels_by_group[g].unique():
+                        mask = labels_by_group[g] == lbl
+                        if mask.sum() > 0:
+                            self.prototypes[g, lbl] = (
+                                self.prototype_momentum * self.prototypes[g, lbl]
+                                + (1 - self.prototype_momentum) * z[mask].mean(0)
+                            )
+            if n_groups > 1:
+                other_groups = [
+                    [gg for gg in range(n_groups) if gg != g] for g in range(n_groups)
+                ]
+                ct_loss = sum(
+                    F.cross_entropy(
+                        F.normalize(inference_outputs["poe_stats"][g]["logtheta_log_z"], dim=-1)
+                        @ F.normalize(self.prototypes[other_groups[g]].mean(0), dim=-1).T
+                        / self.contrastive_temperature,
+                        labels_by_group[g].long(),
+                    )
+                    for g in range(n_groups)
+                )
+                mig_total = mig_total + self.contrastive_weight * ct_loss
+                extra_metrics["contrastive_loss"] = ct_loss / n_groups
+
+        return mig_total
+
     def loss(
         self,
         tensors_by_group,
@@ -1130,97 +1276,9 @@ class spVIPESmodule(BaseModuleClass):
             group_loss = recon_loss + kl_weight * kl_private + kl_weight * kl_poe
             total_loss = group_loss if total_loss is None else total_loss + group_loss
 
-        # MIG objective: 4 auxiliary classifiers
-        # Extract per-group labels once (reused by classifiers 1 and 4)
-        labels_by_group = None
-        if self.use_labels and (self.q_label_shared is not None or self.q_label_private is not None or self.prototypes is not None):
-            labels_by_group = {
-                int(k): grp["labels"].flatten()
-                for grp in tensors_by_group
-                for k in np.unique(grp["groups"].cpu())
-            }
-
-        # Classifier 2: adversarial — erase group identity from z_shared (GRL)
-        if self.q_group_shared is not None:
-            adv_group_loss = sum(
-                F.cross_entropy(
-                    self.q_group_shared(gradient_reversal(inference_outputs["poe_stats"][g]["logtheta_log_z"])),
-                    torch.full(
-                        (inference_outputs["poe_stats"][g]["logtheta_log_z"].size(0),),
-                        g, dtype=torch.long,
-                        device=inference_outputs["poe_stats"][g]["logtheta_log_z"].device,
-                    ),
-                )
-                for g in range(n_groups)
-            )
-            total_loss = total_loss + self.mig_group_shared_weight * adv_group_loss
-            extra_metrics["mig_group_shared_loss"] = adv_group_loss / n_groups
-
-        # Classifier 1: supervised — preserve label info in z_shared
-        if self.q_label_shared is not None and labels_by_group is not None:
-            sup_label_loss = sum(
-                F.cross_entropy(
-                    self.q_label_shared(inference_outputs["poe_stats"][g]["logtheta_log_z"]),
-                    labels_by_group[g].long(),
-                )
-                for g in range(n_groups)
-            )
-            total_loss = total_loss + self.mig_label_shared_weight * sup_label_loss
-            extra_metrics["mig_label_shared_loss"] = sup_label_loss / n_groups
-
-        # Classifier 3: supervised — preserve group info in z_private
-        if self.q_group_private is not None:
-            sup_group_private_loss = sum(
-                F.cross_entropy(
-                    self.q_group_private(inference_outputs["private_stats"][g]["log_z"]),
-                    torch.full(
-                        (inference_outputs["private_stats"][g]["log_z"].size(0),),
-                        g, dtype=torch.long,
-                        device=inference_outputs["private_stats"][g]["log_z"].device,
-                    ),
-                )
-                for g in range(n_groups)
-            )
-            total_loss = total_loss + self.mig_group_private_weight * sup_group_private_loss
-            extra_metrics["mig_group_private_loss"] = sup_group_private_loss / n_groups
-
-        # Classifier 4: adversarial — erase label info from z_private (GRL)
-        if self.q_label_private is not None and labels_by_group is not None:
-            adv_label_private_loss = sum(
-                F.cross_entropy(
-                    self.q_label_private(gradient_reversal(inference_outputs["private_stats"][g]["log_z"])),
-                    labels_by_group[g].long(),
-                )
-                for g in range(n_groups)
-            )
-            total_loss = total_loss + self.mig_label_private_weight * adv_label_private_loss
-            extra_metrics["mig_label_private_loss"] = adv_label_private_loss / n_groups
-
-        # Optional prototype contrastive InfoNCE on z_shared (complements classifier 1)
-        if self.prototypes is not None and labels_by_group is not None:
-            with torch.no_grad():
-                for g in range(n_groups):
-                    z = inference_outputs["poe_stats"][g]["logtheta_log_z"].detach()
-                    for lbl in labels_by_group[g].unique():
-                        mask = labels_by_group[g] == lbl
-                        if mask.sum() > 0:
-                            self.prototypes[g, lbl] = (
-                                self.prototype_momentum * self.prototypes[g, lbl]
-                                + (1 - self.prototype_momentum) * z[mask].mean(0)
-                            )
-            if n_groups > 1:
-                other_groups = [[gg for gg in range(n_groups) if gg != g] for g in range(n_groups)]
-                ct_loss = sum(
-                    F.cross_entropy(
-                        F.normalize(inference_outputs["poe_stats"][g]["logtheta_log_z"], dim=-1)
-                        @ F.normalize(self.prototypes[other_groups[g]].mean(0), dim=-1).T
-                        / self.contrastive_temperature,
-                        labels_by_group[g].long(),
-                    )
-                    for g in range(n_groups)
-                )
-                total_loss = total_loss + self.contrastive_weight * ct_loss
-                extra_metrics["contrastive_loss"] = ct_loss / n_groups
+        total_loss = total_loss + self._compute_mig_losses(
+            inference_outputs, tensors_by_group, n_groups, extra_metrics
+        )
 
         loss = torch.mean(total_loss)
 
