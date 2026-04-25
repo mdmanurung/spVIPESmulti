@@ -142,3 +142,19 @@ def mutual_information(matrix1, matrix2, sigma=0.1, num_bins=256, normalize=True
         mutual_information = 2 * mutual_information / (H_matrix1 + H_matrix2)
 
     return mutual_information
+
+
+class _GradientReversalFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, alpha):
+        ctx.alpha = alpha
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return -ctx.alpha * grad_output, None
+
+
+def gradient_reversal(x: torch.Tensor, alpha: float = 1.0) -> torch.Tensor:
+    """Reverse gradients flowing to the encoder by scaling them by -alpha."""
+    return _GradientReversalFunction.apply(x, alpha)
