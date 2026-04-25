@@ -40,3 +40,27 @@ and this project adheres to [Semantic Versioning][].
 
 -   `gradient_reversal()` utility function and `_GradientReversalFunction` added to
     `spVIPES.module.utils`.
+-   **`mig_preset` kwarg** on `spVIPES` model, with named configurations:
+    `"off"` (default), `"full"`, `"shared_only"`, `"private_only"`,
+    `"adversarial_only"`, `"supervised_only"`, `"no_contrastive"`.
+    Per-component weight kwargs (`mig_*_weight`, `contrastive_weight`) now act
+    as overrides on top of the preset. `None` (the default) means "use the
+    preset's value"; numeric values (including `0.0`) override.
+-   Ablation walkthrough notebook (`docs/notebooks/mig_ablation.ipynb`) showing
+    how to enable/disable each MIG component via presets and per-weight overrides.
+-   `_compute_mig_losses()` helper method on `spVIPESmodule` — extracts the MIG
+    loss block from `loss()` for cleaner ablation workflow. Each component
+    reads as one isolated `if self.q_X is not None` branch.
+
+### Changed
+
+-   Setting any of `mig_label_shared_weight`, `mig_label_private_weight`, or
+    `contrastive_weight > 0` without `use_labels=True` now raises `ValueError`
+    at construction time with a clear message. Group classifiers
+    (`q_group_shared`, `q_group_private`) continue to work without labels —
+    group identity is always known.
+
+### Notes
+
+-   MIG is currently single-modality only. Multimodal mode (`is_multimodal=True`)
+    bypasses the MIG block; tracked in `PLANS.md` as P8.
