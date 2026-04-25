@@ -261,6 +261,27 @@ class spVIPESmodule(BaseModuleClass):
         # acting as variational MI lower bounds. Group classifiers (q_group_*)
         # require only group identity (always known); label classifiers and
         # contrastive require use_labels=True.
+
+        # Disentanglement losses are not yet wired into the multimodal loss
+        # path. Raise rather than silently no-op (P8 in PLANS.md tracks the
+        # proper fix).
+        _any_disentangle_weight = (
+            disentangle_group_shared_weight > 0
+            or disentangle_label_shared_weight > 0
+            or disentangle_group_private_weight > 0
+            or disentangle_label_private_weight > 0
+            or contrastive_weight > 0
+        )
+        if _any_disentangle_weight and groups_modality_lengths is not None:
+            raise ValueError(
+                "Disentanglement and contrastive losses are not yet supported "
+                "in multimodal mode (is_multimodal=True). The multimodal loss "
+                "path (_loss_multimodal) bypasses _compute_disentangle_losses(). "
+                "Set all disentangle_*_weight and contrastive_weight to 0.0, "
+                "or use disentangle_preset='off' (the default). Tracked as P8 "
+                "in PLANS.md."
+            )
+
         _label_required = (
             ("disentangle_label_shared_weight", disentangle_label_shared_weight),
             ("disentangle_label_private_weight", disentangle_label_private_weight),

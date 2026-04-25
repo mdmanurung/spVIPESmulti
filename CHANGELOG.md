@@ -71,6 +71,11 @@ and this project adheres to [Semantic Versioning][].
     `use_labels=True` now raises `ValueError` at construction time with a
     clear message. Group classifiers (`q_group_shared`, `q_group_private`)
     continue to work without labels — group identity is always known.
+-   Setting any `disentangle_*_weight` or `contrastive_weight > 0` together
+    with multimodal data (`is_multimodal=True`) now raises `ValueError` at
+    model construction. Previously this combination silently bypassed the
+    disentanglement losses. Multimodal disentanglement support is tracked as
+    P8 in `PLANS.md`.
 
 ### Notes
 
