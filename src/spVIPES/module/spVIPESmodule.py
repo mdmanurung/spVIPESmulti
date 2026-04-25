@@ -328,11 +328,16 @@ class spVIPESmodule(BaseModuleClass):
             if disentangle_label_private_weight > 0 and use_labels else None
         )
 
-        # Optional prototype buffer for contrastive InfoNCE on z_shared
-        self.prototypes = None
+        # Optional prototype buffer for contrastive InfoNCE on z_shared.
+        # Use register_buffer either way so the attribute is owned by nn.Module's
+        # _buffers dict — assigning self.prototypes = None first crashes on
+        # PyTorch >= 2.x because register_buffer refuses to re-bind a name
+        # already present in __dict__.
         if contrastive_weight > 0 and use_labels:
             self.register_buffer("prototypes", torch.zeros(n_groups, n_labels, n_dimensions_shared))
             self.prototype_momentum = 0.99
+        else:
+            self.register_buffer("prototypes", None)
 
 
     def _cluster_based_poe(
@@ -1218,8 +1223,9 @@ class spVIPESmodule(BaseModuleClass):
             with torch.no_grad():
                 for g in range(n_groups):
                     z = inference_outputs["poe_stats"][g]["logtheta_log_z"].detach()
-                    for lbl in labels_by_group[g].unique():
-                        mask = labels_by_group[g] == lbl
+                    labels_g = labels_by_group[g].long()
+                    for lbl in labels_g.unique():
+                        mask = labels_g == lbl
                         if mask.sum() > 0:
                             self.prototypes[g, lbl] = (
                                 self.prototype_momentum * self.prototypes[g, lbl]
