@@ -19,17 +19,20 @@ urls.Documentation = "https://spVIPES.readthedocs.io/"
 urls.Source = "https://github.com/nrclaudio/spVIPES"
 urls.Home-page = "https://github.com/nrclaudio/spVIPES"
 dependencies = [
-    "anndata==0.10.8",
+    "anndata>=0.10",
     # for debug logging (referenced from the issue template)
     "session-info",
-    "scvi-tools==0.20.0",
+    # scvi-tools is held to the 0.20.x line because spVIPES uses several
+    # private modules (scvi._types, scvi.data._utils, scvi.dataloaders._anntorchdataset,
+    # scvi.dataloaders._data_splitting, scvi.model._utils) that were reorganised
+    # in 0.21+ and again in 1.0. Bumping is a real refactor, not a pin tweak —
+    # tracked as a follow-up.
+    "scvi-tools>=0.20.0,<0.21",
     "torch",
     "zuko>=1.0.0",
     "scanpy>=1.9.1",
     "pandas>=1.5.0",
     "numpy>=1.21.0",
-    "jax==0.4.27",
-    "jaxlib==0.4.27",
 ]
 
 [project.optional-dependencies]
@@ -53,8 +56,6 @@ doc = [
 test = [
     "pytest",
     "pytest-cov",
-    "jax==0.4.27",
-    "jaxlib==0.4.27",
 ]
 
 [tool.hatch.build.targets.wheel]
