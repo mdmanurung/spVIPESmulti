@@ -4,13 +4,22 @@ from typing import Optional, Union
 from uuid import uuid4
 
 import h5py
-import jax
-import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp_sparse
 from anndata import AnnData
-from anndata._core.sparse_dataset import SparseDataset
+
+# anndata renamed/relocated SparseDataset across 0.10 -> 0.11; both private paths
+# may be missing on newer versions, so fall back to a class that no instance
+# matches (the isinstance check below is then a harmless no-op).
+try:
+    from anndata._core.sparse_dataset import SparseDataset
+except ImportError:  # anndata >= 0.11
+    try:
+        from anndata._core.sparse_dataset import BaseCompressedSparseDataset as SparseDataset
+    except ImportError:
+        class SparseDataset:  # noqa: D401 — sentinel for isinstance fallthrough
+            """Sentinel; no real SparseDataset is available on this anndata version."""
 
 # TODO use the experimental api once we lower bound to anndata 0.8
 try:
@@ -198,17 +207,15 @@ def _check_nonnegative_integers(
     ret = True
     if len(data) != 0:
         inds = np.random.choice(len(data), size=(n_to_check,))
-        check = jax.device_put(data.flat[inds], device=jax.devices("cpu")[0])
+        check = np.asarray(data.flat[inds])
         negative, non_integer = _is_not_count_val(check)
-        ret = not (negative or non_integer)
+        ret = not (bool(negative) or bool(non_integer))
     return ret
 
 
-@jax.jit
-def _is_not_count_val(data: jnp.ndarray):
-    negative = jnp.any(data < 0)
-    non_integer = jnp.any(data % 1 != 0)
-
+def _is_not_count_val(data: np.ndarray):
+    negative = np.any(data < 0)
+    non_integer = np.any(data % 1 != 0)
     return negative, non_integer
 
 
