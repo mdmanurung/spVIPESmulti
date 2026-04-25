@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 from spVIPES.data import AnnDataManager
 from spVIPES.dataloaders._concat_dataloader import ConcatDataLoader
-from spVIPES.model._mig_presets import MIG_PRESETS
+from spVIPES.model._disentangle_presets import DISENTANGLE_PRESETS
 from spVIPES.model.base.training_mixin import MultiGroupTrainingMixin
 from spVIPES.module.spVIPESmodule import spVIPESmodule
 
@@ -234,11 +234,11 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
         nf_type: str = "NSF",
         nf_transforms: int = 3,
         nf_target: str = "shared",
-        mig_preset: str = "off",
-        mig_group_shared_weight: Optional[float] = None,
-        mig_label_shared_weight: Optional[float] = None,
-        mig_group_private_weight: Optional[float] = None,
-        mig_label_private_weight: Optional[float] = None,
+        disentangle_preset: str = "off",
+        disentangle_group_shared_weight: Optional[float] = None,
+        disentangle_label_shared_weight: Optional[float] = None,
+        disentangle_group_private_weight: Optional[float] = None,
+        disentangle_label_private_weight: Optional[float] = None,
         contrastive_weight: Optional[float] = None,
         contrastive_temperature: float = 0.1,
         **model_kwargs,
@@ -278,21 +278,21 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
         modality_likelihoods = adata.uns.get("modality_likelihoods")
         modality_names = adata.uns.get("modality_names")
 
-        # Resolve MIG preset + per-component overrides
-        if mig_preset not in MIG_PRESETS:
+        # Resolve disentanglement preset + per-component overrides
+        if disentangle_preset not in DISENTANGLE_PRESETS:
             raise ValueError(
-                f"Unknown mig_preset={mig_preset!r}. Available: {list(MIG_PRESETS)}"
+                f"Unknown disentangle_preset={disentangle_preset!r}. Available: {list(DISENTANGLE_PRESETS)}"
             )
-        _mig_weights = dict(MIG_PRESETS[mig_preset])
+        _disentangle_weights = dict(DISENTANGLE_PRESETS[disentangle_preset])
         for _name, _override in (
-            ("mig_group_shared_weight", mig_group_shared_weight),
-            ("mig_label_shared_weight", mig_label_shared_weight),
-            ("mig_group_private_weight", mig_group_private_weight),
-            ("mig_label_private_weight", mig_label_private_weight),
+            ("disentangle_group_shared_weight", disentangle_group_shared_weight),
+            ("disentangle_label_shared_weight", disentangle_label_shared_weight),
+            ("disentangle_group_private_weight", disentangle_group_private_weight),
+            ("disentangle_label_private_weight", disentangle_label_private_weight),
             ("contrastive_weight", contrastive_weight),
         ):
             if _override is not None:
-                _mig_weights[_name] = _override
+                _disentangle_weights[_name] = _override
 
         self.module = spVIPESmodule(
             groups_lengths=groups_lengths,
@@ -317,7 +317,7 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
             nf_type=nf_type,
             nf_transforms=nf_transforms,
             nf_target=nf_target,
-            **_mig_weights,
+            **_disentangle_weights,
             contrastive_temperature=contrastive_temperature,
             **model_kwargs,
         )

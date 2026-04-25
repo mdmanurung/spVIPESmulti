@@ -16,7 +16,7 @@ re-encoding to verify the shared representation is preserved.
 
 **Why deferred:** Requires a second encoder forward pass per step (~30–50% compute
 overhead) and a maintained per-group private posterior bank. Subsumes standalone cycle
-consistency; best implemented after MIG classifiers (P1–P4) are validated.
+consistency; best implemented after disentanglement classifiers (P1–P4) are validated.
 
 **Loss terms:**
 ```
@@ -40,7 +40,7 @@ L_classify = D_group(re_encode(x̃_AB)) should be group-invariant  [reuse q_grou
 **What it does:**
 Extend `groups_key` from a single string to a list of covariate keys (e.g.,
 `["batch", "condition", "donor"]`). Each covariate gets its own private encoder and
-private latent, with MIG classifiers for every covariate pair.
+private latent, with disentanglement classifiers for every covariate pair.
 
 **Why deferred:** Major architectural refactor — affects data preparation, AnnData
 registration, encoder/decoder instantiation, PoE strategy selection, and the loss
@@ -52,7 +52,7 @@ structure in `adata.uns`.
 - `module/spVIPESmodule.py`: replace single `groups_lengths` dict with nested
   `covariates_lengths: dict[str, dict]`.
 - `model/spvipes.py`: accept `covariate_keys: list[str]` alongside `groups_key`.
-- MIG classifiers: scale to `C(C+1)` auxiliary networks for `C` covariates.
+- Disentanglement classifiers: scale to `C(C+1)` auxiliary networks for `C` covariates.
 
 ---
 
@@ -81,18 +81,18 @@ all groups' shared latents toward the reference manifold.
 
 ---
 
-## P8 — MIG support for multimodal mode
+## P8 — Disentanglement support for multimodal mode
 
-**Source:** Internal — extension of currently-implemented MIG objective
+**Source:** Internal — extension of currently-implemented disentanglement objective
 
 **What it does:**
-Currently `_loss_multimodal()` returns early before the MIG block in `loss()`,
-so MIG/contrastive does not apply when `is_multimodal=True`. Extend MIG to
+Currently `_loss_multimodal()` returns early before the disentanglement block in `loss()`,
+so disentanglement/contrastive does not apply when `is_multimodal=True`. Extend the disentanglement objective to
 support multimodal data by either adding per-modality classifiers or by
 sharing a single classifier on the joint multimodal shared latent (computed
 via PoE across modalities).
 
-**Why deferred:** Single-modality MIG should be benchmarked first to confirm
+**Why deferred:** Single-modality disentanglement should be benchmarked first to confirm
 empirical gains before adding multimodal complexity.
 
 **Implementation notes:**
@@ -101,8 +101,8 @@ empirical gains before adding multimodal complexity.
 - Option B: single classifier on the post-PoE shared latent. Simpler; assumes
   shared latent is consistent across modalities.
 - Group classifier likely shared across modalities (group ID is one per cell).
-- Add MIG block to `_loss_multimodal()` mirroring the single-modality flow,
-  reusing `_compute_mig_losses()` by parameterising it on the latent source.
+- Add disentanglement block to `_loss_multimodal()` mirroring the single-modality flow,
+  reusing `_compute_disentangle_losses()` by parameterising it on the latent source.
 
 ---
 

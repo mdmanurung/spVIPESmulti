@@ -106,11 +106,11 @@ class spVIPESmodule(BaseModuleClass):
         nf_transforms: int = 3,
         nf_bins: int = 8,
         nf_target: Literal["shared", "private", "both"] = "shared",
-        # MIG objective parameters (CellDISECT / Multi-ContrastiveVAE)
-        mig_group_shared_weight: float = 0.0,
-        mig_label_shared_weight: float = 0.0,
-        mig_group_private_weight: float = 0.0,
-        mig_label_private_weight: float = 0.0,
+        # Disentanglement objective parameters (CellDISECT / Multi-ContrastiveVAE)
+        disentangle_group_shared_weight: float = 0.0,
+        disentangle_label_shared_weight: float = 0.0,
+        disentangle_group_private_weight: float = 0.0,
+        disentangle_label_private_weight: float = 0.0,
         contrastive_weight: float = 0.0,
         contrastive_temperature: float = 0.1,
     ):
@@ -255,18 +255,42 @@ class spVIPESmodule(BaseModuleClass):
             if nf_target in ("private", "both"):
                 self.flow_prior_private = flow_cls(features=n_dimensions_private, context=0, **flow_kwargs)
 
-        # MIG objective: 4 auxiliary classifiers (CellDISECT-style).
-        # Group classifiers (q_group_*) require only group identity (always known).
-        # Label classifiers and contrastive require use_labels=True.
+        # Disentanglement objective: 4 auxiliary classifiers (CellDISECT-style).
+        # Note: this is NOT the MIG metric (Chen et al. 2018) — these are a mix
+        # of adversarial domain-invariance losses (GRL) and supervised CE losses
+        # acting as variational MI lower bounds. Group classifiers (q_group_*)
+        # require only group identity (always known); label classifiers and
+        # contrastive require use_labels=True.
+
+        # Disentanglement losses are not yet wired into the multimodal loss
+        # path. Raise rather than silently no-op (P8 in PLANS.md tracks the
+        # proper fix).
+        _any_disentangle_weight = (
+            disentangle_group_shared_weight > 0
+            or disentangle_label_shared_weight > 0
+            or disentangle_group_private_weight > 0
+            or disentangle_label_private_weight > 0
+            or contrastive_weight > 0
+        )
+        if _any_disentangle_weight and groups_modality_lengths is not None:
+            raise ValueError(
+                "Disentanglement and contrastive losses are not yet supported "
+                "in multimodal mode (is_multimodal=True). The multimodal loss "
+                "path (_loss_multimodal) bypasses _compute_disentangle_losses(). "
+                "Set all disentangle_*_weight and contrastive_weight to 0.0, "
+                "or use disentangle_preset='off' (the default). Tracked as P8 "
+                "in PLANS.md."
+            )
+
         _label_required = (
-            ("mig_label_shared_weight", mig_label_shared_weight),
-            ("mig_label_private_weight", mig_label_private_weight),
+            ("disentangle_label_shared_weight", disentangle_label_shared_weight),
+            ("disentangle_label_private_weight", disentangle_label_private_weight),
             ("contrastive_weight", contrastive_weight),
         )
         _violations = [name for name, w in _label_required if w > 0]
         if _violations and not use_labels:
             raise ValueError(
-                f"The following MIG/contrastive weights require use_labels=True "
+                f"The following disentanglement/contrastive weights require use_labels=True "
                 f"(label-based PoE): {_violations}. Either provide a label_key "
                 f"in setup_anndata() or set those weights to 0.0. Group classifiers "
                 f"(q_group_shared, q_group_private) do not require labels and "
@@ -274,10 +298,10 @@ class spVIPESmodule(BaseModuleClass):
             )
 
         n_groups = len(groups_lengths)
-        self.mig_group_shared_weight = mig_group_shared_weight
-        self.mig_label_shared_weight = mig_label_shared_weight
-        self.mig_group_private_weight = mig_group_private_weight
-        self.mig_label_private_weight = mig_label_private_weight
+        self.disentangle_group_shared_weight = disentangle_group_shared_weight
+        self.disentangle_label_shared_weight = disentangle_label_shared_weight
+        self.disentangle_group_private_weight = disentangle_group_private_weight
+        self.disentangle_label_private_weight = disentangle_label_private_weight
         self.contrastive_weight = contrastive_weight
         self.contrastive_temperature = contrastive_temperature
 
@@ -286,22 +310,22 @@ class spVIPESmodule(BaseModuleClass):
         # Classifier 2: adversarial — erase group info from z_shared
         self.q_group_shared = (
             FCLayers(n_in=n_dimensions_shared, n_out=n_groups, **_clf_kwargs)
-            if mig_group_shared_weight > 0 else None
+            if disentangle_group_shared_weight > 0 else None
         )
         # Classifier 1: supervised — preserve label info in z_shared
         self.q_label_shared = (
             FCLayers(n_in=n_dimensions_shared, n_out=n_labels, **_clf_kwargs)
-            if mig_label_shared_weight > 0 and use_labels else None
+            if disentangle_label_shared_weight > 0 and use_labels else None
         )
         # Classifier 3: supervised — preserve group info in z_private
         self.q_group_private = (
             FCLayers(n_in=n_dimensions_private, n_out=n_groups, **_clf_kwargs)
-            if mig_group_private_weight > 0 else None
+            if disentangle_group_private_weight > 0 else None
         )
         # Classifier 4: adversarial — erase label info from z_private
         self.q_label_private = (
             FCLayers(n_in=n_dimensions_private, n_out=n_labels, **_clf_kwargs)
-            if mig_label_private_weight > 0 and use_labels else None
+            if disentangle_label_private_weight > 0 and use_labels else None
         )
 
         # Optional prototype buffer for contrastive InfoNCE on z_shared
@@ -1089,22 +1113,23 @@ class spVIPESmodule(BaseModuleClass):
 
         return loadings
 
-    def _compute_mig_losses(self, inference_outputs, tensors_by_group, n_groups, extra_metrics):
-        """Compute MIG and contrastive losses (sum of all enabled, weighted terms).
+    def _compute_disentangle_losses(self, inference_outputs, tensors_by_group, n_groups, extra_metrics):
+        """Compute disentanglement and contrastive losses (sum of all enabled, weighted terms).
 
         Each component is independently controlled by its weight at construction
-        time — set the corresponding ``mig_*_weight`` to 0 to ablate that
+        time — set the corresponding ``disentangle_*_weight`` to 0 to ablate that
         component (the network is then never created, no forward/backward cost).
 
         Returns
         -------
         torch.Tensor or float
-            Scalar tensor sum of all enabled, weighted MIG terms. Returns the
-            literal ``0.0`` when nothing is enabled, so the caller can write
-            ``total_loss = total_loss + self._compute_mig_losses(...)``
+            Scalar tensor sum of all enabled, weighted disentanglement terms.
+            Returns the literal ``0.0`` when nothing is enabled, so the caller
+            can write
+            ``total_loss = total_loss + self._compute_disentangle_losses(...)``
             unconditionally.
         """
-        # Quick exit when no MIG component is enabled
+        # Quick exit when no disentanglement component is enabled
         enabled = (
             self.q_group_shared, self.q_label_shared,
             self.q_group_private, self.q_label_private, self.prototypes,
@@ -1126,7 +1151,7 @@ class spVIPESmodule(BaseModuleClass):
                 for k in np.unique(grp["groups"].cpu())
             }
 
-        mig_total = 0.0
+        disentangle_total = 0.0
 
         # Component 1 (q_group_shared): adversarial group erasure on z_shared
         if self.q_group_shared is not None:
@@ -1143,8 +1168,8 @@ class spVIPESmodule(BaseModuleClass):
                 )
                 for g in range(n_groups)
             )
-            mig_total = mig_total + self.mig_group_shared_weight * loss_val
-            extra_metrics["mig_group_shared_loss"] = loss_val / n_groups
+            disentangle_total = disentangle_total + self.disentangle_group_shared_weight * loss_val
+            extra_metrics["disentangle_group_shared_loss"] = loss_val / n_groups
 
         # Component 2 (q_label_shared): supervised label preservation on z_shared
         if self.q_label_shared is not None:
@@ -1155,8 +1180,8 @@ class spVIPESmodule(BaseModuleClass):
                 )
                 for g in range(n_groups)
             )
-            mig_total = mig_total + self.mig_label_shared_weight * loss_val
-            extra_metrics["mig_label_shared_loss"] = loss_val / n_groups
+            disentangle_total = disentangle_total + self.disentangle_label_shared_weight * loss_val
+            extra_metrics["disentangle_label_shared_loss"] = loss_val / n_groups
 
         # Component 3 (q_group_private): supervised group preservation on z_private
         if self.q_group_private is not None:
@@ -1171,8 +1196,8 @@ class spVIPESmodule(BaseModuleClass):
                 )
                 for g in range(n_groups)
             )
-            mig_total = mig_total + self.mig_group_private_weight * loss_val
-            extra_metrics["mig_group_private_loss"] = loss_val / n_groups
+            disentangle_total = disentangle_total + self.disentangle_group_private_weight * loss_val
+            extra_metrics["disentangle_group_private_loss"] = loss_val / n_groups
 
         # Component 4 (q_label_private): adversarial label erasure on z_private
         if self.q_label_private is not None:
@@ -1185,8 +1210,8 @@ class spVIPESmodule(BaseModuleClass):
                 )
                 for g in range(n_groups)
             )
-            mig_total = mig_total + self.mig_label_private_weight * loss_val
-            extra_metrics["mig_label_private_loss"] = loss_val / n_groups
+            disentangle_total = disentangle_total + self.disentangle_label_private_weight * loss_val
+            extra_metrics["disentangle_label_private_loss"] = loss_val / n_groups
 
         # Component 5 (contrastive): InfoNCE on z_shared via EMA prototypes
         if self.prototypes is not None:
@@ -1213,10 +1238,10 @@ class spVIPESmodule(BaseModuleClass):
                     )
                     for g in range(n_groups)
                 )
-                mig_total = mig_total + self.contrastive_weight * ct_loss
+                disentangle_total = disentangle_total + self.contrastive_weight * ct_loss
                 extra_metrics["contrastive_loss"] = ct_loss / n_groups
 
-        return mig_total
+        return disentangle_total
 
     def loss(
         self,
@@ -1276,7 +1301,7 @@ class spVIPESmodule(BaseModuleClass):
             group_loss = recon_loss + kl_weight * kl_private + kl_weight * kl_poe
             total_loss = group_loss if total_loss is None else total_loss + group_loss
 
-        total_loss = total_loss + self._compute_mig_losses(
+        total_loss = total_loss + self._compute_disentangle_losses(
             inference_outputs, tensors_by_group, n_groups, extra_metrics
         )
 
