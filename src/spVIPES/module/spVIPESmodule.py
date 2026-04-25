@@ -11,7 +11,9 @@ from scvi.module.base import BaseModuleClass, LossOutput, auto_move_data
 from torch.distributions import Normal
 from torch.distributions import kl_divergence as kl
 
+from scvi.nn import FCLayers
 from spVIPES.nn.networks import Encoder, LinearDecoderSPVIPE
+from spVIPES.module.utils import gradient_reversal
 
 torch.backends.cudnn.benchmark = True
 
@@ -104,6 +106,13 @@ class spVIPESmodule(BaseModuleClass):
         nf_transforms: int = 3,
         nf_bins: int = 8,
         nf_target: Literal["shared", "private", "both"] = "shared",
+        # MIG objective parameters (CellDISECT / Multi-ContrastiveVAE)
+        mig_group_shared_weight: float = 0.0,
+        mig_label_shared_weight: float = 0.0,
+        mig_group_private_weight: float = 0.0,
+        mig_label_private_weight: float = 0.0,
+        contrastive_weight: float = 0.0,
+        contrastive_temperature: float = 0.1,
     ):
         """
         Initialize the spVIPES variational autoencoder module.
@@ -245,6 +254,44 @@ class spVIPESmodule(BaseModuleClass):
                 self.flow_prior_shared = flow_cls(features=n_dimensions_shared, context=0, **flow_kwargs)
             if nf_target in ("private", "both"):
                 self.flow_prior_private = flow_cls(features=n_dimensions_private, context=0, **flow_kwargs)
+
+        # MIG objective: 4 auxiliary classifiers (CellDISECT-style)
+        n_groups = len(groups_lengths)
+        self.mig_group_shared_weight = mig_group_shared_weight
+        self.mig_label_shared_weight = mig_label_shared_weight
+        self.mig_group_private_weight = mig_group_private_weight
+        self.mig_label_private_weight = mig_label_private_weight
+        self.contrastive_weight = contrastive_weight
+        self.contrastive_temperature = contrastive_temperature
+
+        _clf_kwargs = dict(n_layers=2, n_hidden=64, dropout_rate=0.1, use_batch_norm=True)
+
+        # Classifier 2: adversarial — erase group info from z_shared
+        self.q_group_shared = (
+            FCLayers(n_in=n_dimensions_shared, n_out=n_groups, **_clf_kwargs)
+            if mig_group_shared_weight > 0 else None
+        )
+        # Classifier 1: supervised — preserve label info in z_shared
+        self.q_label_shared = (
+            FCLayers(n_in=n_dimensions_shared, n_out=n_labels, **_clf_kwargs)
+            if mig_label_shared_weight > 0 and use_labels else None
+        )
+        # Classifier 3: supervised — preserve group info in z_private
+        self.q_group_private = (
+            FCLayers(n_in=n_dimensions_private, n_out=n_groups, **_clf_kwargs)
+            if mig_group_private_weight > 0 else None
+        )
+        # Classifier 4: adversarial — erase label info from z_private
+        self.q_label_private = (
+            FCLayers(n_in=n_dimensions_private, n_out=n_labels, **_clf_kwargs)
+            if mig_label_private_weight > 0 and use_labels else None
+        )
+
+        # Optional prototype buffer for contrastive InfoNCE on z_shared
+        self.prototypes = None
+        if contrastive_weight > 0 and use_labels:
+            self.register_buffer("prototypes", torch.zeros(n_groups, n_labels, n_dimensions_shared))
+            self.prototype_momentum = 0.99
 
 
     def _cluster_based_poe(
@@ -1082,6 +1129,98 @@ class spVIPESmodule(BaseModuleClass):
 
             group_loss = recon_loss + kl_weight * kl_private + kl_weight * kl_poe
             total_loss = group_loss if total_loss is None else total_loss + group_loss
+
+        # MIG objective: 4 auxiliary classifiers
+        # Extract per-group labels once (reused by classifiers 1 and 4)
+        labels_by_group = None
+        if self.use_labels and (self.q_label_shared is not None or self.q_label_private is not None or self.prototypes is not None):
+            labels_by_group = {
+                int(k): grp["labels"].flatten()
+                for grp in tensors_by_group
+                for k in np.unique(grp["groups"].cpu())
+            }
+
+        # Classifier 2: adversarial — erase group identity from z_shared (GRL)
+        if self.q_group_shared is not None:
+            adv_group_loss = sum(
+                F.cross_entropy(
+                    self.q_group_shared(gradient_reversal(inference_outputs["poe_stats"][g]["logtheta_log_z"])),
+                    torch.full(
+                        (inference_outputs["poe_stats"][g]["logtheta_log_z"].size(0),),
+                        g, dtype=torch.long,
+                        device=inference_outputs["poe_stats"][g]["logtheta_log_z"].device,
+                    ),
+                )
+                for g in range(n_groups)
+            )
+            total_loss = total_loss + self.mig_group_shared_weight * adv_group_loss
+            extra_metrics["mig_group_shared_loss"] = adv_group_loss / n_groups
+
+        # Classifier 1: supervised — preserve label info in z_shared
+        if self.q_label_shared is not None and labels_by_group is not None:
+            sup_label_loss = sum(
+                F.cross_entropy(
+                    self.q_label_shared(inference_outputs["poe_stats"][g]["logtheta_log_z"]),
+                    labels_by_group[g].long(),
+                )
+                for g in range(n_groups)
+            )
+            total_loss = total_loss + self.mig_label_shared_weight * sup_label_loss
+            extra_metrics["mig_label_shared_loss"] = sup_label_loss / n_groups
+
+        # Classifier 3: supervised — preserve group info in z_private
+        if self.q_group_private is not None:
+            sup_group_private_loss = sum(
+                F.cross_entropy(
+                    self.q_group_private(inference_outputs["private_stats"][g]["log_z"]),
+                    torch.full(
+                        (inference_outputs["private_stats"][g]["log_z"].size(0),),
+                        g, dtype=torch.long,
+                        device=inference_outputs["private_stats"][g]["log_z"].device,
+                    ),
+                )
+                for g in range(n_groups)
+            )
+            total_loss = total_loss + self.mig_group_private_weight * sup_group_private_loss
+            extra_metrics["mig_group_private_loss"] = sup_group_private_loss / n_groups
+
+        # Classifier 4: adversarial — erase label info from z_private (GRL)
+        if self.q_label_private is not None and labels_by_group is not None:
+            adv_label_private_loss = sum(
+                F.cross_entropy(
+                    self.q_label_private(gradient_reversal(inference_outputs["private_stats"][g]["log_z"])),
+                    labels_by_group[g].long(),
+                )
+                for g in range(n_groups)
+            )
+            total_loss = total_loss + self.mig_label_private_weight * adv_label_private_loss
+            extra_metrics["mig_label_private_loss"] = adv_label_private_loss / n_groups
+
+        # Optional prototype contrastive InfoNCE on z_shared (complements classifier 1)
+        if self.prototypes is not None and labels_by_group is not None:
+            with torch.no_grad():
+                for g in range(n_groups):
+                    z = inference_outputs["poe_stats"][g]["logtheta_log_z"].detach()
+                    for lbl in labels_by_group[g].unique():
+                        mask = labels_by_group[g] == lbl
+                        if mask.sum() > 0:
+                            self.prototypes[g, lbl] = (
+                                self.prototype_momentum * self.prototypes[g, lbl]
+                                + (1 - self.prototype_momentum) * z[mask].mean(0)
+                            )
+            if n_groups > 1:
+                other_groups = [[gg for gg in range(n_groups) if gg != g] for g in range(n_groups)]
+                ct_loss = sum(
+                    F.cross_entropy(
+                        F.normalize(inference_outputs["poe_stats"][g]["logtheta_log_z"], dim=-1)
+                        @ F.normalize(self.prototypes[other_groups[g]].mean(0), dim=-1).T
+                        / self.contrastive_temperature,
+                        labels_by_group[g].long(),
+                    )
+                    for g in range(n_groups)
+                )
+                total_loss = total_loss + self.contrastive_weight * ct_loss
+                extra_metrics["contrastive_loss"] = ct_loss / n_groups
 
         loss = torch.mean(total_loss)
 

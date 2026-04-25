@@ -233,6 +233,12 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
         nf_type: str = "NSF",
         nf_transforms: int = 3,
         nf_target: str = "shared",
+        mig_group_shared_weight: float = 0.0,
+        mig_label_shared_weight: float = 0.0,
+        mig_group_private_weight: float = 0.0,
+        mig_label_private_weight: float = 0.0,
+        contrastive_weight: float = 0.0,
+        contrastive_temperature: float = 0.1,
         **model_kwargs,
     ):
         super().__init__(adata)
@@ -293,6 +299,12 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
             nf_type=nf_type,
             nf_transforms=nf_transforms,
             nf_target=nf_target,
+            mig_group_shared_weight=mig_group_shared_weight,
+            mig_label_shared_weight=mig_label_shared_weight,
+            mig_group_private_weight=mig_group_private_weight,
+            mig_label_private_weight=mig_label_private_weight,
+            contrastive_weight=contrastive_weight,
+            contrastive_temperature=contrastive_temperature,
             **model_kwargs,
         )
 
