@@ -262,25 +262,11 @@ class spVIPESmodule(BaseModuleClass):
         # require only group identity (always known); label classifiers and
         # contrastive require use_labels=True.
 
-        # Disentanglement losses are not yet wired into the multimodal loss
-        # path. Raise rather than silently no-op (P8 in PLANS.md tracks the
-        # proper fix).
-        _any_disentangle_weight = (
-            disentangle_group_shared_weight > 0
-            or disentangle_label_shared_weight > 0
-            or disentangle_group_private_weight > 0
-            or disentangle_label_private_weight > 0
-            or contrastive_weight > 0
-        )
-        if _any_disentangle_weight and groups_modality_lengths is not None:
-            raise ValueError(
-                "Disentanglement and contrastive losses are not yet supported "
-                "in multimodal mode (is_multimodal=True). The multimodal loss "
-                "path (_loss_multimodal) bypasses _compute_disentangle_losses(). "
-                "Set all disentangle_*_weight and contrastive_weight to 0.0, "
-                "or use disentangle_preset='off' (the default). Tracked as P8 "
-                "in PLANS.md."
-            )
+        # Disentanglement is supported in multimodal mode (P8). Components
+        # 1, 2, 5 (shared / contrastive) operate on the post-PoE shared latent
+        # — modality-agnostic by construction. Components 3, 4 (private) loop
+        # over per-modality private latents in `_compute_disentangle_losses`
+        # when `self.is_multimodal` is True.
 
         _label_required = (
             ("disentangle_label_shared_weight", disentangle_label_shared_weight),
@@ -1188,18 +1174,28 @@ class spVIPESmodule(BaseModuleClass):
             disentangle_total = disentangle_total + self.disentangle_label_shared_weight * loss_val
             extra_metrics["disentangle_label_shared_loss"] = loss_val / n_groups
 
+        # In multimodal mode, private latents are per-(group, modality). Apply
+        # the per-private classifiers to every modality's private latent so the
+        # disentanglement objective acts on all of them (not just the first
+        # modality, which is what `private_stats[g]` holds for backward compat).
+        # In single-modality mode, both lists collapse to one tensor per group.
+        def _private_zs(g):
+            if self.is_multimodal:
+                return [
+                    inference_outputs["per_modality_private"][(g, mod)]["log_z"]
+                    for mod in self.group_modalities[g]
+                ]
+            return [inference_outputs["private_stats"][g]["log_z"]]
+
         # Component 3 (q_group_private): supervised group preservation on z_private
         if self.q_group_private is not None:
             loss_val = sum(
                 F.cross_entropy(
-                    self.q_group_private(inference_outputs["private_stats"][g]["log_z"]),
-                    torch.full(
-                        (inference_outputs["private_stats"][g]["log_z"].size(0),),
-                        g, dtype=torch.long,
-                        device=inference_outputs["private_stats"][g]["log_z"].device,
-                    ),
+                    self.q_group_private(z),
+                    torch.full((z.size(0),), g, dtype=torch.long, device=z.device),
                 )
                 for g in range(n_groups)
+                for z in _private_zs(g)
             )
             disentangle_total = disentangle_total + self.disentangle_group_private_weight * loss_val
             extra_metrics["disentangle_group_private_loss"] = loss_val / n_groups
@@ -1208,12 +1204,11 @@ class spVIPESmodule(BaseModuleClass):
         if self.q_label_private is not None:
             loss_val = sum(
                 F.cross_entropy(
-                    self.q_label_private(gradient_reversal(
-                        inference_outputs["private_stats"][g]["log_z"]
-                    )),
+                    self.q_label_private(gradient_reversal(z)),
                     labels_by_group[g].long(),
                 )
                 for g in range(n_groups)
+                for z in _private_zs(g)
             )
             disentangle_total = disentangle_total + self.disentangle_label_private_weight * loss_val
             extra_metrics["disentangle_label_private_loss"] = loss_val / n_groups
@@ -1381,6 +1376,13 @@ class spVIPESmodule(BaseModuleClass):
             extra_metrics[f"kl_divergence_poe_group_{g}"] = kl_poe.mean()
             kl_local[f"kl_divergence_group_{g}_poe"] = kl_poe
             total_loss = total_loss + kl_weight * kl_poe
+
+        # P8: disentanglement objective on multimodal mode. The helper early-
+        # exits when no component is enabled, so the cost is one tuple
+        # comparison when disentangle_preset='off'.
+        total_loss = total_loss + self._compute_disentangle_losses(
+            inference_outputs, tensors_by_group, n_groups, extra_metrics
+        )
 
         loss = torch.mean(total_loss)
 

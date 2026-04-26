@@ -64,6 +64,41 @@ and this project adheres to [Semantic Versioning][].
     ablation workflow. Each component reads as one isolated
     `if self.q_X is not None` branch.
 
+-   **Multimodal disentanglement support** (PLANS.md P8). The disentanglement
+    objective now applies in multimodal mode (`is_multimodal=True`).
+    Components 1 (`q_group_shared`), 2 (`q_label_shared`), and 5 (contrastive
+    prototypes) operate on the post-PoE shared latent — modality-agnostic by
+    construction. Components 3 (`q_group_private`) and 4 (`q_label_private`)
+    loop over each modality's private latent in
+    `_compute_disentangle_losses`, summing the per-modality cross-entropy
+    terms with the same classifier weights (no new parameters).
+    `_loss_multimodal` now invokes `_compute_disentangle_losses` before
+    returning, and the construction-time `ValueError` that previously
+    rejected `disentangle_*_weight > 0` together with multimodal data has
+    been removed.
+
+### Fixed
+
+-   **`register_buffer("prototypes", ...)` crash on PyTorch 2.x** in
+    `spVIPESmodule.__init__`. The previous code assigned `self.prototypes = None`
+    before conditionally calling `register_buffer`; on PyTorch >= 2.x this
+    raises `KeyError: "attribute 'prototypes' already exists"` on the second
+    instantiation in the same process. Fix: always call `register_buffer`
+    (with `None` in the off branch) so the attribute is owned by
+    `nn.Module._buffers`. Affects any workflow that builds two `spVIPES`
+    models in the same process (e.g., `scripts/validate_disentanglement.py`,
+    the ablation notebook). (PLANS.md P0, fix 1)
+-   **`IndexError: tensors used as indices must be long, int, byte or bool`**
+    in the contrastive prototype EMA update path
+    (`_compute_disentangle_losses`, component 5). `labels_by_group[g]` is a
+    float tensor (categorical codes from scvi-tools' dataloader); the other
+    label-using branches all `.long()`-cast before use, but the contrastive
+    branch missed the cast and `self.prototypes[g, lbl]` failed on float
+    indices. Fix: cast once per group (`labels_g = labels_by_group[g].long()`)
+    above the `unique()` loop. Unblocks `disentangle_preset='full'`,
+    `'shared_only'`, and `'supervised_only'`, plus any custom config with
+    `contrastive_weight > 0`. (PLANS.md P0, fix 2)
+
 ### Changed
 
 -   Setting any of `disentangle_label_shared_weight`,
@@ -71,22 +106,12 @@ and this project adheres to [Semantic Versioning][].
     `use_labels=True` now raises `ValueError` at construction time with a
     clear message. Group classifiers (`q_group_shared`, `q_group_private`)
     continue to work without labels — group identity is always known.
--   Setting any `disentangle_*_weight` or `contrastive_weight > 0` together
-    with multimodal data (`is_multimodal=True`) now raises `ValueError` at
-    model construction. Previously this combination silently bypassed the
-    disentanglement losses. Multimodal disentanglement support is tracked as
-    P8 in `PLANS.md`.
-
 ### Notes
 
--   The disentanglement objective is currently single-modality only.
-    Multimodal mode (`is_multimodal=True`) bypasses the disentanglement
-    block; tracked in `PLANS.md` as P8.
 -   All seven existing notebook vignettes (`Tutorial.ipynb`,
     `dialogue_multigroup_vignette.ipynb`, `iri_days_vignette.ipynb`,
     `pbmc_citeseq_tutorial.ipynb`, `cinemaot_nf_vignette.ipynb`,
     `biolord_comparison_plasmodium_tutorial.ipynb`,
-    `multimodal_nf_tutorial.ipynb`) are updated to demonstrate (or, for
-    multimodal, document the limitation of) the disentanglement objective.
-    `README.md` now includes a dedicated *Disentanglement Objective*
-    section.
+    `multimodal_nf_tutorial.ipynb`) are updated to demonstrate the
+    disentanglement objective. `README.md` now includes a dedicated
+    *Disentanglement Objective* section.
