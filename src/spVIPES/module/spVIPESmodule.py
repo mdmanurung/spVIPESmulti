@@ -100,6 +100,10 @@ class spVIPESmodule(BaseModuleClass):
         groups_modality_var_indices: Optional[dict] = None,
         modality_likelihoods: Optional[dict[str, str]] = None,
         modality_names: Optional[list[str]] = None,
+        groups_modality_masks: Optional[dict] = None,
+        modality_loss_weights: Optional[dict[str, float]] = None,
+        use_jeffreys_integ: bool = False,
+        jeffreys_integ_weight: float = 1.0,
         # Normalizing flow prior parameters
         use_nf_prior: bool = False,
         nf_type: Literal["NSF", "MAF"] = "NSF",
@@ -156,6 +160,10 @@ class spVIPESmodule(BaseModuleClass):
         self.groups_modality_var_indices = groups_modality_var_indices
         self.modality_likelihoods = modality_likelihoods or {}
         self.modality_names = modality_names or []
+        self.groups_modality_masks = groups_modality_masks or {}
+        self.modality_loss_weights = modality_loss_weights or {}
+        self.use_jeffreys_integ = use_jeffreys_integ
+        self.jeffreys_integ_weight = jeffreys_integ_weight
         # Track which modalities each group has
         if self.is_multimodal:
             self.group_modalities = {g: list(mod_dict.keys()) for g, mod_dict in groups_modality_lengths.items()}
@@ -806,6 +814,45 @@ class spVIPESmodule(BaseModuleClass):
 
         return poe_stats
 
+    def _jeffreys_divergence_loss(self, mu1, logvar1, mu2, logvar2):
+        """Symmetric KL (Jeffreys divergence) between two batches of Gaussian posteriors.
+
+        Aggregates each batch to a single representative Gaussian by averaging
+        means and variances, then returns KL(p1‖p2) + KL(p2‖p1) summed over
+        latent dimensions. This handles groups of unequal batch sizes.
+        """
+        var1 = logvar1.exp().mean(dim=0)
+        var2 = logvar2.exp().mean(dim=0)
+        agg_mu1 = mu1.mean(dim=0)
+        agg_mu2 = mu2.mean(dim=0)
+        rv1 = Normal(agg_mu1, var1.sqrt().clamp(min=1e-6))
+        rv2 = Normal(agg_mu2, var2.sqrt().clamp(min=1e-6))
+        return (kl(rv1, rv2) + kl(rv2, rv1)).sum()
+
+    def _compute_jeffreys_integ_loss(self, inference_outputs, n_groups, extra_metrics):
+        """Pairwise Jeffreys divergence across all group PoE posteriors.
+
+        Following multigrate's alignment strategy (symmetric KL between groups),
+        this loss pulls the shared latent distributions of all groups together
+        without requiring matched cells or auxiliary networks.
+        """
+        poe_stats = inference_outputs["poe_stats"]
+        device = poe_stats[0]["logtheta_loc"].device
+        total = torch.zeros(1, device=device)
+
+        for g1 in range(n_groups):
+            for g2 in range(g1 + 1, n_groups):
+                mu1 = poe_stats[g1]["logtheta_loc"]
+                logvar1 = poe_stats[g1]["logtheta_logvar"]
+                mu2 = poe_stats[g2]["logtheta_loc"]
+                logvar2 = poe_stats[g2]["logtheta_logvar"]
+                total = total + self._jeffreys_divergence_loss(mu1, logvar1, mu2, logvar2)
+
+        n_pairs = max(1, n_groups * (n_groups - 1) // 2)
+        loss = total / n_pairs
+        extra_metrics["jeffreys_integ_loss"] = loss.detach().mean()
+        return loss.squeeze(0)
+
     def _product_of_experts(self, mus, logvars):
         vars = torch.exp(logvars)
         mus_joint = torch.sum(mus / vars, dim=0)
@@ -1360,7 +1407,8 @@ class spVIPESmodule(BaseModuleClass):
                 else:
                     kl_mod_private = torch.zeros(x_mod.shape[0], device=x_mod.device)
 
-                mod_loss = recon_loss + kl_weight * kl_mod_private
+                mod_weight = self.modality_loss_weights.get(modality, 1.0)
+                mod_loss = mod_weight * recon_loss + kl_weight * kl_mod_private
                 total_loss = mod_loss if total_loss is None else total_loss + mod_loss
 
             # Per-group PoE KL (shared across modalities)
@@ -1383,6 +1431,10 @@ class spVIPESmodule(BaseModuleClass):
         total_loss = total_loss + self._compute_disentangle_losses(
             inference_outputs, tensors_by_group, n_groups, extra_metrics
         )
+
+        if self.use_jeffreys_integ:
+            jeffreys_loss = self._compute_jeffreys_integ_loss(inference_outputs, n_groups, extra_metrics)
+            total_loss = total_loss + self.jeffreys_integ_weight * jeffreys_loss
 
         loss = torch.mean(total_loss)
 

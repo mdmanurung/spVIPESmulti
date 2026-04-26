@@ -288,12 +288,19 @@ def prepare_multimodal_adatas(
                 indices = np.where(multigroups_adata.var_names.str.startswith(prefix))[0]
                 groups_modality_var_indices[i][modality] = indices
 
+    # Boolean mask: groups_modality_masks[group_idx][modality] = True if present
+    groups_modality_masks = {
+        i: {modality: modality in adatas[group_name] for modality in modality_names}
+        for i, group_name in enumerate(group_names)
+    }
+
     # Store all metadata
     multigroups_adata.uns["is_multimodal"] = True
     multigroups_adata.uns["modality_names"] = modality_names
     multigroups_adata.uns["modality_likelihoods"] = modality_likelihoods
     multigroups_adata.uns["groups_modality_lengths"] = groups_modality_lengths
     multigroups_adata.uns["groups_modality_var_indices"] = groups_modality_var_indices
+    multigroups_adata.uns["groups_modality_masks"] = groups_modality_masks
     multigroups_adata.uns["groups_obs_names"] = groups_obs_names
     multigroups_adata.uns["groups_lengths"] = groups_lengths
     multigroups_adata.uns["groups_var_names"] = groups_var_names
