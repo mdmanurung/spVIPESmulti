@@ -28,6 +28,10 @@ import json
 import warnings
 from pathlib import Path
 from time import perf_counter
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import anndata
 
 warnings.filterwarnings("ignore")
 
