@@ -241,6 +241,9 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
         disentangle_label_private_weight: Optional[float] = None,
         contrastive_weight: Optional[float] = None,
         contrastive_temperature: float = 0.1,
+        modality_loss_weights: Optional[dict] = None,
+        use_jeffreys_integ: bool = False,
+        jeffreys_integ_weight: float = 1.0,
         **model_kwargs,
     ):
         super().__init__(adata)
@@ -277,6 +280,7 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
         groups_modality_var_indices = adata.uns.get("groups_modality_var_indices")
         modality_likelihoods = adata.uns.get("modality_likelihoods")
         modality_names = adata.uns.get("modality_names")
+        groups_modality_masks = adata.uns.get("groups_modality_masks")
 
         # Resolve disentanglement preset + per-component overrides
         if disentangle_preset not in DISENTANGLE_PRESETS:
@@ -313,6 +317,10 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
             groups_modality_var_indices=groups_modality_var_indices,
             modality_likelihoods=modality_likelihoods,
             modality_names=modality_names,
+            groups_modality_masks=groups_modality_masks,
+            modality_loss_weights=modality_loss_weights,
+            use_jeffreys_integ=use_jeffreys_integ,
+            jeffreys_integ_weight=jeffreys_integ_weight,
             use_nf_prior=use_nf_prior,
             nf_type=nf_type,
             nf_transforms=nf_transforms,
