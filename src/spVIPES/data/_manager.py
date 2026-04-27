@@ -16,7 +16,7 @@ from mudata import MuData
 from rich import box
 from rich.console import Console
 from scvi._types import AnnOrMuData
-from scvi.dataloaders._anntorchdataset import AnnTorchDataset
+from scvi.data import AnnTorchDataset
 from scvi.utils import attrdict
 from torch.utils.data import Subset
 

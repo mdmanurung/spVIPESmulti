@@ -2,16 +2,14 @@
 
 from typing import Optional
 
+import lightning.pytorch as pl
 import numpy as np
-import pytorch_lightning as pl
-from anndata import AnnData
+import torch
 from scvi import settings
 from scvi.dataloaders._data_splitting import validate_data_split
-from scvi.model._utils import parse_use_gpu_arg
 
+from spVIPES.data._manager import AnnDataManager
 from spVIPES.dataloaders._concat_dataloader import ConcatDataLoader
-
-# from spVIPES.dataloaders._supervised_concat_dataloader import SupervisedConcatDataLoader
 
 
 # accessed https://github.com/Genentech/multiGroupVI/blob/main/multigroup_vi/data/data_splitting.py 01/04/2023
@@ -20,33 +18,28 @@ class MultiGroupDataSplitter(pl.LightningDataModule):
     Create MultiGroupDataLoader for training, validation, and test set.
     Args:
     ----
-        adata: AnnData object that has been registered via `setup_anndata`.
+        adata_manager: AnnDataManager object registered via `setup_anndata`.
         group_indices_list: [[species_1 obs indices], [species_2 obs indices]]
         train_size: Proportion of data to include in the training set.
         validation_size: Proportion of data to include in the validation set. The
             remaining proportion after `train_size` and `validation_size` is used for
             the test set.
-        use_gpu: Use default GPU if available (if None or True); or index of GPU to
-            use (if int); or name of GPU (if str, e.g., `'cuda:0'`); or use CPU
-            (if False).
         **kwargs: Keyword args for data loader (`MultiGroupDataLoader`).
     """
 
     def __init__(
         self,
-        adata: AnnData,
+        adata_manager: AnnDataManager,
         group_indices_list: list[list[int]],
         train_size: float = 0.9,
         validation_size: Optional[float] = None,
-        use_gpu: bool = False,
         **kwargs,
     ) -> None:
         super().__init__()
-        self.adata = adata
+        self.adata = adata_manager
         self.group_indices_list = group_indices_list
         self.train_size = train_size
         self.validation_size = validation_size
-        self.use_gpu = use_gpu
         self.data_loader_kwargs = kwargs
 
         self.n_per_group = [len(group_indices) for group_indices in group_indices_list]
@@ -78,8 +71,9 @@ class MultiGroupDataSplitter(pl.LightningDataModule):
             self.train_idx_per_group.append(group_permutation[n_val_group : (n_val_group + n_train_group)])
             self.test_idx_per_group.append(group_permutation[(n_val_group + n_train_group) :])
 
-        accelerator, _, self.device = parse_use_gpu_arg(self.use_gpu, return_device=True)
-        self.pin_memory = True if (settings.dl_pin_memory_gpu_training and accelerator == "gpu") else False
+        on_gpu = torch.cuda.is_available()
+        self.device = torch.device("cuda" if on_gpu else "cpu")
+        self.pin_memory = settings.dl_pin_memory_gpu_training and on_gpu
         self.train_idx = self.train_idx_per_group
         self.test_idx = self.test_idx_per_group
         self.val_idx = self.val_idx_per_group

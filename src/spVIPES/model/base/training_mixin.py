@@ -5,7 +5,7 @@ https://docs.scvi-tools.org/en/0.9.0/user_guide/notebooks/model_user_guide.html#
 """
 
 
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 from scvi.train import TrainingPlan, TrainRunner
@@ -21,13 +21,12 @@ class MultiGroupTrainingMixin:
         group_indices_list: list[list[int]],
         batch_size: Optional[int] = 128,
         max_epochs: Optional[int] = None,
-        use_gpu: Optional[Union[str, int, bool]] = None,
         train_size: float = 0.9,
         validation_size: Optional[float] = None,
         early_stopping: bool = False,
         plan_kwargs: Optional[dict] = None,
-        n_steps_kl_warmup: Union[int, None] = None,
-        n_epochs_kl_warmup: Union[int, None] = 400,
+        n_steps_kl_warmup: Optional[int] = None,
+        n_epochs_kl_warmup: Optional[int] = 400,
         **trainer_kwargs,
     ) -> None:
         """
@@ -45,10 +44,6 @@ class MultiGroupTrainingMixin:
         max_epochs : int, optional
             Number of passes through the dataset. If None, defaults to
             ``np.min([round((20000 / n_cells) * 400), 400])``.
-        use_gpu : str, int, bool, optional
-            GPU usage specification. Use default GPU if available (if None or True),
-            or index of GPU to use (if int), or name of GPU (if str, e.g., "cuda:0"),
-            or use CPU (if False).
         train_size : float, default=0.9
             Size of training set in the range [0.0, 1.0].
         validation_size : float, optional
@@ -81,11 +76,6 @@ class MultiGroupTrainingMixin:
         handling of multiple cell groups during training, maintaining the integrity
         of the shared-private latent space learning.
         """
-        # if batch_sizes is None:
-        #     n_cells_per_group = [len(group) for group in group_indices_list]
-        #     biggest_groups = n_cells_per_group.index(max(n_cells_per_group)) #get index, groups0 or groups1
-        #     n_iters = n_cells_per_group[biggest_groups] / 128 #default to 128 batch size for biggest groups
-        #     batch_sizes = [math.floor(i/n_iters) for i in n_cells_per_group]
         if max_epochs is None:
             n_cells = self.adata.n_obs
             max_epochs = np.min([round((20000 / n_cells) * 400), 400]).item()
@@ -106,7 +96,6 @@ class MultiGroupTrainingMixin:
             train_size=train_size,
             validation_size=validation_size,
             batch_size=batch_size,
-            use_gpu=use_gpu,
         )
         training_plan = TrainingPlan(self.module, **plan_kwargs)
 
@@ -117,7 +106,6 @@ class MultiGroupTrainingMixin:
             training_plan=training_plan,
             data_splitter=data_splitter,
             max_epochs=max_epochs,
-            use_gpu=use_gpu,
             **trainer_kwargs,
         )
         return runner()
