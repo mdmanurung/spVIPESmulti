@@ -63,7 +63,9 @@ class MultiGroupTrainingMixin:
         n_epochs_kl_warmup : int, default=400
             Number of epochs for KL divergence warmup.
         **trainer_kwargs
-            Additional keyword arguments for the trainer.
+            Additional keyword arguments forwarded to ``pl.Trainer`` via scvi-tools'
+            ``TrainRunner``. To select an accelerator (replaces the removed ``use_gpu``
+            argument), pass e.g. ``accelerator="gpu"`` and ``devices=1``.
 
         Returns
         -------

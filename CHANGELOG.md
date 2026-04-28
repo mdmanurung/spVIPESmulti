@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+-   **scvi-tools upgraded to >=1.0,<2** (was pinned to 0.20.x). Minimum Python
+    is now 3.10. Several private scvi-tools modules removed in 1.x (`scvi.data._constants`,
+    `scvi.data._utils.get_anndata_attribute`, `scvi.dataloaders._anntorchdataset`,
+    `scvi.dataloaders._data_splitting.validate_data_split`, `scvi._types`) are now
+    vendored under `spVIPES.data`. `pytorch_lightning` was replaced with
+    `lightning.pytorch`.
+-   **`MultiGroupTrainingMixin.train(...)` no longer accepts `use_gpu`.** scvi-tools 1.x
+    routes accelerator selection through `pl.Trainer`. Pass `accelerator="gpu"` (or
+    `"cpu"`, `"auto"`) and `devices=...` via `**trainer_kwargs` instead.
+-   **`MultiGroupDataSplitter` now stores its registered manager on
+    `self.adata_manager`** (was `self.adata`). Downstream code using the splitter as a
+    library should rename accordingly.
+
 ### Added
 
 -   Basic tool, preprocessing and plotting functions

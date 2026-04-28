@@ -115,6 +115,21 @@ class TestDataSplitter:
                 "Found 'pytorch_lightning' import — must use 'lightning.pytorch'"
             )
 
+    def test_no_private_data_splitting_import(self):
+        """scvi.dataloaders._data_splitting.validate_data_split must not be imported (vendored)."""
+        for kind, module, _ in _collect_imports(self.PATH):
+            assert not module.startswith("scvi.dataloaders._data_splitting"), (
+                "Found 'scvi.dataloaders._data_splitting' import — function is vendored locally"
+            )
+
+    def test_local_validate_data_split_defined(self):
+        """A local _validate_data_split helper must be defined."""
+        tree = ast.parse(self.PATH.read_text())
+        names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+        assert "_validate_data_split" in names, (
+            "Missing local _validate_data_split helper in _multi_datasplitter.py"
+        )
+
     def test_lightning_pytorch_imported(self):
         """lightning.pytorch must be imported."""
         found = any(
@@ -192,19 +207,51 @@ class TestTrainingMixin:
                     "Found 'Union' in typing imports — unused after use_gpu removal"
                 )
 
-    def test_no_use_gpu_in_datasplitter_call(self):
-        """use_gpu= must not appear in MultiGroupDataSplitter(...) call."""
-        source = self.PATH.read_text()
-        # Simple text search is sufficient; AST keyword detection is equivalent
-        assert "use_gpu=use_gpu" not in source, (
-            "Found 'use_gpu=use_gpu' in _multi_datasplitter call — must be removed"
-        )
+    def test_no_use_gpu_kwarg_in_any_call(self):
+        """No call site may pass a ``use_gpu`` keyword (kwarg removed in scvi 1.x)."""
+        tree = ast.parse(self.PATH.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                for kw in node.keywords:
+                    assert kw.arg != "use_gpu", (
+                        "Found a call passing 'use_gpu=...' — kwarg removed in scvi-tools 1.x"
+                    )
 
-    def test_no_use_gpu_in_trainrunner_call(self):
-        """use_gpu= must not appear in TrainRunner(...) call."""
-        source = self.PATH.read_text()
-        assert "use_gpu=" not in source, (
-            "Found 'use_gpu=' in TrainRunner call — kwarg removed in scvi-tools 1.x"
+
+# ---------------------------------------------------------------------------
+# Vendored types — no remaining `from scvi._types import ...` in source
+# ---------------------------------------------------------------------------
+
+
+class TestVendoredTypes:
+    FILES = [
+        SRC / "data" / "_manager.py",
+        SRC / "data" / "_utils.py",
+        SRC / "data" / "fields" / "_base_field.py",
+    ]
+
+    @pytest.mark.parametrize("path", FILES, ids=lambda p: p.name)
+    def test_no_scvi_private_types_import(self, path):
+        """``from scvi._types import ...`` must be replaced by spVIPES.data._types."""
+        for kind, module, _ in _collect_imports(path):
+            assert not (kind == "from" and module == "scvi._types"), (
+                f"{path.name} still imports from private 'scvi._types' — "
+                "use 'spVIPES.data._types' instead"
+            )
+
+    def test_local_types_module_exposes_aliases(self):
+        """spVIPES.data._types must define AnnOrMuData and MinifiedDataType."""
+        text = (SRC / "data" / "_types.py").read_text()
+        tree = ast.parse(text)
+        defined = {
+            target.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        assert {"AnnOrMuData", "MinifiedDataType"}.issubset(defined), (
+            f"spVIPES.data._types missing aliases: {defined}"
         )
 
 
@@ -245,22 +292,55 @@ class TestPyprojectToml:
 
 @pytest.mark.integration
 class TestIntegration:
-    """Runtime checks that require scvi 1.x to be installed."""
+    """Runtime checks that require scvi 1.x to be installed.
+
+    These tests skip (rather than fail) when scvi-tools isn't on the
+    Python path so the AST suite stays useful in lightweight CI / local
+    setups. CI installs scvi as a hard dependency, so they run there.
+    """
 
     def test_scvi_version(self):
-        import scvi
+        scvi = pytest.importorskip("scvi")
         major = int(scvi.__version__.split(".")[0])
         assert major >= 1, f"Expected scvi-tools>=1.0, got {scvi.__version__}"
 
     def test_anntorchdataset_importable_from_scvi_data(self):
+        pytest.importorskip("scvi")
         from scvi.data import AnnTorchDataset  # noqa: F401
 
     def test_lightning_pytorch_importable(self):
-        import lightning.pytorch  # noqa: F401
+        pytest.importorskip("lightning.pytorch")
 
     def test_no_parse_use_gpu_arg_in_scvi(self):
+        pytest.importorskip("scvi")
         with pytest.raises(ImportError):
             from scvi.model._utils import parse_use_gpu_arg  # noqa: F401
 
     def test_spvipes_importable(self):
+        pytest.importorskip("scvi")
         import spVIPES  # noqa: F401
+
+    def test_multigroup_datasplitter_constructs(self):
+        """Smoke test: data splitter accepts a registered AnnDataManager and computes split sizes."""
+        pytest.importorskip("scvi")
+        import numpy as np
+        from anndata import AnnData
+        from scvi.data.fields import LayerField
+
+        from spVIPES.data import AnnDataManager
+        from spVIPES.data._multi_datasplitter import MultiGroupDataSplitter
+
+        rng = np.random.default_rng(0)
+        adata = AnnData(X=rng.poisson(1.0, size=(40, 5)).astype("float32"))
+        adata.layers["counts"] = adata.X.copy()
+        manager = AnnDataManager(fields=[LayerField("X", "counts")])
+        manager.register_fields(adata)
+
+        group_indices_list = [list(range(20)), list(range(20, 40))]
+        splitter = MultiGroupDataSplitter(
+            manager,
+            group_indices_list=group_indices_list,
+            train_size=0.8,
+        )
+        assert splitter.adata_manager is manager
+        assert all(n > 0 for n in splitter.n_train_per_group)
