@@ -82,14 +82,14 @@ import scanpy as sc
 adata = sc.read_h5ad("data.h5ad")
 
 # Configure integration strategy
-spVIPES.model.setup_anndata(
+spVIPES.model.spVIPES.setup_anndata(
     adata,
     groups_key="dataset",
     label_key="cell_type",  # Optional: for supervised integration
 )
 
 # Initialize and train model
-model = spVIPES.model(adata)
+model = spVIPES.model.spVIPES(adata)
 model.train(max_epochs=200)
 
 # Extract integrated representations
@@ -105,7 +105,7 @@ adata.obsm["X_spVIPES"] = latent
 Use when high-quality cell type annotations are available:
 
 ```python
-spVIPES.model.setup_anndata(
+spVIPES.model.spVIPES.setup_anndata(
     adata,
     groups_key="dataset",
     label_key="cell_type",
@@ -122,7 +122,7 @@ For datasets with known cell-to-cell correspondences:
 
 ```python
 # Assumes transport plan stored in adata.uns["transport_plan"]
-spVIPES.model.setup_anndata(
+spVIPES.model.spVIPES.setup_anndata(
     adata,
     groups_key="dataset",
     transport_plan_key="transport_plan",
@@ -138,7 +138,7 @@ spVIPES.model.setup_anndata(
 For automatic cluster-based alignment:
 
 ```python
-spVIPES.model.setup_anndata(
+spVIPES.model.spVIPES.setup_anndata(
     adata,
     groups_key="dataset",
     transport_plan_key="transport_plan",
@@ -152,7 +152,7 @@ spVIPES.model.setup_anndata(
 
 ```python
 # Custom model parameters
-model = spVIPES.model(
+model = spVIPES.model.spVIPES(
     adata,
     n_dimensions_shared=25,  # Shared latent dimensions
     n_dimensions_private=10,  # Private latent dimensions
@@ -162,7 +162,12 @@ model = spVIPES.model(
 
 # Training with custom settings
 model.train(
-    max_epochs=300, batch_size=512, early_stopping=True, check_val_every_n_epoch=10
+    max_epochs=300,
+    batch_size=512,
+    early_stopping=True,
+    check_val_every_n_epoch=10,
+    accelerator="gpu",  # scvi-tools 1.x: replaces the removed use_gpu=True
+    devices=1,
 )
 ```
 
