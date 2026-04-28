@@ -33,8 +33,11 @@ spVIPES provides three complementary approaches for dataset alignment:
 
 ### Requirements
 
--   Python 3.9-3.10
+-   Python ≥ 3.10
+-   scvi-tools ≥ 1.0 (built on `lightning.pytorch`)
 -   PyTorch (GPU support strongly recommended)
+
+> **scvi-tools 1.x note.** The deprecated `use_gpu=True` kwarg on `model.train(...)` has been removed; pass `accelerator="gpu", devices=1` (or `"auto"`) inside `**trainer_kwargs` instead. Several private scvi-tools modules removed in 1.x are now vendored under `spVIPES.data`.
 
 ### Quick Install
 
@@ -196,9 +199,34 @@ Available presets: `"off"` (default), `"full"`, `"shared_only"`, `"private_only"
 ### Constraints
 
 -   **Labels required for label-using components.** `disentangle_label_shared_weight`, `disentangle_label_private_weight`, and `contrastive_weight > 0` require `label_key` to be registered with `setup_anndata`. The two group classifiers (`q_group_shared`, `q_group_private`) work without labels — group identity is always known.
--   **Multimodal not yet supported.** The disentanglement objective is single-modality only. Setting any disentanglement weight on multimodal data raises a `ValueError` at construction.
+-   **Multimodal supported.** As of the multimodal-disentanglement work (P8), the objective applies in multimodal mode too: components 1, 2, 5 act on the post-PoE shared latent and components 3, 4 loop over each modality's private latent. The earlier construction-time `ValueError` for multimodal + disentangle has been removed. See `scripts/validate_disentanglement_multimodal.py` for a systematic preset benchmark.
 
 See [`docs/notebooks/disentangle_ablation.ipynb`](docs/notebooks/disentangle_ablation.ipynb) for a systematic per-component ablation walkthrough.
+
+## Multimodal Integration
+
+`spVIPES.data.prepare_multimodal_adatas` builds a single AnnData from a nested dict of `{group: {modality: AnnData}}`, then `spVIPES.model.spVIPES` learns per-(group, modality) encoders/decoders with a two-level Product of Experts (intra-group across modalities, inter-group across groups). Three multimodal-specific kwargs let you tune training:
+
+```python
+# Inspect which (group, modality) pairs hold real data
+mask = adata.uns["groups_modality_masks"]  # {group_idx: {modality: bool}}
+
+# Re-balance per-modality reconstruction (e.g. ~1000 HVGs vs. 110 proteins)
+model = spVIPES.model.spVIPES(
+    adata,
+    modality_loss_weights={"rna": 1.0, "protein": 5.0},
+)
+
+# Symmetric-KL alignment between group PoE posteriors (unsupervised, complements disentanglement)
+model = spVIPES.model.spVIPES(
+    adata,
+    use_jeffreys_integ=True,
+    jeffreys_integ_weight=0.5,
+    disentangle_preset="full",  # disentanglement now works in multimodal mode
+)
+```
+
+See [`docs/notebooks/multimodal_nf_tutorial.ipynb`](docs/notebooks/multimodal_nf_tutorial.ipynb) for an end-to-end CITE-seq example covering `prepare_multimodal_adatas`, `modality_loss_weights`, `use_jeffreys_integ`, and multimodal disentanglement.
 
 ## Documentation & Tutorials
 

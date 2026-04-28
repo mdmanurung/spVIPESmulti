@@ -99,8 +99,11 @@ The PyTorch Lightning module implementing the variational autoencoder.
     :toctree: generated
 
     data.prepare_adatas.prepare_adatas
+    data.prepare_adatas.prepare_multimodal_adatas
 
 .. autofunction:: spVIPES.data.prepare_adatas.prepare_adatas
+
+.. autofunction:: spVIPES.data.prepare_adatas.prepare_multimodal_adatas
 ```
 
 ## Data Loaders
