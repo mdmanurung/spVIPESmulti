@@ -30,6 +30,17 @@ and this project adheres to [Semantic Versioning][].
 -   Basic tool, preprocessing and plotting functions
 -   DIALOGUE-style multi-group vignette (`docs/notebooks/dialogue_multigroup_vignette.ipynb`)
     showcasing N ≥ 2 group integration using `clinical.status` from `pt.dt.dialogue_example()`.
+-   **Multimodal tutorial extended** — `docs/notebooks/multimodal_nf_tutorial.ipynb`
+    now demonstrates the multigrate-inspired multimodal kwargs introduced in
+    `1749292` (`groups_modality_masks` introspection,
+    `modality_loss_weights`, `use_jeffreys_integ` / `jeffreys_integ_weight`)
+    and the multimodal disentanglement objective (P8). The PBMC CITE-seq
+    tutorial (`pbmc_citeseq_tutorial.ipynb`) gains an "Optional: multimodal
+    mode" appendix that wires up `prepare_multimodal_adatas` on the same
+    data as a forward pointer to the dedicated multimodal vignette.
+-   **`docs/api.md`** now documents
+    `spVIPES.data.prepare_adatas.prepare_multimodal_adatas` alongside the
+    single-modality `prepare_adatas`.
 -   **Disentanglement objective** (inspired by CellDISECT's cross-covariate
     decoupling MLPs and Multi-ContrastiveVAE). Four auxiliary classifiers + an
     optional contrastive term enforce that each latent space encodes only its
@@ -121,12 +132,32 @@ and this project adheres to [Semantic Versioning][].
     `use_labels=True` now raises `ValueError` at construction time with a
     clear message. Group classifiers (`q_group_shared`, `q_group_private`)
     continue to work without labels — group identity is always known.
+-   **All eight tutorial notebooks** (`Tutorial.ipynb`,
+    `dialogue_multigroup_vignette.ipynb`, `iri_days_vignette.ipynb`,
+    `cinemaot_nf_vignette.ipynb`, `pbmc_citeseq_tutorial.ipynb`,
+    `biolord_comparison_plasmodium_tutorial.ipynb`,
+    `multimodal_nf_tutorial.ipynb`, `disentangle_ablation.ipynb`) carry a
+    **Requirements / Compatibility** callout pointing out the scvi-tools
+    1.x training-kwarg change (`accelerator=` / `devices=` instead of the
+    removed `use_gpu=`).
+-   **`docs/index.md`** toctree links every shipped tutorial notebook
+    (previously linked only `notebooks/example` (nonexistent) and
+    `notebooks/dialogue_multigroup_vignette`).
+-   **`README.md`** documents the multigrate-inspired multimodal kwargs
+    (`modality_loss_weights`, `use_jeffreys_integ`, `jeffreys_integ_weight`)
+    and updates the Disentanglement Objective constraint block to reflect
+    that multimodal mode is now supported.
+-   **Removed** `docs/notebooks/vignette_plan.md` (planning scratchpad
+    self-marked for deletion once `multimodal_nf_tutorial.ipynb` landed).
+
 ### Notes
 
--   All seven existing notebook vignettes (`Tutorial.ipynb`,
-    `dialogue_multigroup_vignette.ipynb`, `iri_days_vignette.ipynb`,
-    `pbmc_citeseq_tutorial.ipynb`, `cinemaot_nf_vignette.ipynb`,
+-   The six pertpy/local-h5ad-dependent notebooks (`Tutorial.ipynb`,
+    `iri_days_vignette.ipynb`,
     `biolord_comparison_plasmodium_tutorial.ipynb`,
-    `multimodal_nf_tutorial.ipynb`) are updated to demonstrate the
-    disentanglement objective. `README.md` now includes a dedicated
-    *Disentanglement Objective* section.
+    `cinemaot_nf_vignette.ipynb`, `dialogue_multigroup_vignette.ipynb`,
+    `disentangle_ablation.ipynb`) received markdown-only edits this round.
+    Their existing rendered outputs were not regenerated, because pertpy
+    1.x conflicts with the `jax==0.4.27` pin and the splatter / IRI /
+    Plasmodium h5ad files are not bundled in-tree. Re-execution of those
+    six is tracked separately.
