@@ -4,9 +4,9 @@ from typing import Optional, Union
 import numpy as np
 import pandas as pd
 import rich
-from scvi._types import AnnOrMuData
 
 from spVIPES.data import _constants
+from spVIPES.data._types import AnnOrMuData
 from spVIPES.data._utils import get_anndata_attribute
 
 

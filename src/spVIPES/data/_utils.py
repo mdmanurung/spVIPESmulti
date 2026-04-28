@@ -30,9 +30,9 @@ except ImportError:
 from mudata import MuData
 from pandas.api.types import CategoricalDtype
 from scvi import settings
-from scvi._types import AnnOrMuData, MinifiedDataType
 
 from . import _constants
+from ._types import AnnOrMuData, MinifiedDataType
 
 logger = logging.getLogger(__name__)
 

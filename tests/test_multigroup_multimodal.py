@@ -10,7 +10,7 @@ from scipy.sparse import csr_matrix
 
 import anndata as ad
 
-# Direct module loaders to avoid triggering spVIPES.__init__ (which requires scvi-tools 0.20.0)
+# Direct module loaders to avoid triggering spVIPES.__init__ (which requires scvi-tools >=1.0)
 _SRC = os.path.join(os.path.dirname(__file__), "..", "src")
 
 
