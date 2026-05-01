@@ -292,6 +292,87 @@ model = spVIPES.model.spVIPES(
 
 See [`docs/notebooks/cinemaot_nf_vignette.ipynb`](docs/notebooks/cinemaot_nf_vignette.ipynb) for a comparison of Gaussian vs. NSF prior vs. disentanglement.
 
+## Post-training Utilities
+
+The `spVIPES.utils` and `spVIPES.pl` modules provide ready-to-use helpers that
+eliminate the boilerplate repeated in every analysis notebook.
+
+### Storing latent representations
+
+After calling `model.get_latent_representation(...)`, use `store_latents` to
+stitch per-group arrays back into `adata.obsm` in original cell order:
+
+```python
+latents = model.get_latent_representation(group_indices_list, batch_size=512)
+spVIPES.utils.store_latents(adata, latents, group_indices_list)
+# writes: adata.obsm["X_spVIPES_shared"], adata.obsm["X_spVIPES_private_g0"], ...
+```
+
+### UMAP embeddings
+
+```python
+# Shared latent UMAP (all groups integrated):
+spVIPES.utils.compute_shared_umap(adata)
+spVIPES.pl.umap_shared(adata, color=["cell_type", "groups"])
+
+# Per-group private latent UMAPs:
+adatas = {"control": adata_g0, "treatment": adata_g1}
+spVIPES.utils.compute_private_umaps(adatas)
+fig = spVIPES.pl.umap_private(adatas, color="cell_type")
+```
+
+### Gene loadings
+
+Rank genes by loading magnitude per latent dimension and visualise them:
+
+```python
+# Top genes per shared latent dimension:
+top = spVIPES.utils.get_top_genes(model=model, n_top=10)
+print(top[["dim", "pos_genes"]].to_string(index=False))
+
+# Heatmap of top-5 genes per dimension (requires seaborn):
+ax = spVIPES.pl.heatmap_loadings(model=model, n_top=5)
+
+# Scanpy dotplot of selected dimensions:
+spVIPES.pl.loadings_dotplot(adata, dims=[0, 2, 4], groupby="cell_type", model=model)
+```
+
+### Per-factor coloring and violin plots
+
+```python
+# Copy a single dimension into adata.obs for use as a color key:
+spVIPES.utils.score_cells_on_factor(adata_g0, dim_idx=2, obsm_key="X_spVIPES_private_g0")
+
+# Or copy all dimensions at once (optionally capped):
+spVIPES.utils.add_latent_dims_to_obs(adata_g0, "X_spVIPES_private_g0", max_dims=5)
+
+# Violin plot of a specific latent factor:
+spVIPES.pl.factor_violin(adata_g0, dim_idx=1, groupby="cell_type",
+                          obsm_key="X_spVIPES_private_g0")
+```
+
+### Training diagnostics
+
+```python
+fig = spVIPES.pl.training_curves(model)
+fig.savefig("training.pdf")
+```
+
+| Function | Module | Description |
+|---|---|---|
+| `store_latents` | `spVIPES.utils` | Stitch per-group latents into `adata.obsm` in original cell order |
+| `add_latent_dims_to_obs` | `spVIPES.utils` | Copy latent dims into `adata.obs` for use as scanpy `color=` keys |
+| `compute_shared_umap` | `spVIPES.utils` | Run neighbours + UMAP on the shared latent |
+| `compute_private_umaps` | `spVIPES.utils` | Run neighbours + UMAP on each group's private latent |
+| `get_top_genes` | `spVIPES.utils` | Rank genes by loading magnitude per latent dimension |
+| `score_cells_on_factor` | `spVIPES.utils` | Write one latent dimension into `adata.obs` |
+| `heatmap_loadings` | `spVIPES.pl` | Seaborn heatmap of top-N gene loadings per dimension |
+| `umap_shared` | `spVIPES.pl` | Plot the shared latent UMAP (wraps `sc.pl.embedding`) |
+| `umap_private` | `spVIPES.pl` | Grid of per-group private UMAP panels |
+| `factor_violin` | `spVIPES.pl` | Violin plot of a single latent factor by cell metadata |
+| `training_curves` | `spVIPES.pl` | Multi-panel plot of training history |
+| `loadings_dotplot` | `spVIPES.pl` | Scanpy dotplot of top genes for selected latent dimensions |
+
 ## Documentation & Tutorials
 
 -   [Basic Tutorial](docs/notebooks/Tutorial.ipynb) — Complete walkthrough of spVIPES functionality
