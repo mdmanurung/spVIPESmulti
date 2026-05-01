@@ -1,9 +1,9 @@
 case,status,secs,error
 single-modality / 2-group / label PoE / off,PASS,1.2,
-single-modality / 2-group / OT cluster-based PoE / off,PASS,19.1,
-single-modality / 2-group / NSF prior on shared / off,PASS,0.4,
-single-modality / 2-group / NSF prior on shared / full,PASS,0.5,
+single-modality / 2-group / OT cluster-based PoE / off,FAIL,13.3,RuntimeError: indices should be either on cpu or on the same device as the indexed tensor (cpu)
+single-modality / 2-group / NSF prior on shared / off,PASS,0.5,
+single-modality / 2-group / NSF prior on shared / full,PASS,0.6,
 single-modality / 3-group / label PoE / off,PASS,0.5,
-single-modality / 3-group / label PoE / full,PASS,0.6,
+single-modality / 3-group / label PoE / full,PASS,0.7,
 multimodal / 3-group / NSF prior on shared / off,PASS,0.7,
-multimodal / 3-group / disentangle=full,PASS,0.8,
+multimodal / 3-group / disentangle=full,PASS,0.6,

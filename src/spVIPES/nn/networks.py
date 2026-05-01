@@ -325,7 +325,9 @@ class LinearDecoderSPVIPE(nn.Module):
         px_mixing = self.mixture(p_mixing_cat_z, *cat_list)
 
         mixing = 1 / (1 + torch.exp(-px_mixing))
-        px_scale = torch.nn.functional.normalize((1 - mixing) * px_rate_shared, p=1, dim=-1)
+        px_scale = torch.nn.functional.normalize(
+            mixing * px_rate_private + (1 - mixing) * px_rate_shared, p=1, dim=-1
+        )
 
         # raw_px_scale_private_shared = self.factor_regressor_private_shared(z_private_shared, *cat_list)
         # px_scale_private_shared = torch.softmax(raw_px_scale_private_shared, dim=-1)

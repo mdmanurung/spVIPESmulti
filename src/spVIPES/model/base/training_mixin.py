@@ -9,6 +9,59 @@ from typing import Optional
 
 import numpy as np
 from scvi.train import TrainingPlan, TrainRunner
+from scvi.train._trainrunner import TrainRunner as OrigTrainRunner
+class PatchedTrainRunner(OrigTrainRunner):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def __call__(self):
+        import lightning as pl
+        from packaging import version
+        # Validate training_plan
+        if not hasattr(self, "training_plan") or self.training_plan is None:
+            raise RuntimeError("PatchedTrainRunner: training_plan is not set. Ensure TrainingPlan is constructed correctly.")
+        # Validate data_splitter
+        if not hasattr(self, "data_splitter") or self.data_splitter is None:
+            raise RuntimeError("PatchedTrainRunner: data_splitter is not set. Ensure DataSplitter is constructed correctly.")
+
+        # Pre-fit: propagate dataset sizes to the training plan
+        if hasattr(self.data_splitter, "n_train"):
+            self.training_plan.n_obs_training = self.data_splitter.n_train
+        if hasattr(self.data_splitter, "n_val"):
+            self.training_plan.n_obs_validation = self.data_splitter.n_val
+
+        # Lightning-version-aware trainer.fit() call
+        lightning_version = pl.__version__
+        if version.parse(lightning_version) >= version.parse("2.0.0"):
+            try:
+                self.trainer.fit(
+                    self.training_plan,
+                    train_dataloaders=self.data_splitter,
+                    ckpt_path=getattr(self, "ckpt_path", None),
+                )
+            except TypeError as e:
+                raise RuntimeError(f"PatchedTrainRunner: Trainer.fit argument mismatch (Lightning {lightning_version}): {e}\n"
+                                   f"training_plan={type(self.training_plan)}, data_splitter={type(self.data_splitter)}")
+        else:
+            try:
+                self.trainer.fit(
+                    self.training_plan,
+                    self.data_splitter,
+                    ckpt_path=getattr(self, "ckpt_path", None),
+                )
+            except TypeError as e:
+                raise RuntimeError(f"PatchedTrainRunner: Trainer.fit argument mismatch (Lightning {lightning_version}): {e}\n"
+                                   f"training_plan={type(self.training_plan)}, data_splitter={type(self.data_splitter)}")
+
+        # Post-fit bookkeeping (mirrors TrainRunner.__call__)
+        self._update_history()
+        self.model.train_indices = getattr(self.data_splitter, "train_idx", None)
+        self.model.test_indices = getattr(self.data_splitter, "test_idx", None)
+        self.model.validation_indices = getattr(self.data_splitter, "val_idx", None)
+        self.model.module.eval()
+        self.model.is_trained_ = True
+        self.model.to_device(self.device)
+        self.model.trainer = self.trainer
 
 from spVIPES.data._multi_datasplitter import MultiGroupDataSplitter
 
@@ -103,7 +156,7 @@ class MultiGroupTrainingMixin:
 
         es = "early_stopping"
         trainer_kwargs[es] = early_stopping if es not in trainer_kwargs.keys() else trainer_kwargs[es]
-        runner = TrainRunner(
+        runner = PatchedTrainRunner(
             self,
             training_plan=training_plan,
             data_splitter=data_splitter,

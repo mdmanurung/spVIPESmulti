@@ -16,7 +16,7 @@ on a per-weight kwarg means "use the preset's value"; a numeric value
 (including ``0.0``) overrides the preset for that component.
 """
 
-DISENTANGLE_PRESETS = {
+DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
     "off": {
         "disentangle_group_shared_weight": 0.0,
         "disentangle_label_shared_weight": 0.0,
@@ -73,3 +73,18 @@ DISENTANGLE_PRESETS = {
         "contrastive_weight": 0.0,
     },
 }
+
+_REQUIRED_PRESET_KEYS = frozenset({
+    "disentangle_group_shared_weight",
+    "disentangle_label_shared_weight",
+    "disentangle_group_private_weight",
+    "disentangle_label_private_weight",
+    "contrastive_weight",
+})
+
+for _preset_name, _preset_vals in DISENTANGLE_PRESETS.items():
+    _missing = _REQUIRED_PRESET_KEYS - _preset_vals.keys()
+    if _missing:
+        raise RuntimeError(
+            f"DISENTANGLE_PRESETS['{_preset_name}'] is missing required keys: {_missing}"
+        )

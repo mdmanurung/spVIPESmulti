@@ -98,6 +98,10 @@ class ConcatDataLoader(DataLoader):
         #             )
         #         )
 
+        if not self.dataloaders:
+            raise ValueError(
+                "ConcatDataLoader requires at least one group (indices_list is empty)."
+            )
         lens = [len(dl) for dl in self.dataloaders]
         self.largest_dl = self.dataloaders[np.argmax(lens)]
         super().__init__(self.largest_dl, **data_loader_kwargs)
@@ -106,8 +110,27 @@ class ConcatDataLoader(DataLoader):
         return len(self.largest_dl)
 
     def __iter__(self):
+        import torch
+        import numpy as np
         iter_list = [cycle(dl) if dl != self.largest_dl else dl for dl in self.dataloaders]
-        return zip(*iter_list)
+        for batches in zip(*iter_list):
+            # batches is a tuple of dicts, one per group
+            merged = {}
+            for d in batches:
+                for k, v in d.items():
+                    if k not in merged:
+                        merged[k] = []
+                    merged[k].append(v)
+            # Now stack/concat along batch dimension
+            for k in merged:
+                if isinstance(merged[k][0], torch.Tensor):
+                    merged[k] = torch.cat(merged[k], dim=0)
+                elif isinstance(merged[k][0], np.ndarray):
+                    merged[k] = np.concatenate(merged[k], axis=0)
+                else:
+                    # fallback: keep as list
+                    merged[k] = sum(merged[k], []) if isinstance(merged[k][0], list) else merged[k]
+            yield merged
 
     def _create_paired_indices(self, indices_list, transport_plan, top_k=5):
         dataset1_indices, dataset2_indices = indices_list

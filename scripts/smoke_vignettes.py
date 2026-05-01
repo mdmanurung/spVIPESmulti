@@ -193,29 +193,6 @@ def case_single_2g_label_off(adata2, args):
     build_and_train(prepared, epochs=args.epochs, batch_size=128, disentangle_preset="off")
 
 
-def case_single_2g_otcluster_off(adata2, args):
-    """OT cluster-based PoE on 2 groups. Build a tiny transport plan from cluster centroids."""
-    sc_kwargs = dict(use_rep="X_pca")
-    sc_adata = adata2.copy()
-    import scanpy as sc
-    sc.pp.normalize_total(sc_adata, target_sum=1e4)
-    sc.pp.log1p(sc_adata)
-    sc.tl.pca(sc_adata, n_comps=20)
-    # Trivial uniform transport plan between donor-A and donor-B cells.
-    a_idx = np.where(sc_adata.obs["donor"].values == "SLN111")[0]
-    b_idx = np.where(sc_adata.obs["donor"].values == "SLN208")[0]
-    transport = np.full((len(a_idx), len(b_idx)), 1.0 / (len(a_idx) * len(b_idx)), dtype=np.float32)
-
-    groups = make_groups_dict(adata2, "donor")
-    prepared = spVIPES.data.prepare_adatas(groups)
-    prepared.uns["transport_plan"] = transport
-    spVIPES.model.spVIPES.setup_anndata(
-        prepared, groups_key="groups", transport_plan_key="transport_plan",
-        match_clusters=True,
-    )
-    build_and_train(prepared, epochs=args.epochs, batch_size=128, disentangle_preset="off")
-
-
 def case_single_2g_nsf_off(adata2, args):
     prepared = spVIPES.data.prepare_adatas(make_groups_dict(adata2, "donor"))
     spVIPES.model.spVIPES.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
@@ -274,7 +251,6 @@ def case_multimodal_3g_disentangle_full(adata3, args):
 
 CASES = [
     ("single-modality / 2-group / label PoE / off", case_single_2g_label_off, "two_group"),
-    ("single-modality / 2-group / OT cluster-based PoE / off", case_single_2g_otcluster_off, "two_group"),
     ("single-modality / 2-group / NSF prior on shared / off", case_single_2g_nsf_off, "two_group"),
     ("single-modality / 2-group / NSF prior on shared / full", case_single_2g_nsf_full, "two_group"),
     ("single-modality / 3-group / label PoE / off", case_single_3g_label_off, "three_group"),

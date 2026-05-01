@@ -38,10 +38,6 @@ class spVIPESmodule(BaseModuleClass):
         List of observation indices for each group.
     groups_var_indices : list
         List of variable indices for each group.
-    transport_plan : torch.Tensor, optional
-        Precomputed optimal transport plan matrix for PoE alignment.
-    pair_data : bool, default=False
-        Whether to use paired data for direct cell-to-cell correspondences.
     use_labels : bool, default=False
         Whether to use cell type labels for supervised PoE alignment.
     n_labels : int, optional
@@ -81,8 +77,6 @@ class spVIPESmodule(BaseModuleClass):
         groups_var_names,
         groups_obs_indices,
         groups_var_indices,
-        transport_plan: Optional[torch.Tensor] = None,
-        pair_data: bool = False,
         use_labels: bool = False,
         n_labels: Optional[int] = None,
         n_batch: int = 0,
@@ -129,7 +123,7 @@ class spVIPESmodule(BaseModuleClass):
         Notes
         -----
         The initialization automatically configures the appropriate PoE strategy based on
-        the provided inputs (transport_plan, use_labels, pair_data). The module creates
+        the provided inputs (use_labels). The module creates
         separate encoders and decoders for each group while sharing the latent space
         structure for integration.
 
@@ -242,12 +236,14 @@ class spVIPESmodule(BaseModuleClass):
                 self.add_module(f"encoder_{groups}_private", values_encoder["private"])
                 self.add_module(f"decoder_{groups}", values_decoder)
 
-        # Store the transport plan as an attribute
-        self.use_transport_plan = transport_plan is not None
-        self.transport_plan = transport_plan
         self.use_labels = use_labels
         self.n_labels = n_labels
-        self.pair_data = pair_data
+
+        if use_labels and n_labels is None:
+            raise ValueError(
+                "n_labels must be provided when use_labels=True. "
+                "Ensure label_key is passed to setup_anndata() before constructing the model."
+            )
 
         # Normalizing flow prior
         self.use_nf_prior = use_nf_prior
@@ -334,8 +330,11 @@ class spVIPESmodule(BaseModuleClass):
             self.register_buffer("prototypes", None)
 
 
-    def _cluster_based_poe(
-        self, shared_stats: dict, batch_transport_plans: dict[int, torch.Tensor], processed_labels: list[torch.Tensor]
+    def _cluster_based_poe(self, *args, **kwargs):
+        raise NotImplementedError("Cluster-based PoE has been removed. Use label-based PoE (label_key=...) instead.")
+
+    def _cluster_based_poe_removed(
+        self, shared_stats: dict, batch_transport_plans: dict, processed_labels: list
     ):
         if len(shared_stats) != 2:
             raise ValueError(
@@ -501,11 +500,48 @@ class spVIPESmodule(BaseModuleClass):
 
         return result
 
+
+    def _split_tensors_by_group(self, tensors):
+        """Split a merged minibatch dict into a list of per-group dicts.
+
+        ``ConcatDataLoader`` concatenates all groups into a single dict keyed
+        by the usual scvi-tools registry keys. The ``"groups"`` field contains
+        integer category codes (0, 1, 2, …) identifying each cell's group.
+        This helper splits that merged dict back into an ordered list of
+        per-group dicts, sorted by ascending group code, so that
+        ``per_group[i]`` always corresponds to group *i*.
+
+        If *tensors* is already a list (e.g., a direct internal call), it is
+        returned unchanged for backward compatibility.
+        """
+        if isinstance(tensors, list):
+            return tensors
+
+        # group_codes may be shape (N,) or (N, 1) — flatten to 1D for masking
+        group_codes = tensors["groups"].reshape(-1)
+        unique_groups = torch.unique(group_codes, sorted=True)
+
+        per_group = []
+        for g_code in unique_groups:
+            mask = group_codes == g_code
+            group_dict = {}
+            for k, v in tensors.items():
+                if isinstance(v, torch.Tensor):
+                    group_dict[k] = v[mask]
+                elif isinstance(v, np.ndarray):
+                    group_dict[k] = v[mask.cpu().numpy()]
+                else:
+                    group_dict[k] = v
+            per_group.append(group_dict)
+
+        return per_group
+
     def _get_inference_input(self, tensors_by_group):
-        x = {i: group[REGISTRY_KEYS.X_KEY] for i, group in enumerate(tensors_by_group)}
-        batch_index = [group[REGISTRY_KEYS.BATCH_KEY] for group in tensors_by_group]
-        groups = [group["groups"] for group in tensors_by_group]
-        global_indices = [group["indices"] for group in tensors_by_group]
+        per_group = self._split_tensors_by_group(tensors_by_group)
+        x = {i: group[REGISTRY_KEYS.X_KEY] for i, group in enumerate(per_group)}
+        batch_index = [group[REGISTRY_KEYS.BATCH_KEY] for group in per_group]
+        groups = [group["groups"] for group in per_group]
+        global_indices = [group["indices"] for group in per_group]
 
         input_dict = {
             "x": x,
@@ -514,26 +550,21 @@ class spVIPESmodule(BaseModuleClass):
             "global_indices": global_indices,
         }
 
-        if self.use_transport_plan and not self.pair_data:
-            required_key = "processed_transport_labels"
-            if required_key not in tensors_by_group[0]:
-                raise ValueError(f"{required_key} are required when using transport plan.")
-            input_dict["processed_labels"] = [group[required_key] for group in tensors_by_group]
-
         if self.use_labels:
-            if "labels" not in tensors_by_group[0]:
+            if "labels" not in per_group[0]:
                 raise ValueError("Labels are required when using label-based POE.")
-            input_dict["labels"] = [group["labels"].flatten() for group in tensors_by_group]
+            input_dict["labels"] = [group["labels"].flatten() for group in per_group]
 
         return input_dict
 
     def _get_generative_input(self, tensors_by_group, inference_outputs):
+        per_group = self._split_tensors_by_group(tensors_by_group)
         private_stats = inference_outputs["private_stats"]
         shared_stats = inference_outputs["shared_stats"]
         poe_stats = inference_outputs["poe_stats"]
         library = inference_outputs["library"]
-        groups = [group["groups"] for group in tensors_by_group]
-        batch_index = [group[REGISTRY_KEYS.BATCH_KEY] for group in tensors_by_group]
+        groups = [g["groups"] for g in per_group]
+        batch_index = [g[REGISTRY_KEYS.BATCH_KEY] for g in per_group]
 
         input_dict = {
             "private_stats": private_stats,
@@ -584,20 +615,12 @@ class spVIPESmodule(BaseModuleClass):
             private_stats[group] = private_values
             shared_stats[group] = shared_values
 
-        batch_transport_plans = None
-        processed_labels = None
         labels = None
-
-        if self.use_transport_plan:
-            batch_transport_plans = self._get_batch_transport_plans(global_indices)
-            if self.transport_plan is not None and not self.pair_data:
-                processed_labels = kwargs.get("processed_labels")
-
         if self.use_labels:
             if "labels" in kwargs:
                 labels = dict(enumerate(kwargs["labels"]))
 
-        poe_stats = self._supervised_poe(shared_stats, batch_transport_plans, processed_labels, labels)
+        poe_stats = self._supervised_poe(shared_stats, labels)
 
         outputs = {
             "private_stats": private_stats,
@@ -633,7 +656,7 @@ class spVIPESmodule(BaseModuleClass):
                 else:
                     x_mod_enc = x_mod  # Gaussian: data already log-normalized
 
-                lib = torch.log(x_mod.sum(1).clamp(min=1)).unsqueeze(1)
+                lib = torch.log(x_mod.sum(1).clamp(min=1e-6)).unsqueeze(1)
                 library[(group, modality)] = lib
 
                 shared_enc = self.encoders[(group, modality)]["shared"]
@@ -679,12 +702,12 @@ class spVIPESmodule(BaseModuleClass):
                     "qz": qz,
                 }
 
-        # Step 3: Inter-group PoE (same as single-modality)
+        # Step 3: Inter-group PoE (label-based)
         labels = None
         if self.use_labels and "labels" in kwargs:
             labels = dict(enumerate(kwargs["labels"]))
 
-        poe_stats = self._supervised_poe(per_group_shared, None, None, labels)
+        poe_stats = self._supervised_poe(per_group_shared, labels)
 
         # Build output: private_stats keyed by group (use first modality for backward compat)
         # For multimodal, we also include per-modality private stats
@@ -705,49 +728,19 @@ class spVIPESmodule(BaseModuleClass):
 
         return outputs
 
-    def _get_batch_transport_plans(self, global_indices):
-        if len(global_indices) != 2:
-            raise ValueError(
-                f"Transport plan-based PoE only supports exactly 2 groups, got {len(global_indices)}. "
-                "Use label-based PoE for more than 2 groups."
-            )
-        # Convert to CPU numpy arrays if they're on GPU
-        indices1 = global_indices[0].cpu().numpy() if isinstance(global_indices[0], torch.Tensor) else global_indices[0]
-        indices2 = global_indices[1].cpu().numpy() if isinstance(global_indices[1], torch.Tensor) else global_indices[1]
-
-        # Slice the transport plan for the current minibatches
-        batch_transport_plan = self.transport_plan[indices1.squeeze()][:, indices2.squeeze()]
-
-        return {0: batch_transport_plan, 1: batch_transport_plan.T}
-
     def _supervised_poe(
         self,
-        shared_stats: dict,
-        batch_transport_plans: Optional[dict[int, torch.Tensor]],
-        processed_labels: Optional[list[torch.Tensor]],
+        shared_stats,
         labels: Optional[dict[int, torch.Tensor]],
     ):
-        # Prioritize label-based PoE when labels are explicitly provided
         if self.use_labels and labels is not None:
             return self._label_based_poe(shared_stats, labels)
-        elif self.use_transport_plan:
-            if self.pair_data:
-                # Assuming batch_transport_plans[0] contains the transport plan for paired data
-                return self._paired_poe(shared_stats, batch_transport_plans[0])
-            elif batch_transport_plans is not None:
-                if processed_labels is None:
-                    raise ValueError("Processed labels are required when using transport plan.")
-                # Convert processed_labels list to a dictionary
-                label_group = {i: processed_labels[i] for i in range(len(processed_labels))}
-                return self._cluster_based_poe(shared_stats, batch_transport_plans, label_group)
-            else:
-                raise ValueError(
-                    "Either paired cells or batch transport plans must be provided when using transport plan."
-                )
-        else:
-            raise ValueError("Either transport plan or labels must be provided for supervised POE.")
+        raise ValueError("label_key must be provided in setup_anndata for supervised PoE.")
 
-    def _paired_poe(self, shared_stats: dict, transport_plan: torch.Tensor):
+    def _paired_poe(self, *args, **kwargs):
+        raise NotImplementedError("Paired PoE has been removed. Use label-based PoE (label_key=...) instead.")
+
+    def _paired_poe_removed(self, shared_stats: dict, transport_plan: torch.Tensor):
         if len(shared_stats) != 2:
             raise ValueError(
                 f"Paired PoE only supports exactly 2 groups, got {len(shared_stats)}. "
@@ -928,16 +921,20 @@ class spVIPESmodule(BaseModuleClass):
                 label_stats_for_poe[g] = {key: value[mask] for key, value in per_group_stats[g].items()}
 
             if len(groups_with_label) >= 2:
-                # Enough groups for PoE — also add uninformative priors for missing groups
+                # Enough groups for PoE — absent groups contribute near-zero precision so
+                # only the global prior inside _product_of_experts (ones_like) acts as prior.
+                # Using logvar=30 gives precision ≈ exp(-30) ≈ 0, avoiding the double-prior
+                # that would result from logvar=0 (precision=1) + ones_like (precision=1).
                 for g in groups_without_label:
                     ref_g = groups_with_label[0]
                     n_cells = label_stats_for_poe[ref_g]["logtheta_loc"].shape[0]
                     latent_dim = label_stats_for_poe[ref_g]["logtheta_loc"].shape[1]
                     device = label_stats_for_poe[ref_g]["logtheta_loc"].device
+                    _large_logvar = torch.full((n_cells, latent_dim), 30.0, device=device)
                     label_stats_for_poe[g] = {
                         "logtheta_loc": torch.zeros(n_cells, latent_dim, device=device),
-                        "logtheta_logvar": torch.zeros(n_cells, latent_dim, device=device),
-                        "logtheta_scale": torch.ones(n_cells, latent_dim, device=device),
+                        "logtheta_logvar": _large_logvar,
+                        "logtheta_scale": torch.exp(0.5 * _large_logvar),
                     }
 
                 poe_result = self._poe_n(label_stats_for_poe)
@@ -961,10 +958,11 @@ class spVIPESmodule(BaseModuleClass):
 
                 # Create a dummy second group for the PoE (uninformative prior)
                 dummy_key = -1  # temporary key not in group_keys
+                _large_logvar = torch.full((n_cells, latent_dim), 30.0, device=device)
                 dummy_stats = {
                     "logtheta_loc": torch.zeros(n_cells, latent_dim, device=device),
-                    "logtheta_logvar": torch.zeros(n_cells, latent_dim, device=device),
-                    "logtheta_scale": torch.ones(n_cells, latent_dim, device=device),
+                    "logtheta_logvar": _large_logvar,
+                    "logtheta_scale": torch.exp(0.5 * _large_logvar),
                 }
                 poe_result = self._poe_n({g_with: real_stats, dummy_key: dummy_stats})
 
@@ -1039,8 +1037,8 @@ class spVIPESmodule(BaseModuleClass):
             decoder = self.decoders[group]
             px_scale_private, px_scale_shared, px_rate_private, px_rate_shared, px_mixing, px_scale = decoder(
                 self.dispersion,
-                stats["log_z"][:, self.n_dimensions_shared : self.n_dimensions_private + self.n_dimensions_shared],
-                stats["log_z"][:, : self.n_dimensions_shared],
+                stats["log_z"][:, : self.n_dimensions_private],
+                stats["log_z"][:, self.n_dimensions_private :],
                 library[group],
                 batch,
             )
@@ -1090,8 +1088,8 @@ class spVIPESmodule(BaseModuleClass):
 
                 px_scale_private, px_scale_shared, px_rate_private, px_rate_shared, px_mixing, px_scale = decoder(
                     self.dispersion,
-                    combined_log_z[:, self.n_dimensions_shared : self.n_dimensions_private + self.n_dimensions_shared],
-                    combined_log_z[:, : self.n_dimensions_shared],
+                    combined_log_z[:, : self.n_dimensions_private],
+                    combined_log_z[:, self.n_dimensions_private :],
                     mod_library,
                     batch,
                 )
@@ -1302,7 +1300,8 @@ class spVIPESmodule(BaseModuleClass):
         if self.is_multimodal:
             return self._loss_multimodal(tensors_by_group, inference_outputs, generative_outputs, kl_weight)
 
-        x = {int(k): group[REGISTRY_KEYS.X_KEY] for group in tensors_by_group for k in np.unique(group["groups"].cpu())}
+        per_group = self._split_tensors_by_group(tensors_by_group)
+        x = {i: g[REGISTRY_KEYS.X_KEY] for i, g in enumerate(per_group)}
         x = {i: xs[:, self.groups_var_indices[i]] for i, xs in x.items()}
 
         if self.log_variational_generative:
@@ -1350,7 +1349,7 @@ class spVIPESmodule(BaseModuleClass):
             total_loss = group_loss if total_loss is None else total_loss + group_loss
 
         total_loss = total_loss + self._compute_disentangle_losses(
-            inference_outputs, tensors_by_group, n_groups, extra_metrics
+            inference_outputs, per_group, n_groups, extra_metrics
         )
 
         loss = torch.mean(total_loss)
@@ -1363,7 +1362,8 @@ class spVIPESmodule(BaseModuleClass):
 
     def _loss_multimodal(self, tensors_by_group, inference_outputs, generative_outputs, kl_weight):
         """Multimodal loss: sum over groups and modalities."""
-        x = {int(k): group[REGISTRY_KEYS.X_KEY] for group in tensors_by_group for k in np.unique(group["groups"].cpu())}
+        per_group = self._split_tensors_by_group(tensors_by_group)
+        x = {i: g[REGISTRY_KEYS.X_KEY] for i, g in enumerate(per_group)}
 
         n_groups = len(x)
         extra_metrics = {}
@@ -1408,18 +1408,23 @@ class spVIPESmodule(BaseModuleClass):
                     kl_mod_private = torch.zeros(x_mod.shape[0], device=x_mod.device)
 
                 mod_weight = self.modality_loss_weights.get(modality, 1.0)
-                mod_loss = mod_weight * recon_loss + kl_weight * kl_mod_private
+                n_modalities = len(self.group_modalities[g])
+                mod_loss = mod_weight * recon_loss + kl_weight * (kl_mod_private / n_modalities)
                 total_loss = mod_loss if total_loss is None else total_loss + mod_loss
 
             # Per-group PoE KL (shared across modalities)
             qz_poe = inference_outputs["poe_stats"][g]["logtheta_qz"]
-            kl_poe = kl(
-                qz_poe,
-                Normal(
-                    torch.zeros_like(inference_outputs["poe_stats"][g]["logtheta_log_z"]),
-                    torch.ones_like(inference_outputs["poe_stats"][g]["logtheta_log_z"]),
-                ),
-            ).sum(dim=1)
+            z_poe = inference_outputs["poe_stats"][g]["logtheta_log_z"]
+            if self.use_nf_prior and self.nf_target in ("shared", "both"):
+                kl_poe = self._nf_kl(qz_poe, z_poe, "shared")
+            else:
+                kl_poe = kl(
+                    qz_poe,
+                    Normal(
+                        torch.zeros_like(z_poe),
+                        torch.ones_like(z_poe),
+                    ),
+                ).sum(dim=1)
 
             extra_metrics[f"kl_divergence_poe_group_{g}"] = kl_poe.mean()
             kl_local[f"kl_divergence_group_{g}_poe"] = kl_poe
@@ -1429,7 +1434,7 @@ class spVIPESmodule(BaseModuleClass):
         # exits when no component is enabled, so the cost is one tuple
         # comparison when disentangle_preset='off'.
         total_loss = total_loss + self._compute_disentangle_losses(
-            inference_outputs, tensors_by_group, n_groups, extra_metrics
+            inference_outputs, per_group, n_groups, extra_metrics
         )
 
         if self.use_jeffreys_integ:

@@ -89,7 +89,7 @@ class MultiGroupDataSplitter(pl.LightningDataModule):
             self.train_idx_per_group.append(group_permutation[n_val_group : (n_val_group + n_train_group)])
             self.test_idx_per_group.append(group_permutation[(n_val_group + n_train_group) :])
 
-        self.pin_memory = settings.dl_pin_memory_gpu_training and torch.cuda.is_available()
+        self.pin_memory = torch.cuda.is_available()
         self.train_idx = self.train_idx_per_group
         self.test_idx = self.test_idx_per_group
         self.val_idx = self.val_idx_per_group
