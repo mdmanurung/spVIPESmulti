@@ -31,4 +31,5 @@ __pycache__/
 # misc
 CLAUDE.md
 data/*
-notebooks/data/*
+docs/notebooks/data/*
+*.h5ad
