@@ -1,5 +1,5 @@
 name: Feature request
-description: Propose a new feature for spVIPES
+description: Propose a new feature for spVIPESmulti
 labels: enhancement
 body:
   - type: textarea

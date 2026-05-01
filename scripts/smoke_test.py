@@ -1,4 +1,4 @@
-"""Smoke test: run full spVIPES multimodal + NF-prior path on a tiny subsample."""
+"""Smoke test: run full spVIPESmulti multimodal + NF-prior path on a tiny subsample."""
 import warnings
 warnings.filterwarnings("ignore")
 import numpy as np
@@ -7,7 +7,7 @@ import scanpy as sc
 import scvi
 import torch
 import anndata as ad
-import spVIPES
+import spVIPESmulti
 
 np.random.seed(0)
 torch.manual_seed(0)
@@ -75,7 +75,7 @@ for g in groups:
     print(f"  {g}: rna={rna_raw.shape}, prot={prot.shape}")
 
 # prepare_multimodal_adatas
-adata = spVIPES.data.prepare_multimodal_adatas(
+adata = spVIPESmulti.data.prepare_multimodal_adatas(
     adatas_dict,
     modality_likelihoods={"rna": "nb", "protein": "nb"},
 )
@@ -85,7 +85,7 @@ print("groups_modality_lengths:", adata.uns["groups_modality_lengths"])
 print("modality_names:", adata.uns["modality_names"])
 
 # setup_anndata  (label-based PoE path)
-spVIPES.model.spVIPES.setup_anndata(
+spVIPESmulti.model.spVIPESmulti.setup_anndata(
     adata,
     groups_key="groups",
     label_key="cell_types",
@@ -93,7 +93,7 @@ spVIPES.model.spVIPES.setup_anndata(
 )
 
 # Build model — baseline Gaussian prior
-model = spVIPES.model.spVIPES(
+model = spVIPESmulti.model.spVIPESmulti(
     adata,
     n_hidden=64,
     n_dimensions_shared=12,
@@ -129,7 +129,7 @@ if "private_multimodal" in latents:
         print(f"  pm[{g},{mod}]: shape={arr.shape}")
 
 # Now NF prior
-model_nf = spVIPES.model.spVIPES(
+model_nf = spVIPESmulti.model.spVIPESmulti(
     adata,
     n_hidden=64,
     n_dimensions_shared=12,

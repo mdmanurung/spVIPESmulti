@@ -1,4 +1,4 @@
-"""Tests for spVIPES.utils, spVIPES.pl, and spVIPES.metrics.
+"""Tests for spVIPESmulti.utils, spVIPESmulti.pl, and spVIPESmulti.metrics.
 
 These tests are unit tests that do NOT require a trained model or scvi-tools
 integration. They use synthetic numpy arrays and mock objects.
@@ -16,16 +16,16 @@ import pandas as pd
 import pytest
 
 # ---------------------------------------------------------------------------
-# Import modules under test directly (avoids full spVIPES import chain)
+# Import modules under test directly (avoids full spVIPESmulti import chain)
 # ---------------------------------------------------------------------------
 _ROOT = Path(__file__).resolve().parent.parent / "src"
 
 
 def _load(name: str):
-    path = _ROOT / "spVIPES" / f"{name}.py"
-    spec = importlib.util.spec_from_file_location(f"spVIPES.{name}", path)
+    path = _ROOT / "spVIPESmulti" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"spVIPESmulti.{name}", path)
     mod = importlib.util.module_from_spec(spec)
-    sys.modules[f"spVIPES.{name}"] = mod
+    sys.modules[f"spVIPESmulti.{name}"] = mod
     spec.loader.exec_module(mod)
     return mod
 
@@ -66,9 +66,9 @@ def adata(rng):
     )
     var = pd.DataFrame(index=GENE_NAMES)
     ad_obj = ad.AnnData(X=X, obs=obs, var=var)
-    ad_obj.obsm["X_spVIPES_shared"] = rng.random((n, N_DIMS_SHARED)).astype(np.float32)
+    ad_obj.obsm["X_spVIPESmulti_shared"] = rng.random((n, N_DIMS_SHARED)).astype(np.float32)
     # Full-length private array (zeros for cells outside group 0) — matches store_latents output
-    ad_obj.obsm["X_spVIPES_private_g0"] = rng.random((n, N_DIMS_PRIVATE)).astype(np.float32)
+    ad_obj.obsm["X_spVIPESmulti_private_g0"] = rng.random((n, N_DIMS_PRIVATE)).astype(np.float32)
     return ad_obj
 
 
@@ -196,15 +196,15 @@ class TestStoreLatents:
         import anndata as ad
         fresh = ad.AnnData(X=adata.X, obs=adata.obs.copy(), var=adata.var.copy())
         result = utils.store_latents(fresh, fake_latents, group_indices_list)
-        assert "X_spVIPES_shared" in result.obsm
-        assert result.obsm["X_spVIPES_shared"].shape == (N_CELLS, N_DIMS_SHARED)
+        assert "X_spVIPESmulti_shared" in result.obsm
+        assert result.obsm["X_spVIPESmulti_shared"].shape == (N_CELLS, N_DIMS_SHARED)
 
     def test_private_per_group_written(self, adata, fake_latents, group_indices_list):
         import anndata as ad
         fresh = ad.AnnData(X=adata.X, obs=adata.obs.copy(), var=adata.var.copy())
         utils.store_latents(fresh, fake_latents, group_indices_list)
         for gi in range(3):
-            key = f"X_spVIPES_private_g{gi}"
+            key = f"X_spVIPESmulti_private_g{gi}"
             assert key in fresh.obsm, f"Missing key {key}"
             assert fresh.obsm[key].shape == (N_CELLS, N_DIMS_PRIVATE)
 
@@ -228,8 +228,8 @@ class TestStoreLatents:
             },
         }
         utils.store_latents(fresh, latents, group_indices_list)
-        assert "X_spVIPES_private_0_rna" in fresh.obsm
-        assert "X_spVIPES_private_0_protein" in fresh.obsm
+        assert "X_spVIPESmulti_private_0_rna" in fresh.obsm
+        assert "X_spVIPESmulti_private_0_protein" in fresh.obsm
 
     def test_cell_order_preserved(self, rng, group_indices_list):
         """Cells at specific indices should receive the correct latent vector."""
@@ -240,7 +240,7 @@ class TestStoreLatents:
         sentinel = {i: np.full((40, N_DIMS_SHARED), float(i), dtype=np.float32) for i in range(3)}
         latents = {"shared_reordered": sentinel}
         utils.store_latents(fresh, latents, group_indices_list)
-        arr = fresh.obsm["X_spVIPES_shared"]
+        arr = fresh.obsm["X_spVIPESmulti_shared"]
         for gi, idxs in enumerate(group_indices_list):
             assert np.allclose(arr[idxs], float(gi))
 
@@ -252,18 +252,18 @@ class TestStoreLatents:
 
 class TestAddLatentDimsToObs:
     def test_columns_created(self, adata):
-        utils.add_latent_dims_to_obs(adata, "X_spVIPES_shared")
+        utils.add_latent_dims_to_obs(adata, "X_spVIPESmulti_shared")
         for i in range(N_DIMS_SHARED):
-            assert f"spVIPES_shared_{i}" in adata.obs.columns
+            assert f"spVIPESmulti_shared_{i}" in adata.obs.columns
 
     def test_max_dims(self, adata):
-        utils.add_latent_dims_to_obs(adata, "X_spVIPES_shared", max_dims=2)
-        assert "spVIPES_shared_0" in adata.obs.columns
-        assert "spVIPES_shared_1" in adata.obs.columns
-        assert "spVIPES_shared_2" not in adata.obs.columns
+        utils.add_latent_dims_to_obs(adata, "X_spVIPESmulti_shared", max_dims=2)
+        assert "spVIPESmulti_shared_0" in adata.obs.columns
+        assert "spVIPESmulti_shared_1" in adata.obs.columns
+        assert "spVIPESmulti_shared_2" not in adata.obs.columns
 
     def test_custom_prefix(self, adata):
-        utils.add_latent_dims_to_obs(adata, "X_spVIPES_shared", prefix="myZ")
+        utils.add_latent_dims_to_obs(adata, "X_spVIPESmulti_shared", prefix="myZ")
         assert "myZ_0" in adata.obs.columns
 
     def test_missing_key_raises(self, adata):
@@ -271,10 +271,10 @@ class TestAddLatentDimsToObs:
             utils.add_latent_dims_to_obs(adata, "X_nonexistent")
 
     def test_values_correct(self, adata):
-        utils.add_latent_dims_to_obs(adata, "X_spVIPES_shared")
+        utils.add_latent_dims_to_obs(adata, "X_spVIPESmulti_shared")
         np.testing.assert_allclose(
-            adata.obs["spVIPES_shared_0"].values,
-            adata.obsm["X_spVIPES_shared"][:, 0],
+            adata.obs["spVIPESmulti_shared_0"].values,
+            adata.obsm["X_spVIPESmulti_shared"][:, 0],
         )
 
 
@@ -316,18 +316,18 @@ class TestGetTopGenes:
 
 class TestScoreCellsOnFactor:
     def test_default_col_name(self, adata):
-        utils.score_cells_on_factor(adata, dim_idx=0, obsm_key="X_spVIPES_shared")
-        assert "spVIPES_shared_0" in adata.obs.columns
+        utils.score_cells_on_factor(adata, dim_idx=0, obsm_key="X_spVIPESmulti_shared")
+        assert "spVIPESmulti_shared_0" in adata.obs.columns
 
     def test_custom_col_name(self, adata):
-        utils.score_cells_on_factor(adata, dim_idx=1, obsm_key="X_spVIPES_shared", col_name="myFactor")
+        utils.score_cells_on_factor(adata, dim_idx=1, obsm_key="X_spVIPESmulti_shared", col_name="myFactor")
         assert "myFactor" in adata.obs.columns
 
     def test_values_correct(self, adata):
-        utils.score_cells_on_factor(adata, dim_idx=2, obsm_key="X_spVIPES_shared")
+        utils.score_cells_on_factor(adata, dim_idx=2, obsm_key="X_spVIPESmulti_shared")
         np.testing.assert_allclose(
-            adata.obs["spVIPES_shared_2"].values,
-            adata.obsm["X_spVIPES_shared"][:, 2],
+            adata.obs["spVIPESmulti_shared_2"].values,
+            adata.obsm["X_spVIPESmulti_shared"][:, 2],
         )
 
     def test_missing_key_raises(self, adata):
@@ -336,7 +336,7 @@ class TestScoreCellsOnFactor:
 
     def test_out_of_range_dim_raises(self, adata):
         with pytest.raises(ValueError, match="out of range"):
-            utils.score_cells_on_factor(adata, dim_idx=999, obsm_key="X_spVIPES_shared")
+            utils.score_cells_on_factor(adata, dim_idx=999, obsm_key="X_spVIPESmulti_shared")
 
 
 # ===========================================================================

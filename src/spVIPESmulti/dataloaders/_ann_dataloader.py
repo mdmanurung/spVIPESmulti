@@ -6,7 +6,7 @@ from typing import Optional, Union
 import numpy as np
 from torch.utils.data import BatchSampler, DataLoader, RandomSampler, Sampler, SequentialSampler, WeightedRandomSampler
 
-from spVIPES.data import AnnDataManager
+from spVIPESmulti.data import AnnDataManager
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 """End-to-end test for multimodal disentanglement (P8).
 
-Unlike `test_multigroup_multimodal.py`, this test imports the full spVIPES
+Unlike `test_multigroup_multimodal.py`, this test imports the full spVIPESmulti
 package (which transitively pulls in scvi-tools, torch, jax, etc.). It
 exercises the loss function path that wires `_compute_disentangle_losses`
 into `_loss_multimodal`.
@@ -13,8 +13,8 @@ from scipy.sparse import csr_matrix
 
 import anndata as ad
 
-import spVIPES
-from spVIPES.dataloaders._concat_dataloader import ConcatDataLoader
+import spVIPESmulti
+from spVIPESmulti.dataloaders._concat_dataloader import ConcatDataLoader
 
 
 def _make_mod(n_obs, n_vars, seed):
@@ -42,7 +42,7 @@ def _make_multimodal_adata(n_groups=3, n_per_group=60, n_rna=50, n_prot=20, n_ce
         prot.obs["cell_types"] = cts
         groups[gname] = {"rna": rna, "protein": prot}
 
-    prepared = spVIPES.data.prepare_multimodal_adatas(
+    prepared = spVIPESmulti.data.prepare_multimodal_adatas(
         groups, modality_likelihoods={"rna": "nb", "protein": "nb"}
     )
     # `prepare_multimodal_adatas`'s outer concat preserves the obs column when
@@ -53,13 +53,13 @@ def _make_multimodal_adata(n_groups=3, n_per_group=60, n_rna=50, n_prot=20, n_ce
 
 def _build_and_run_one_step(prepared, *, disentangle_preset, batch_size=32):
     """Build the model, pull one batch from the dataloader, run loss."""
-    spVIPES.model.spVIPES.setup_anndata(
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(
         prepared,
         groups_key="groups",
         label_key="cell_types",
         modality_likelihoods={"rna": "nb", "protein": "nb"},
     )
-    model = spVIPES.model.spVIPES(
+    model = spVIPESmulti.model.spVIPESmulti(
         prepared,
         n_hidden=32,
         n_dimensions_shared=8,
@@ -86,11 +86,11 @@ class TestMultimodalDisentangle:
     def test_construction_does_not_raise(self):
         """Multimodal + disentangle_preset='full' should construct cleanly."""
         prepared = _make_multimodal_adata()
-        spVIPES.model.spVIPES.setup_anndata(
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(
             prepared, groups_key="groups", label_key="cell_types",
             modality_likelihoods={"rna": "nb", "protein": "nb"},
         )
-        model = spVIPES.model.spVIPES(
+        model = spVIPESmulti.model.spVIPESmulti(
             prepared,
             n_hidden=32, n_dimensions_shared=8, n_dimensions_private=4,
             disentangle_preset="full",
@@ -155,15 +155,15 @@ class TestMultimodalDisentangle:
             rna.obs_names = [f"{gname}_c{i}" for i in range(60)]
             prot.obs_names = rna.obs_names
             groups[gname] = {"rna": rna, "protein": prot}
-        prepared = spVIPES.data.prepare_multimodal_adatas(
+        prepared = spVIPESmulti.data.prepare_multimodal_adatas(
             groups, modality_likelihoods={"rna": "nb", "protein": "nb"}
         )
-        spVIPES.model.spVIPES.setup_anndata(
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(
             prepared, groups_key="groups",  # no label_key
             modality_likelihoods={"rna": "nb", "protein": "nb"},
         )
         with pytest.raises(ValueError, match="use_labels=True"):
-            spVIPES.model.spVIPES(
+            spVIPESmulti.model.spVIPESmulti(
                 prepared, n_hidden=32, n_dimensions_shared=8, n_dimensions_private=4,
                 disentangle_preset="full",
             )

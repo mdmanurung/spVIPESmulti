@@ -66,7 +66,7 @@
 
 - `recon_train_final` is comparable across rows because the seed-fixed train/val split is identical for every preset.
 - `recon_train_drop = recon[0] - recon[-1]`; positive = the loss decreased.
-- spVIPES' TrainingPlan does not currently log validation_step metrics, so a true held-out NLL is not reported here. Adding `validation_step` to the plan is a straightforward follow-up.
+- spVIPESmulti' TrainingPlan does not currently log validation_step metrics, so a true held-out NLL is not reported here. Adding `validation_step` to the plan is a straightforward follow-up.
 
 ## Verdict
 

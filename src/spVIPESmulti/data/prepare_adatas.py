@@ -10,12 +10,12 @@ def prepare_adatas(
     layers: Optional[list[list[Union[str, None]]]] = None,
 ):
     """
-    Prepare and concatenate multiple AnnData objects for spVIPES integration.
+    Prepare and concatenate multiple AnnData objects for spVIPESmulti integration.
 
     This function takes multiple single-cell datasets and prepares them for
     multi-group integration by concatenating them into a single AnnData object
     while preserving group-specific metadata. It sets up all the necessary
-    data structures for spVIPES to perform shared-private latent space learning.
+    data structures for spVIPESmulti to perform shared-private latent space learning.
 
     Parameters
     ----------
@@ -56,7 +56,7 @@ def prepare_adatas(
     3. **Index tracking**: Creates mappings to track group-specific indices
     4. **Outer join concatenation**: Preserves all variables from all groups
 
-    This prepared data structure enables spVIPES to handle datasets with different
+    This prepared data structure enables spVIPESmulti to handle datasets with different
     feature sets (genes) while maintaining the ability to separate shared and
     private latent representations.
 
@@ -64,19 +64,19 @@ def prepare_adatas(
     --------
     Basic usage with two datasets:
 
-    >>> import spVIPES
+    >>> import spVIPESmulti
     >>> import scanpy as sc
     >>>
     >>> # Load your datasets
     >>> adata1 = sc.read_h5ad("dataset1.h5ad")
     >>> adata2 = sc.read_h5ad("dataset2.h5ad")
     >>>
-    >>> # Prepare for spVIPES
+    >>> # Prepare for spVIPESmulti
     >>> adatas_dict = {"treatment": adata1, "control": adata2}
-    >>> combined_adata = spVIPES.data.prepare_adatas(adatas_dict)
+    >>> combined_adata = spVIPESmulti.data.prepare_adatas(adatas_dict)
     >>>
-    >>> # Now ready for spVIPES setup
-    >>> spVIPES.model.spVIPES.setup_anndata(combined_adata, groups_key="groups")
+    >>> # Now ready for spVIPESmulti setup
+    >>> spVIPESmulti.model.spVIPESmulti.setup_anndata(combined_adata, groups_key="groups")
 
     Integration with different feature sets:
 
@@ -84,7 +84,7 @@ def prepare_adatas(
     >>> print(f"Dataset 1: {adata1.n_vars} genes")
     >>> print(f"Dataset 2: {adata2.n_vars} genes")
     >>>
-    >>> combined = spVIPES.data.prepare_adatas({"batch1": adata1, "batch2": adata2})
+    >>> combined = spVIPESmulti.data.prepare_adatas({"batch1": adata1, "batch2": adata2})
     >>> print(f"Combined: {combined.n_vars} genes")  # Union of all genes
     """
     groups_obs_names = []
@@ -140,7 +140,7 @@ def prepare_multimodal_adatas(
     modality_likelihoods: Optional[dict[str, str]] = None,
 ):
     """
-    Prepare and concatenate multimodal AnnData objects for spVIPES integration.
+    Prepare and concatenate multimodal AnnData objects for spVIPESmulti integration.
 
     Each group can have one or more modalities (e.g., RNA, protein, ATAC).
     All data is concatenated into a single AnnData with metadata tracking

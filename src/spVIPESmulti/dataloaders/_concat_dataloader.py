@@ -4,8 +4,8 @@ from typing import Optional, Union
 import numpy as np
 from torch.utils.data import DataLoader
 
-from spVIPES.data import AnnDataManager
-from spVIPES.dataloaders._ann_dataloader import AnnDataLoader
+from spVIPESmulti.data import AnnDataManager
+from spVIPESmulti.dataloaders._ann_dataloader import AnnDataLoader
 
 
 class ConcatDataLoader(DataLoader):
@@ -65,39 +65,6 @@ class ConcatDataLoader(DataLoader):
                 )
             )
 
-        # if transport_plan is not None:
-        #     # Use transport plan for pairing
-        #     paired_indices = self._create_paired_indices(indices_list, transport_plan)
-        #     for indices in paired_indices:
-        #         self.dataloaders.append(
-        #             AnnDataLoader(
-        #                 adata_manager,
-        #                 indices=indices,
-        #                 shuffle=False,  # We don't shuffle here as the indices are already paired
-        #                 use_labels=use_labels,
-        #                 batch_size=batch_size,
-        #                 data_and_attributes=data_and_attributes,
-        #                 drop_last=drop_last,
-        #                 **self.dataloader_kwargs,
-        #             )
-        #         )
-        # else:
-        #     # Original behavior when no transport plan is available
-        #     largest_species = max([len(indices) for indices in indices_list])
-        #     for indices in indices_list:
-        #         self.dataloaders.append(
-        #             AnnDataLoader(
-        #                 adata_manager,
-        #                 indices=indices,
-        #                 shuffle=shuffle,
-        #                 use_labels=use_labels,
-        #                 batch_size=batch_size,
-        #                 data_and_attributes=data_and_attributes,
-        #                 drop_last=drop_last,
-        #                 **self.dataloader_kwargs,
-        #             )
-        #         )
-
         if not self.dataloaders:
             raise ValueError(
                 "ConcatDataLoader requires at least one group (indices_list is empty)."
@@ -131,47 +98,3 @@ class ConcatDataLoader(DataLoader):
                     # fallback: keep as list
                     merged[k] = sum(merged[k], []) if isinstance(merged[k][0], list) else merged[k]
             yield merged
-
-    def _create_paired_indices(self, indices_list, transport_plan, top_k=5):
-        dataset1_indices, dataset2_indices = indices_list
-        paired_indices = [[], []]
-
-        if len(dataset1_indices) <= len(dataset2_indices):
-            smaller_indices, larger_indices = dataset1_indices, dataset2_indices
-            transpose_plan = False
-        else:
-            smaller_indices, larger_indices = dataset2_indices, dataset1_indices
-            transpose_plan = True
-
-        if transpose_plan:
-            transport_plan = transport_plan.T
-
-        # Normalize transport plan
-        transport_plan = transport_plan / transport_plan.sum(axis=1, keepdims=True)
-
-        # First, ensure each cell from the smaller dataset is matched
-        for i, idx_small in enumerate(smaller_indices):
-            top_k_matches = np.argsort(transport_plan[i])[-top_k:][::-1]
-            best_match = larger_indices[top_k_matches[0]]
-
-            if transpose_plan:
-                paired_indices[0].append(best_match)
-                paired_indices[1].append(idx_small)
-            else:
-                paired_indices[0].append(idx_small)
-                paired_indices[1].append(best_match)
-
-        # Then, match the remaining cells from the larger dataset
-        for i in range(len(smaller_indices), len(larger_indices)):
-            idx_small = smaller_indices[i % len(smaller_indices)]
-            top_k_matches = np.argsort(transport_plan[i % len(smaller_indices)])[-top_k:][::-1]
-            best_match = larger_indices[top_k_matches[0]]
-
-            if transpose_plan:
-                paired_indices[0].append(best_match)
-                paired_indices[1].append(idx_small)
-            else:
-                paired_indices[0].append(idx_small)
-                paired_indices[1].append(best_match)
-
-        return paired_indices

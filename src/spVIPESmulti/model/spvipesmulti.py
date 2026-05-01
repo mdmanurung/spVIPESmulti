@@ -11,57 +11,115 @@ from scvi.data.fields import CategoricalObsField, LayerField
 from scvi.model.base import BaseModelClass
 from scvi.utils import setup_anndata_dsp
 
-from spVIPES.data import AnnDataManager
-from spVIPES.dataloaders._concat_dataloader import ConcatDataLoader
-from spVIPES.model._disentangle_presets import DISENTANGLE_PRESETS
-from spVIPES.model.base.training_mixin import MultiGroupTrainingMixin
-from spVIPES.module.spVIPESmodule import spVIPESmodule
+from spVIPESmulti.data import AnnDataManager
+from spVIPESmulti.dataloaders._concat_dataloader import ConcatDataLoader
+from spVIPESmulti.model._disentangle_presets import DISENTANGLE_PRESETS
+from spVIPESmulti.model.base.training_mixin import MultiGroupTrainingMixin
+from spVIPESmulti.module.spVIPESmultimodule import spVIPESmultimodule
 
 logger = logging.getLogger(__name__)
 
 
-class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
+class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
     """
-    Implementation of the spVIPES model.
+    Implementation of the spVIPESmulti model.
 
-    spVIPES (shared-private Variational Inference with Product of Experts and Supervision)
+    spVIPESmulti (shared-private Variational Inference with Product of Experts and Supervision)
     is a method for integrating multi-group single-cell datasets using a shared-private
     latent space approach. The model learns both shared representations (common across
-    groups) and private representations (group-specific) through a label-based Product
-    of Experts (PoE) framework.
+    groups) and private representations (group-specific) through a Product of Experts
+    (PoE) framework.
 
     Parameters
     ----------
     adata : AnnData
-        AnnData object that has been registered via :func:`~spVIPES.model.spVIPES.setup_anndata`.
+        AnnData object that has been registered via
+        :func:`~spVIPESmulti.model.spVIPESmulti.setup_anndata`.
     n_hidden : int, default=128
-        Number of nodes per hidden layer in the neural networks.
+        Number of nodes per hidden layer in all encoder and decoder networks.
     n_dimensions_shared : int, default=25
-        Dimensionality of the shared latent space. This space captures features
-        common across all groups/datasets.
+        Dimensionality of the shared latent space ``z_shared``. Captures biology
+        common across all groups.
     n_dimensions_private : int, default=10
-        Dimensionality of the private latent spaces. Each group gets its own
-        private latent space of this dimensionality.
+        Dimensionality of each group's private latent space ``z_private``.
+        Captures group-specific variation.
     dropout_rate : float, default=0.1
-        Dropout rate for neural networks to prevent overfitting.
+        Dropout probability applied in all encoder / decoder hidden layers.
+    use_nf_prior : bool, default=False
+        Replace the standard N(0, I) prior with a learned normalizing-flow prior
+        (implemented via Zuko). See ``nf_type``, ``nf_transforms``, ``nf_target``.
+    nf_type : str, default="NSF"
+        Flow architecture when ``use_nf_prior=True``. ``"NSF"`` (Neural Spline
+        Flow) or ``"MAF"`` (Masked Autoregressive Flow).
+    nf_transforms : int, default=3
+        Number of sequential coupling transforms in the normalizing flow.
+    nf_target : str, default="shared"
+        Which latent(s) receive the flow prior. One of ``"shared"``,
+        ``"private"``, or ``"both"``.
+    disentangle_preset : str, default="off"
+        Named preset activating the optional disentanglement objective.
+        Available presets: ``"off"``, ``"full"``, ``"shared_only"``,
+        ``"private_only"``, ``"adversarial_only"``, ``"supervised_only"``,
+        ``"no_contrastive"``.
+    disentangle_group_shared_weight : float or None, default=None
+        Override the preset's weight for the adversarial group classifier on
+        ``z_shared`` (gradient-reversal layer). ``None`` keeps the preset value.
+    disentangle_label_shared_weight : float or None, default=None
+        Override the preset's weight for the supervised label classifier on
+        ``z_shared`` (mutual-information lower bound). Requires ``label_key``.
+    disentangle_group_private_weight : float or None, default=None
+        Override the preset's weight for the supervised group classifier on
+        ``z_private``. Requires ``label_key`` for the group supervision signal.
+    disentangle_label_private_weight : float or None, default=None
+        Override the preset's weight for the adversarial label classifier on
+        ``z_private`` (gradient-reversal layer). Requires ``label_key``.
+    contrastive_weight : float or None, default=None
+        Override the preset's weight for the prototype InfoNCE loss on
+        ``z_shared``. Requires ``label_key``. ``None`` keeps the preset value.
+    contrastive_temperature : float, default=0.1
+        Temperature for the InfoNCE softmax denominator.
+    modality_loss_weights : dict[str, float] or None, default=None
+        Per-modality scalar multipliers on the reconstruction loss.
+        E.g. ``{"rna": 1.0, "protein": 5.0}`` to up-weight the protein term.
+        Multimodal mode only (ignored for single-modal data).
+    use_jeffreys_integ : bool, default=False
+        Add a Jeffreys (symmetric KL) integration loss between every pair of
+        group PoE posteriors on ``z_shared``.
+    jeffreys_integ_weight : float, default=1.0
+        Scalar multiplier on the Jeffreys integration loss.
     **model_kwargs
-        Additional keyword arguments passed to the underlying module.
+        Additional keyword arguments forwarded to :class:`~spVIPESmulti.module.spVIPESmultimodule`.
 
     Examples
     --------
     Basic usage with cell type labels:
 
-    >>> import spVIPES
-    >>> adata = spVIPES.data.prepare_adatas({"dataset1": dataset1, "dataset2": dataset2})
-    >>> spVIPES.model.spVIPES.setup_anndata(adata, groups_key="groups", label_key="cell_type")
-    >>> model = spVIPES.model.spVIPES(adata)
-    >>> model.train()
-    >>> latents = model.get_latent_representation()
+    >>> import spVIPESmulti
+    >>> adata = spVIPESmulti.data.prepare_adatas({"ctrl": adata_ctrl, "treat": adata_treat})
+    >>> spVIPESmulti.model.spVIPESmulti.setup_anndata(adata, groups_key="groups", label_key="cell_type")
+    >>> group_indices_list = [list(map(int, g)) for g in adata.uns["groups_obs_indices"]]
+    >>> model = spVIPESmulti.model.spVIPESmulti(adata)
+    >>> model.train(group_indices_list, max_epochs=200)
+    >>> latents = model.get_latent_representation(group_indices_list, batch_size=512)
+    >>> spVIPESmulti.utils.store_latents(adata, latents, group_indices_list)
+
+    With full disentanglement and NF prior:
+
+    >>> model = spVIPESmulti.model.spVIPESmulti(
+    ...     adata,
+    ...     use_nf_prior=True,
+    ...     nf_type="NSF",
+    ...     disentangle_preset="full",
+    ...     contrastive_weight=0.0,  # override to disable InfoNCE
+    ... )
 
     Notes
     -----
-    - We recommend setting n_dimensions_private < n_dimensions_shared for optimal performance
-    - GPU acceleration is strongly recommended for large datasets
+    - Disentanglement components that use labels (2, 4, 5) require ``label_key``
+      in :meth:`setup_anndata`.
+    - Individual weight overrides stack on top of a preset: any numeric value
+      (including ``0.0``) replaces the preset; ``None`` keeps it.
+    - GPU acceleration is strongly recommended for large datasets.
     """
 
     def __init__(
@@ -134,7 +192,7 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
                     "Negative weights reverse the loss and will produce unexpected results."
                 )
 
-        self.module = spVIPESmodule(
+        self.module = spVIPESmultimodule(
             groups_lengths=groups_lengths,
             groups_obs_names=groups_obs_names,
             groups_var_names=groups_var_names,
@@ -166,7 +224,7 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
 
         is_multimodal = groups_modality_lengths is not None
         self._model_summary_string = (
-            "spVIPES Model with the following params: \nn_hidden: {}, n_dimensions_shared: {}, "
+            "spVIPESmulti Model with the following params: \nn_hidden: {}, n_dimensions_shared: {}, "
             "n_dimensions_private: {}, dropout_rate: {}, multimodal: {}, "
             "nf_prior: {}"
         ).format(
@@ -194,7 +252,7 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
         **kwargs,
     ) -> None:
         """
-        Set up AnnData object for spVIPES model.
+        Set up AnnData object for spVIPESmulti model.
 
         Parameters
         ----------
@@ -221,7 +279,7 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
             CategoricalObsField("groups", groups_key),
         ]
 
-        print("=== spVIPES AnnData Setup ===")
+        print("=== spVIPESmulti AnnData Setup ===")
         print(f"Setting up with groups_key: '{groups_key}'")
 
         if label_key is not None:
@@ -263,7 +321,7 @@ class spVIPES(MultiGroupTrainingMixin, BaseModelClass):
         Parameters
         ----------
         group_indices_list
-            List of lists containing the indices of cells in each of the groups used as input for spVIPES.
+            List of lists containing the indices of cells in each of the groups used as input for spVIPESmulti.
         adata
             AnnData object with equivalent structure to initial AnnData. If `None`, defaults to the
             AnnData object used to initialize the model.

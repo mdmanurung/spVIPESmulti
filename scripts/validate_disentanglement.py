@@ -1,4 +1,4 @@
-"""Empirical validation of the spVIPES disentanglement objective.
+"""Empirical validation of the spVIPESmulti disentanglement objective.
 
 Implements the verification checklist from PLANS.md against a real multi-group
 single-cell dataset:
@@ -16,7 +16,7 @@ Compares all `disentangle_preset` values + single-component ablations from
 with donor (SLN111/SLN208) as the group axis and `cell_types` as the label.
 The DIALOGUE example used by `docs/notebooks/disentangle_ablation.ipynb` is not
 reachable here because pertpy 1.0.3 requires jax >= 0.6.1, conflicting with
-spVIPES' jax==0.4.27 pin.
+spVIPESmulti' jax==0.4.27 pin.
 
 Outputs:
     scripts/validation_results.json   numeric results per preset/ablation
@@ -44,7 +44,7 @@ import torch
 from sklearn.metrics import adjusted_rand_score, silhouette_score
 from sklearn.neighbors import NearestNeighbors
 
-import spVIPES
+import spVIPESmulti
 
 SEED = 0
 N_PER_GROUP = 1000
@@ -109,8 +109,8 @@ def prepare(adata):
     groups_dict = {
         d: adata[adata.obs["donor"] == d].copy() for d in sorted(adata.obs["donor"].unique())
     }
-    prepared = spVIPES.data.prepare_adatas(groups_dict)
-    spVIPES.model.spVIPES.setup_anndata(
+    prepared = spVIPESmulti.data.prepare_adatas(groups_dict)
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(
         prepared, groups_key="groups", label_key="cell_types"
     )
     return prepared
@@ -202,7 +202,7 @@ def per_group_silhouette(z_private, groups):
 def extract_history_summary(model):
     """Pull final + initial train metrics from model.history.
 
-    spVIPES' TrainingPlan logs train-side metrics only (no validation_step),
+    spVIPESmulti' TrainingPlan logs train-side metrics only (no validation_step),
     so held-out NLL is computed separately in `held_out_nll()`.
     """
     h = model.history
@@ -235,7 +235,7 @@ def extract_history_summary(model):
     return out
 
 
-# held-out NLL is intentionally omitted: spVIPES' multi-group inference/generative
+# held-out NLL is intentionally omitted: spVIPESmulti' multi-group inference/generative
 # path doesn't expose a clean per-cell reconstruction loss without re-implementing
 # parts of the TrainingPlan. With a deterministic seed the train/val split is
 # fixed across presets, so `recon_train_final` is a fair cross-preset signal.
@@ -244,7 +244,7 @@ def extract_history_summary(model):
 def train_and_score(adata, *, label, **disentangle_kwargs):
     set_seeds(SEED)
     t0 = perf_counter()
-    model = spVIPES.model.spVIPES(
+    model = spVIPESmulti.model.spVIPESmulti(
         adata,
         n_hidden=N_HIDDEN,
         n_dimensions_shared=N_SHARED,
@@ -342,7 +342,7 @@ def write_report(rows: list[dict]) -> None:
         "",
         "- `recon_train_final` is comparable across rows because the seed-fixed train/val split is identical for every preset.",
         "- `recon_train_drop = recon[0] - recon[-1]`; positive = the loss decreased.",
-        "- spVIPES' TrainingPlan does not currently log validation_step metrics, so a true held-out NLL is not reported here. Adding `validation_step` to the plan is a straightforward follow-up.",
+        "- spVIPESmulti' TrainingPlan does not currently log validation_step metrics, so a true held-out NLL is not reported here. Adding `validation_step` to the plan is a straightforward follow-up.",
         "",
         "## Verdict",
         "",
@@ -361,7 +361,7 @@ def write_report(rows: list[dict]) -> None:
 
 def main():
     print("=" * 70)
-    print(" spVIPES disentanglement empirical validation")
+    print(" spVIPESmulti disentanglement empirical validation")
     print("=" * 70)
     print("Loading data ...")
     adata = load_data()

@@ -1,4 +1,4 @@
-"""Utility functions for working with spVIPES latent spaces.
+"""Utility functions for working with spVIPESmulti latent spaces.
 
 These functions cover the post-training workflow that every tutorial notebook
 repeats manually:
@@ -110,13 +110,13 @@ def store_latents(
     adata: "AnnData",
     latents: dict,
     group_indices_list: list[np.ndarray],
-    obsm_prefix: str = "X_spVIPES",
+    obsm_prefix: str = "X_spVIPESmulti",
 ) -> "AnnData":
     """Stitch per-group latent arrays back into ``adata.obsm`` (original cell order).
 
     Consolidates the manual concatenation pattern used in every tutorial
     notebook. Handles all keys returned by
-    :meth:`~spVIPES.model.spVIPES.get_latent_representation`:
+    :meth:`~spVIPESmulti.model.spVIPESmulti.get_latent_representation`:
     ``shared_reordered``, ``private_reordered``, and (for multimodal models)
     ``private_multimodal_reordered``.
 
@@ -125,7 +125,7 @@ def store_latents(
     adata:
         AnnData object (same one passed to :meth:`setup_anndata`).
     latents:
-        Dict returned by :meth:`~spVIPES.model.spVIPES.get_latent_representation`.
+        Dict returned by :meth:`~spVIPESmulti.model.spVIPESmulti.get_latent_representation`.
     group_indices_list:
         List of index arrays, one per group (same list passed to ``train``
         and ``get_latent_representation``).
@@ -144,8 +144,8 @@ def store_latents(
     Examples
     --------
     >>> latents = model.get_latent_representation(group_indices_list)
-    >>> spVIPES.utils.store_latents(adata, latents, group_indices_list)
-    >>> sc.pp.neighbors(adata, use_rep="X_spVIPES_shared")
+    >>> spVIPESmulti.utils.store_latents(adata, latents, group_indices_list)
+    >>> sc.pp.neighbors(adata, use_rep="X_spVIPESmulti_shared")
     """
     n_obs = adata.n_obs
 
@@ -197,10 +197,10 @@ def add_latent_dims_to_obs(
     adata:
         AnnData object containing ``obsm_key`` in ``adata.obsm``.
     obsm_key:
-        Key in ``adata.obsm`` to copy from (e.g. ``"X_spVIPES_private_g0"``).
+        Key in ``adata.obsm`` to copy from (e.g. ``"X_spVIPESmulti_private_g0"``).
     prefix:
         Column name prefix. Defaults to ``obsm_key`` with leading ``"X_"``
-        stripped (e.g. ``"X_spVIPES_private_g0"`` → ``"spVIPES_private_g0"``).
+        stripped (e.g. ``"X_spVIPESmulti_private_g0"`` → ``"spVIPESmulti_private_g0"``).
     max_dims:
         Maximum number of dimensions to copy. ``None`` copies all.
 
@@ -211,8 +211,8 @@ def add_latent_dims_to_obs(
 
     Examples
     --------
-    >>> spVIPES.utils.add_latent_dims_to_obs(adata_g0, "X_spVIPES_private_g0", max_dims=5)
-    >>> sc.pl.violin(adata_g0, "spVIPES_private_g0_1", groupby="cell_type")
+    >>> spVIPESmulti.utils.add_latent_dims_to_obs(adata_g0, "X_spVIPESmulti_private_g0", max_dims=5)
+    >>> sc.pl.violin(adata_g0, "spVIPESmulti_private_g0_1", groupby="cell_type")
     """
     if obsm_key not in adata.obsm:
         raise KeyError(
@@ -235,10 +235,10 @@ def add_latent_dims_to_obs(
 
 def compute_shared_umap(
     adata: "AnnData",
-    obsm_key: str = "X_spVIPES_shared",
+    obsm_key: str = "X_spVIPESmulti_shared",
     n_neighbors: int = 15,
     min_dist: float = 0.3,
-    umap_key: str = "X_umap_spvipes_shared",
+    umap_key: str = "X_umap_spvipesmulti_shared",
 ) -> "AnnData":
     """Compute UMAP on the shared latent and store it under a named key.
 
@@ -267,8 +267,8 @@ def compute_shared_umap(
 
     Examples
     --------
-    >>> spVIPES.utils.compute_shared_umap(adata)
-    >>> spVIPES.pl.umap_shared(adata, color="cell_type")
+    >>> spVIPESmulti.utils.compute_shared_umap(adata)
+    >>> spVIPESmulti.pl.umap_shared(adata, color="cell_type")
     """
     import scanpy as sc
 
@@ -277,7 +277,7 @@ def compute_shared_umap(
             f"'{obsm_key}' not found in adata.obsm. "
             f"Run store_latents() first or provide the correct obsm_key."
         )
-    nn_key = "_spvipes_nn_shared"
+    nn_key = "_spvipesmulti_nn_shared"
     sc.pp.neighbors(adata, use_rep=obsm_key, key_added=nn_key, n_neighbors=n_neighbors)
     sc.tl.umap(adata, neighbors_key=nn_key, min_dist=min_dist)
     adata.obsm[umap_key] = adata.obsm["X_umap"].copy()
@@ -286,10 +286,10 @@ def compute_shared_umap(
 
 def compute_private_umaps(
     adatas_per_group: dict[str, "AnnData"],
-    obsm_key: str = "X_spVIPES_private",
+    obsm_key: str = "X_spVIPESmulti_private",
     n_neighbors: int = 15,
     min_dist: float = 0.3,
-    umap_key: str = "X_umap_spvipes_private",
+    umap_key: str = "X_umap_spvipesmulti_private",
 ) -> dict[str, "AnnData"]:
     """Compute UMAP on each group's private latent.
 
@@ -315,8 +315,8 @@ def compute_private_umaps(
     Examples
     --------
     >>> adatas = {"day0": adata_g0, "day3": adata_g1}
-    >>> spVIPES.utils.compute_private_umaps(adatas)
-    >>> spVIPES.pl.umap_private(adatas, color="cell_type")
+    >>> spVIPESmulti.utils.compute_private_umaps(adatas)
+    >>> spVIPESmulti.pl.umap_private(adatas, color="cell_type")
     """
     import scanpy as sc
 
@@ -326,7 +326,7 @@ def compute_private_umaps(
                 f"Group '{name}': '{obsm_key}' not found in adata.obsm. "
                 f"Available keys: {list(adata.obsm.keys())}"
             )
-        nn_key = "_spvipes_nn_private"
+        nn_key = "_spvipesmulti_nn_private"
         sc.pp.neighbors(adata, use_rep=obsm_key, key_added=nn_key, n_neighbors=n_neighbors)
         sc.tl.umap(adata, neighbors_key=nn_key, min_dist=min_dist)
         adata.obsm[umap_key] = adata.obsm["X_umap"].copy()
@@ -358,7 +358,7 @@ def get_top_genes(
         columns = ``Z_{latent_type}_{0..n-1}``.
         If ``None``, ``model`` must be provided.
     model:
-        Fitted spVIPES model. Used to fetch loadings when ``loadings_df``
+        Fitted spVIPESmulti model. Used to fetch loadings when ``loadings_df``
         is ``None``.
     group_idx:
         Group (dataset) index passed to ``model.get_loadings()``.
@@ -383,7 +383,7 @@ def get_top_genes(
 
     Examples
     --------
-    >>> top = spVIPES.utils.get_top_genes(model=model, n_top=5)
+    >>> top = spVIPESmulti.utils.get_top_genes(model=model, n_top=5)
     >>> print(top[["dim", "pos_genes"]].to_string(index=False))
     """
     df = _resolve_loadings(loadings_df, model, group_idx, latent_type)
@@ -422,7 +422,7 @@ def score_cells_on_factor(
         Key in ``adata.obsm`` to read from.
     col_name:
         Column name to write in ``adata.obs``. Defaults to
-        ``"{obsm_key_stripped}_{dim_idx}"``, e.g. ``"spVIPES_private_g0_2"``.
+        ``"{obsm_key_stripped}_{dim_idx}"``, e.g. ``"spVIPESmulti_private_g0_2"``.
 
     Returns
     -------
@@ -431,8 +431,8 @@ def score_cells_on_factor(
 
     Examples
     --------
-    >>> spVIPES.utils.score_cells_on_factor(adata_g0, dim_idx=2, obsm_key="X_spVIPES_private_g0")
-    >>> sc.pl.violin(adata_g0, "spVIPES_private_g0_2", groupby="cell_type")
+    >>> spVIPESmulti.utils.score_cells_on_factor(adata_g0, dim_idx=2, obsm_key="X_spVIPESmulti_private_g0")
+    >>> sc.pl.violin(adata_g0, "spVIPESmulti_private_g0_2", groupby="cell_type")
     """
     if obsm_key not in adata.obsm:
         raise KeyError(

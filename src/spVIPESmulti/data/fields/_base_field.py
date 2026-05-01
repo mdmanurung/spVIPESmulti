@@ -5,9 +5,9 @@ import numpy as np
 import pandas as pd
 import rich
 
-from spVIPES.data import _constants
-from spVIPES.data._types import AnnOrMuData
-from spVIPES.data._utils import get_anndata_attribute
+from spVIPESmulti.data import _constants
+from spVIPESmulti.data._types import AnnOrMuData
+from spVIPESmulti.data._utils import get_anndata_attribute
 
 
 class BaseAnnDataField(ABC):

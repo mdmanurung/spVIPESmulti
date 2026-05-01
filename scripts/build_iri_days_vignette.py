@@ -1,7 +1,7 @@
 """Generate iri_days_vignette.ipynb programmatically.
 
 This vignette mirrors the IRI (immediate repair) experiment from the
-original spVIPES paper (Novella-Rausell et al., *Cell Systems Biology
+original spVIPESmulti paper (Novella-Rausell et al., *Cell Systems Biology
 Journal* 2024 — https://spj.science.org/doi/10.34133/csbj.0015), but
 splits the data by **post-injury day** (1d / 3d / 14d) instead of by
 the paper's two-group "IRI short" vs "IRI long" stratification. With
@@ -33,10 +33,10 @@ def code(src: str) -> None:
 # ------------------------------------------------------------------
 # Section A — Title and motivation
 # ------------------------------------------------------------------
-md("""# spVIPES on Kidney IRI — split by post-injury day (1d / 3d / 14d)
+md("""# spVIPESmulti on Kidney IRI — split by post-injury day (1d / 3d / 14d)
 
 This vignette reproduces the **immediate repair injury (IRI)** analysis
-from the original spVIPES paper
+from the original spVIPESmulti paper
 ([Novella-Rausell *et al.*, 2024](https://spj.science.org/doi/10.34133/csbj.0015)),
 but with one key difference: instead of grouping cells into the paper's
 two buckets (**IRI short** vs **IRI long**), we split the data into
@@ -58,7 +58,7 @@ repair → scar resolution).
 
 | Feature | API |
 |---|---|
-| **3-group integration** by day | `spVIPES.data.prepare_adatas`, label-based PoE |
+| **3-group integration** by day | `spVIPESmulti.data.prepare_adatas`, label-based PoE |
 | **Shared latent** preserves cell-type identity across days | `get_latent_representation` → shared UMAP |
 | **Per-day private latent** isolates day-specific programmes | per-group private UMAP |
 | **Quantitative integration metrics** | ARI on cell types + batch-mixing entropy on day labels |
@@ -88,13 +88,13 @@ import seaborn as sns
 import anndata as ad
 import scipy.sparse as sp
 
-import spVIPES
+import spVIPESmulti
 
 np.random.seed(42)
 torch.manual_seed(42)
 sc.settings.set_figure_params(dpi=80, frameon=False)
 
-print(f"spVIPES : {spVIPES.__version__}")
+print(f"spVIPESmulti : {spVIPESmulti.__version__}")
 print(f"scanpy  : {sc.__version__}")
 print(f"torch   : {torch.__version__} (CUDA: {torch.cuda.is_available()})")
 print(f"anndata : {ad.__version__}")""")
@@ -104,7 +104,7 @@ print(f"anndata : {ad.__version__}")""")
 # ------------------------------------------------------------------
 md("""## 2. Load the IRI dataset
 
-The original spVIPES paper uses the kidney **IRI** scRNA-seq atlas
+The original spVIPESmulti paper uses the kidney **IRI** scRNA-seq atlas
 from [Kirita *et al.* (2020)](https://doi.org/10.1073/pnas.2005477117)
 (GEO accession **GSE139107**), which profiles proximal-tubule cells at
 several post-injury timepoints. We expect the AnnData to live at
@@ -226,7 +226,7 @@ To keep the vignette runnable on a laptop CPU we keep at most 2,000
 cells per day and the top 2,000 highly variable genes. Increase these
 numbers for a real run.
 
-We also make sure raw counts are in `adata.X` (spVIPES uses a
+We also make sure raw counts are in `adata.X` (spVIPESmulti uses a
 Negative-Binomial likelihood by default).
 """)
 
@@ -273,10 +273,10 @@ print(adata.obs["day"].value_counts().sort_index())""")
 # ------------------------------------------------------------------
 md("""## 5. Build the per-day AnnData dict and call `prepare_adatas`
 
-`spVIPES.data.prepare_adatas` expects a dict mapping group name →
+`spVIPESmulti.data.prepare_adatas` expects a dict mapping group name →
 AnnData. We split the subsampled AnnData by day, hand the dict to
 `prepare_adatas`, and end up with a single concatenated AnnData
-carrying the per-group bookkeeping spVIPES needs.
+carrying the per-group bookkeeping spVIPESmulti needs.
 """)
 
 code("""days = sorted(adata.obs["day"].unique())  # ["day_14d", "day_1d", "day_3d"] alphabetically
@@ -292,7 +292,7 @@ for d in day_order:
     adatas_dict[d] = sub
     print(f"  {d}: {sub.shape}")
 
-adata_spv = spVIPES.data.prepare_adatas(adatas_dict)
+adata_spv = spVIPESmulti.data.prepare_adatas(adatas_dict)
 
 print()
 print("Concatenated AnnData :", adata_spv.shape)
@@ -305,11 +305,11 @@ print("Group sizes          :", [len(g) for g in adata_spv.uns["groups_obs_indic
 md("""## 6. `setup_anndata` — label-based PoE
 
 With **three** groups we must use the **label-based** PoE variant: the
-optimal-transport variants in spVIPES are 2-group only. The label
+optimal-transport variants in spVIPESmulti are 2-group only. The label
 column is the cell-type annotation we identified in Section 3.
 """)
 
-code("""spVIPES.model.spVIPES.setup_anndata(
+code("""spVIPESmulti.model.spVIPESmulti.setup_anndata(
     adata_spv,
     groups_key="groups",
     label_key=LABEL_COL,
@@ -318,7 +318,7 @@ code("""spVIPES.model.spVIPES.setup_anndata(
 # ------------------------------------------------------------------
 # Section H — Instantiate and train
 # ------------------------------------------------------------------
-md("""## 7. Instantiate and train spVIPES
+md("""## 7. Instantiate and train spVIPESmulti
 
 We use a moderate-sized model: 15 shared latent dimensions (cell-type
 identity), 8 private dimensions per day (day-specific repair
@@ -333,7 +333,7 @@ MAX_EPOCHS = 50
 BATCH_SIZE = 128
 KL_WARMUP  = 30
 
-model = spVIPES.model.spVIPES(
+model = spVIPESmulti.model.spVIPESmulti(
     adata_spv,
     n_hidden=N_HIDDEN,
     n_dimensions_shared=N_SHARED,
@@ -371,7 +371,7 @@ if "elbo_validation" in model.history:
     ax.plot(model.history["elbo_validation"]["elbo_validation"], label="ELBO (val)")
 ax.set_xlabel("Epoch")
 ax.set_ylabel("ELBO")
-ax.set_title("spVIPES IRI — training curve")
+ax.set_title("spVIPESmulti IRI — training curve")
 ax.legend()
 sns.despine()
 plt.tight_layout()
@@ -404,8 +404,8 @@ latent_shared = np.concatenate(
     axis=0,
 )
 adata_spv = adata_spv[:len(latent_shared)].copy()
-adata_spv.obsm["X_spVIPES_shared"] = latent_shared
-print("X_spVIPES_shared :", adata_spv.obsm["X_spVIPES_shared"].shape)""")
+adata_spv.obsm["X_spVIPESmulti_shared"] = latent_shared
+print("X_spVIPESmulti_shared :", adata_spv.obsm["X_spVIPESmulti_shared"].shape)""")
 
 # ------------------------------------------------------------------
 # Section K — Shared UMAP
@@ -420,9 +420,9 @@ A successful shared latent should:
   the shared space.
 """)
 
-code("""sc.pp.neighbors(adata_spv, use_rep="X_spVIPES_shared",
-                key_added="spvipes_shared", n_neighbors=15)
-sc.tl.umap(adata_spv, neighbors_key="spvipes_shared", min_dist=0.3)
+code("""sc.pp.neighbors(adata_spv, use_rep="X_spVIPESmulti_shared",
+                key_added="spvipesmulti_shared", n_neighbors=15)
+sc.tl.umap(adata_spv, neighbors_key="spvipesmulti_shared", min_dist=0.3)
 adata_spv.obsm["X_umap_shared"] = adata_spv.obsm["X_umap"].copy()
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
@@ -455,10 +455,10 @@ code("""group_adatas = {}
 for g, d in enumerate(day_order):
     mask = adata_spv.obs["groups"] == d
     sub = adata_spv[mask].copy()
-    sub.obsm["X_spVIPES_private"] = latents["private_reordered"][g]
-    sc.pp.neighbors(sub, use_rep="X_spVIPES_private",
-                    key_added="spvipes_private", n_neighbors=15)
-    sc.tl.umap(sub, neighbors_key="spvipes_private", min_dist=0.3)
+    sub.obsm["X_spVIPESmulti_private"] = latents["private_reordered"][g]
+    sc.pp.neighbors(sub, use_rep="X_spVIPESmulti_private",
+                    key_added="spvipesmulti_private", n_neighbors=15)
+    sc.tl.umap(sub, neighbors_key="spvipesmulti_private", min_dist=0.3)
     sub.obsm["X_umap_private"] = sub.obsm["X_umap"].copy()
     group_adatas[d] = sub
 
@@ -514,7 +514,7 @@ def batch_entropy(rep, group_obs, k=30):
         entropies.append(-np.sum(p * np.log2(p + 1e-12)) / max_entropy)
     return float(np.mean(entropies))
 
-rep = adata_spv.obsm["X_spVIPES_shared"]
+rep = adata_spv.obsm["X_spVIPESmulti_shared"]
 ari = leiden_ari(rep, adata_spv.obs[LABEL_COL].values)
 mix = batch_entropy(rep, adata_spv.obs["day"].values, k=30)
 
@@ -526,7 +526,7 @@ print(f"Shared latent — batch mixing (day, ↑)   : {mix:.3f}")""")
 # ------------------------------------------------------------------
 md("""## 13. Summary
 
-We re-ran the spVIPES IRI experiment from the original paper with a
+We re-ran the spVIPESmulti IRI experiment from the original paper with a
 **three-group day split** (1d / 3d / 14d) instead of the binary IRI
 short / long stratification. The **shared latent** integrates cells
 across the three repair days while preserving cell-type identity, and

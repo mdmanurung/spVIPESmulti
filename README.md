@@ -1,6 +1,6 @@
 <div align="center">
 
-# spVIPES
+# spVIPESmulti
 
 **Shared-private Variational Inference with Product of Experts and Supervision**
 
@@ -13,19 +13,18 @@
 
 ## About
 
-spVIPES (v0.3.0) enables robust integration of multi-group single-cell datasets through a principled shared-private latent space decomposition. The model learns both **shared** representations (biological signals common across groups) and **private** representations (group-specific variation) using a Product of Experts (PoE) framework.
+spVIPESmulti (v1.0.0) enables robust integration of multi-group single-cell datasets through a principled shared-private latent space decomposition. The model learns both **shared** representations (biological signals common across groups) and **private** representations (group-specific variation) using a Product of Experts (PoE) framework.
 
 An optional **disentanglement objective** (inspired by CellDISECT and Multi-ContrastiveVAE) can additionally enforce that `z_shared` encodes biology — and only biology — while `z_private` encodes group-specific variation — and only that. This objective is fully supported in both single-modal and multimodal modes. See [Disentanglement Objective](#disentanglement-objective) below.
 
 ### Integration Strategies
 
-spVIPES provides three complementary approaches for dataset alignment, selected automatically based on what you pass to `setup_anndata`:
+spVIPESmulti aligns groups via a label-supervised Product of Experts (PoE) framework. Cell-type labels guide the PoE integration and support N ≥ 2 groups:
 
 | Method | How it's selected | Best use case |
 | --- | --- | --- |
 | **Label-based PoE** | `label_key` provided | High-quality cell type labels; supports N ≥ 2 groups |
-| **OT Paired PoE** | `transport_plan_key` + `match_clusters=False` | Known cell-to-cell correspondences (e.g., time series); exactly 2 groups |
-| **OT Cluster-based PoE** | `transport_plan_key` + `match_clusters=True` | Similar populations, no direct correspondences; exactly 2 groups |
+| **Unsupervised PoE** | `label_key` omitted | No label annotations available; integration quality depends on data overlap |
 
 ## Installation
 
@@ -36,18 +35,18 @@ spVIPES provides three complementary approaches for dataset alignment, selected 
 -   PyTorch ≥ 2.0 (GPU strongly recommended)
 -   zuko ≥ 1.0.0 (normalizing flows prior)
 
-> **scvi-tools 1.x note.** The deprecated `use_gpu=True` kwarg on `model.train(...)` has been removed upstream. Pass GPU settings via `trainer_kwargs`: `model.train(accelerator="gpu", devices=1)`. Several private scvi-tools modules removed in 1.x are now vendored under `spVIPES.data`.
+> **scvi-tools 1.x note.** The deprecated `use_gpu=True` kwarg on `model.train(...)` has been removed upstream. Pass GPU settings via `trainer_kwargs`: `model.train(accelerator="gpu", devices=1)`. Several private scvi-tools modules removed in 1.x are now vendored under `spVIPESmulti.data`.
 
 ### Quick Install
 
 ```bash
-pip install spVIPES
+pip install spVIPESmulti
 ```
 
 Development version:
 
 ```bash
-pip install git+https://github.com/nrclaudio/spVIPES.git@main
+pip install git+https://github.com/mdmanurung/spVIPESmulti.git@main
 ```
 
 With test/dev extras:
@@ -61,17 +60,17 @@ pip install -e ".[dev,test]"
 ### Data Preparation
 
 ```python
-import spVIPES
+import spVIPESmulti
 import scanpy as sc
 
 # Single-modal: dict of {group_name: AnnData}
 adata1 = sc.read_h5ad("dataset1.h5ad")
 adata2 = sc.read_h5ad("dataset2.h5ad")
 
-combined = spVIPES.data.prepare_adatas({"control": adata1, "treatment": adata2})
+combined = spVIPESmulti.data.prepare_adatas({"control": adata1, "treatment": adata2})
 
 # Multimodal: dict of {group_name: {modality_name: AnnData}}
-combined = spVIPES.data.prepare_multimodal_adatas({
+combined = spVIPESmulti.data.prepare_multimodal_adatas({
     "control":   {"rna": rna1,   "protein": prot1},
     "treatment": {"rna": rna2,   "protein": prot2},
 })
@@ -83,7 +82,7 @@ combined = spVIPES.data.prepare_multimodal_adatas({
 
 ```python
 # 1. Register the AnnData
-spVIPES.model.spVIPES.setup_anndata(
+spVIPESmulti.model.spVIPESmulti.setup_anndata(
     combined,
     groups_key="groups",
     label_key="cell_type",   # optional; enables label-supervised PoE
@@ -91,21 +90,23 @@ spVIPES.model.spVIPES.setup_anndata(
 )
 
 # 2. Build and train
-model = spVIPES.model.spVIPES(combined)
-model.train(max_epochs=200)
+group_indices_list = [list(map(int, g)) for g in combined.uns["groups_obs_indices"]]
+model = spVIPESmulti.model.spVIPESmulti(combined)
+model.train(group_indices_list, max_epochs=200)
 
 # 3. Extract representations
-combined.obsm["X_spVIPES_shared"]  = model.get_latent_representation(representation="shared")
-combined.obsm["X_spVIPES_private"] = model.get_latent_representation(representation="private")
+latents = model.get_latent_representation(group_indices_list, batch_size=512)
+spVIPESmulti.utils.store_latents(combined, latents, group_indices_list)
+# writes: combined.obsm["X_spVIPESmulti_shared"], combined.obsm["X_spVIPESmulti_private_g0"], ...
 ```
 
 ### Integration Strategies
 
 <details>
-<summary><b>Label-based Integration (N ≥ 2 groups)</b></summary>
+<summary><b>Label-based Integration (recommended, N ≥ 2 groups)</b></summary>
 
 ```python
-spVIPES.model.spVIPES.setup_anndata(
+spVIPESmulti.model.spVIPESmulti.setup_anndata(
     combined,
     groups_key="groups",
     label_key="cell_type",
@@ -116,29 +117,13 @@ spVIPES.model.spVIPES.setup_anndata(
 </details>
 
 <details>
-<summary><b>Optimal Transport — Paired Cells (exactly 2 groups)</b></summary>
+<summary><b>Unsupervised Integration (no labels)</b></summary>
 
 ```python
-# transport plan stored in combined.uns["transport_plan"]
-spVIPES.model.spVIPES.setup_anndata(
+spVIPESmulti.model.spVIPESmulti.setup_anndata(
     combined,
     groups_key="groups",
-    transport_plan_key="transport_plan",
-    match_clusters=False,
-)
-```
-
-</details>
-
-<details>
-<summary><b>Optimal Transport — Cluster Matching (exactly 2 groups)</b></summary>
-
-```python
-spVIPES.model.spVIPES.setup_anndata(
-    combined,
-    groups_key="groups",
-    transport_plan_key="transport_plan",
-    match_clusters=True,   # Leiden + linear assignment
+    # omit label_key for unsupervised PoE
 )
 ```
 
@@ -147,7 +132,7 @@ spVIPES.model.spVIPES.setup_anndata(
 ### Model Parameters
 
 ```python
-model = spVIPES.model.spVIPES(
+model = spVIPESmulti.model.spVIPESmulti(
     combined,
     n_dimensions_shared=25,      # shared latent dimensionality
     n_dimensions_private=10,     # private latent dimensionality per group
@@ -167,6 +152,7 @@ model = spVIPES.model.spVIPES(
 
 ```python
 model.train(
+    group_indices_list,
     max_epochs=300,
     batch_size=512,
     early_stopping=True,
@@ -178,7 +164,7 @@ model.train(
 
 ## Disentanglement Objective
 
-spVIPES exposes an optional disentanglement objective inspired by **CellDISECT** and **Multi-ContrastiveVAE**. It is implemented as a mix of:
+spVIPESmulti exposes an optional disentanglement objective inspired by **CellDISECT** and **Multi-ContrastiveVAE**. It is implemented as a mix of:
 
 -   **Adversarial losses** via gradient reversal (GRL / DANN-style) — to *erase* a covariate from a latent space
 -   **Supervised classification losses** — acting as variational MI lower bounds to *preserve* a covariate
@@ -212,16 +198,16 @@ Select a preset via `disentangle_preset=` on the model constructor. Individual w
 
 ```python
 # No disentanglement (default):
-model = spVIPES.model.spVIPES(combined)
+model = spVIPESmulti.model.spVIPESmulti(combined)
 
 # Full disentanglement:
-model = spVIPES.model.spVIPES(combined, disentangle_preset="full")
+model = spVIPESmulti.model.spVIPESmulti(combined, disentangle_preset="full")
 
 # Preset with per-component override (e.g. ablation study):
-model = spVIPES.model.spVIPES(combined, disentangle_preset="full", contrastive_weight=0.0)
+model = spVIPESmulti.model.spVIPESmulti(combined, disentangle_preset="full", contrastive_weight=0.0)
 
 # Fine-grained manual control:
-model = spVIPES.model.spVIPES(
+model = spVIPESmulti.model.spVIPESmulti(
     combined,
     disentangle_group_shared_weight=1.0,
     disentangle_label_shared_weight=1.0,
@@ -244,19 +230,19 @@ See [`docs/notebooks/disentangle_ablation.ipynb`](docs/notebooks/disentangle_abl
 `prepare_multimodal_adatas` accepts `{group: {modality: AnnData}}` and builds a single combined AnnData. The model then learns per-(group, modality) encoders/decoders with a two-level PoE: intra-group across modalities, then inter-group across groups.
 
 ```python
-combined = spVIPES.data.prepare_multimodal_adatas({
+combined = spVIPESmulti.data.prepare_multimodal_adatas({
     "control":   {"rna": rna1,   "protein": prot1},
     "treatment": {"rna": rna2,   "protein": prot2},
 })
 
-spVIPES.model.spVIPES.setup_anndata(
+spVIPESmulti.model.spVIPESmulti.setup_anndata(
     combined,
     groups_key="groups",
     label_key="cell_type",
     modality_likelihoods={"rna": "nb", "protein": "nb"},
 )
 
-model = spVIPES.model.spVIPES(
+model = spVIPESmulti.model.spVIPESmulti(
     combined,
     # Re-balance per-modality reconstruction loss (~1000 HVGs vs. ~110 proteins):
     modality_loss_weights={"rna": 1.0, "protein": 5.0},
@@ -281,7 +267,7 @@ See [`docs/notebooks/multimodal_nf_tutorial.ipynb`](docs/notebooks/multimodal_nf
 Replace the standard Gaussian prior with a learned normalizing flow over `z_shared`, `z_private`, or both:
 
 ```python
-model = spVIPES.model.spVIPES(
+model = spVIPESmulti.model.spVIPESmulti(
     combined,
     use_nf_prior=True,
     nf_type="NSF",       # Neural Spline Flow (default) or "MAF"
@@ -294,7 +280,7 @@ See [`docs/notebooks/cinemaot_nf_vignette.ipynb`](docs/notebooks/cinemaot_nf_vig
 
 ## Post-training Utilities
 
-The `spVIPES.utils` and `spVIPES.pl` modules provide ready-to-use helpers that
+The `spVIPESmulti.utils` and `spVIPESmulti.pl` modules provide ready-to-use helpers that
 eliminate the boilerplate repeated in every analysis notebook.
 
 ### Storing latent representations
@@ -304,21 +290,21 @@ stitch per-group arrays back into `adata.obsm` in original cell order:
 
 ```python
 latents = model.get_latent_representation(group_indices_list, batch_size=512)
-spVIPES.utils.store_latents(adata, latents, group_indices_list)
-# writes: adata.obsm["X_spVIPES_shared"], adata.obsm["X_spVIPES_private_g0"], ...
+spVIPESmulti.utils.store_latents(adata, latents, group_indices_list)
+# writes: adata.obsm["X_spVIPESmulti_shared"], adata.obsm["X_spVIPESmulti_private_g0"], ...
 ```
 
 ### UMAP embeddings
 
 ```python
 # Shared latent UMAP (all groups integrated):
-spVIPES.utils.compute_shared_umap(adata)
-spVIPES.pl.umap_shared(adata, color=["cell_type", "groups"])
+spVIPESmulti.utils.compute_shared_umap(adata)
+spVIPESmulti.pl.umap_shared(adata, color=["cell_type", "groups"])
 
 # Per-group private latent UMAPs:
 adatas = {"control": adata_g0, "treatment": adata_g1}
-spVIPES.utils.compute_private_umaps(adatas)
-fig = spVIPES.pl.umap_private(adatas, color="cell_type")
+spVIPESmulti.utils.compute_private_umaps(adatas)
+fig = spVIPESmulti.pl.umap_private(adatas, color="cell_type")
 ```
 
 ### Gene loadings
@@ -327,58 +313,56 @@ Rank genes by loading magnitude per latent dimension and visualise them:
 
 ```python
 # Top genes per shared latent dimension:
-top = spVIPES.utils.get_top_genes(model=model, n_top=10)
+top = spVIPESmulti.utils.get_top_genes(model=model, n_top=10)
 print(top[["dim", "pos_genes"]].to_string(index=False))
 
 # Heatmap of top-5 genes per dimension (requires seaborn):
-ax = spVIPES.pl.heatmap_loadings(model=model, n_top=5)
+ax = spVIPESmulti.pl.heatmap_loadings(model=model, n_top=5)
 
 # Scanpy dotplot of selected dimensions:
-spVIPES.pl.loadings_dotplot(adata, dims=[0, 2, 4], groupby="cell_type", model=model)
+spVIPESmulti.pl.loadings_dotplot(adata, dims=[0, 2, 4], groupby="cell_type", model=model)
 ```
 
 ### Per-factor coloring and violin plots
 
 ```python
 # Copy a single dimension into adata.obs for use as a color key:
-spVIPES.utils.score_cells_on_factor(adata_g0, dim_idx=2, obsm_key="X_spVIPES_private_g0")
+spVIPESmulti.utils.score_cells_on_factor(adata_g0, dim_idx=2, obsm_key="X_spVIPESmulti_private_g0")
 
 # Or copy all dimensions at once (optionally capped):
-spVIPES.utils.add_latent_dims_to_obs(adata_g0, "X_spVIPES_private_g0", max_dims=5)
+spVIPESmulti.utils.add_latent_dims_to_obs(adata_g0, "X_spVIPESmulti_private_g0", max_dims=5)
 
 # Violin plot of a specific latent factor:
-spVIPES.pl.factor_violin(adata_g0, dim_idx=1, groupby="cell_type",
-                          obsm_key="X_spVIPES_private_g0")
+spVIPESmulti.pl.factor_violin(adata_g0, dim_idx=1, groupby="cell_type",
+                          obsm_key="X_spVIPESmulti_private_g0")
 ```
 
 ### Training diagnostics
 
 ```python
-fig = spVIPES.pl.training_curves(model)
+fig = spVIPESmulti.pl.training_curves(model)
 fig.savefig("training.pdf")
 ```
 
 | Function | Module | Description |
 |---|---|---|
-| `store_latents` | `spVIPES.utils` | Stitch per-group latents into `adata.obsm` in original cell order |
-| `add_latent_dims_to_obs` | `spVIPES.utils` | Copy latent dims into `adata.obs` for use as scanpy `color=` keys |
-| `compute_shared_umap` | `spVIPES.utils` | Run neighbours + UMAP on the shared latent |
-| `compute_private_umaps` | `spVIPES.utils` | Run neighbours + UMAP on each group's private latent |
-| `get_top_genes` | `spVIPES.utils` | Rank genes by loading magnitude per latent dimension |
-| `score_cells_on_factor` | `spVIPES.utils` | Write one latent dimension into `adata.obs` |
-| `heatmap_loadings` | `spVIPES.pl` | Seaborn heatmap of top-N gene loadings per dimension |
-| `umap_shared` | `spVIPES.pl` | Plot the shared latent UMAP (wraps `sc.pl.embedding`) |
-| `umap_private` | `spVIPES.pl` | Grid of per-group private UMAP panels |
-| `factor_violin` | `spVIPES.pl` | Violin plot of a single latent factor by cell metadata |
-| `training_curves` | `spVIPES.pl` | Multi-panel plot of training history |
-| `loadings_dotplot` | `spVIPES.pl` | Scanpy dotplot of top genes for selected latent dimensions |
+| `store_latents` | `spVIPESmulti.utils` | Stitch per-group latents into `adata.obsm` in original cell order |
+| `add_latent_dims_to_obs` | `spVIPESmulti.utils` | Copy latent dims into `adata.obs` for use as scanpy `color=` keys |
+| `compute_shared_umap` | `spVIPESmulti.utils` | Run neighbours + UMAP on the shared latent |
+| `compute_private_umaps` | `spVIPESmulti.utils` | Run neighbours + UMAP on each group's private latent |
+| `get_top_genes` | `spVIPESmulti.utils` | Rank genes by loading magnitude per latent dimension |
+| `score_cells_on_factor` | `spVIPESmulti.utils` | Write one latent dimension into `adata.obs` |
+| `heatmap_loadings` | `spVIPESmulti.pl` | Seaborn heatmap of top-N gene loadings per dimension |
+| `umap_shared` | `spVIPESmulti.pl` | Plot the shared latent UMAP (wraps `sc.pl.embedding`) |
+| `umap_private` | `spVIPESmulti.pl` | Grid of per-group private UMAP panels |
+| `factor_violin` | `spVIPESmulti.pl` | Violin plot of a single latent factor by cell metadata |
+| `training_curves` | `spVIPESmulti.pl` | Multi-panel plot of training history |
+| `loadings_dotplot` | `spVIPESmulti.pl` | Scanpy dotplot of top genes for selected latent dimensions |
 
 ## Documentation & Tutorials
 
--   [Basic Tutorial](docs/notebooks/Tutorial.ipynb) — Complete walkthrough of spVIPES functionality
+-   [Basic Tutorial](docs/notebooks/Tutorial.ipynb) — Complete walkthrough of spVIPESmulti functionality
 -   [Disentanglement ablation](docs/notebooks/disentangle_ablation.ipynb) — Per-component ablation of the disentanglement objective
--   [DIALOGUE multi-group](docs/notebooks/dialogue_multigroup_vignette.ipynb) — N ≥ 2 group integration using clinical status
--   [Kidney IRI time-course](docs/notebooks/iri_days_vignette.ipynb) — Three-day post-injury comparison
 -   [PBMC CITE-seq vaccination](docs/notebooks/pbmc_citeseq_tutorial.ipynb) — Three time-point integration + multimodal appendix
 -   [CINEMA-OT + NF prior](docs/notebooks/cinemaot_nf_vignette.ipynb) — Gaussian vs. NSF prior vs. disentanglement
 -   [Plasmodium liver-stage](docs/notebooks/biolord_comparison_plasmodium_tutorial.ipynb) — Comparison with biolord
@@ -391,10 +375,10 @@ fig.savefig("training.pdf")
 
 ## Citation
 
-If you use spVIPES in your research, please cite:
+If you use spVIPESmulti in your research, please cite:
 
 ```bibtex
-@article{spVIPES2023,
+@article{spVIPESmulti2023,
   title={Integrative learning of disentangled representations},
   author={C. Novella-Rausell, D.J.M Peters and A. Mahfouz},
   journal={bioRxiv},
@@ -410,15 +394,15 @@ If you use spVIPES in your research, please cite:
 
 <!-- Badge references -->
 
-[badge-tests]: https://img.shields.io/github/actions/workflow/status/nrclaudio/spVIPES/test.yaml?branch=main
-[badge-python]: https://img.shields.io/pypi/pyversions/spVIPES
-[badge-pypi]: https://img.shields.io/pypi/v/spVIPES
-[badge-docs]: https://readthedocs.org/projects/spvipes/badge/?version=latest
-[link-tests]: https://github.com/nrclaudio/spVIPES/actions/workflows/test.yml
-[link-python]: https://pypi.org/project/spVIPES
-[link-pypi]: https://pypi.org/project/spVIPES
+[badge-tests]: https://img.shields.io/github/actions/workflow/status/mdmanurung/spVIPESmulti/test.yaml?branch=main
+[badge-python]: https://img.shields.io/pypi/pyversions/spVIPESmulti
+[badge-pypi]: https://img.shields.io/pypi/v/spVIPESmulti
+[badge-docs]: https://readthedocs.org/projects/spvipesmulti/badge/?version=latest
+[link-tests]: https://github.com/mdmanurung/spVIPESmulti/actions/workflows/test.yml
+[link-python]: https://pypi.org/project/spVIPESmulti
+[link-pypi]: https://pypi.org/project/spVIPESmulti
 [scverse-discourse]: https://discourse.scverse.org/
-[issue-tracker]: https://github.com/nrclaudio/spVIPES/issues
-[changelog]: https://spVIPES.readthedocs.io/latest/changelog.html
-[link-docs]: https://spvipes.readthedocs.io/en/latest/
-[link-api]: https://spvipes.readthedocs.io/en/latest/api.html
+[issue-tracker]: https://github.com/mdmanurung/spVIPESmulti/issues
+[changelog]: https://spVIPESmulti.readthedocs.io/latest/changelog.html
+[link-docs]: https://spvipesmulti.readthedocs.io/en/latest/
+[link-api]: https://spvipesmulti.readthedocs.io/en/latest/api.html

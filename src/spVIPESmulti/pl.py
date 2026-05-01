@@ -1,4 +1,4 @@
-"""Plotting utilities for spVIPES results.
+"""Plotting utilities for spVIPESmulti results.
 
 All functions are standalone (not model methods) and accept pre-computed
 arrays / AnnData objects as inputs so they can be used independently of
@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Optional, Union
 import numpy as np
 import pandas as pd
 
-from spVIPES.utils import _resolve_loadings, get_top_genes, score_cells_on_factor
+from spVIPESmulti.utils import _resolve_loadings, get_top_genes, score_cells_on_factor
 
 if TYPE_CHECKING:
     import matplotlib.pyplot as plt
@@ -58,7 +58,7 @@ def heatmap_loadings(
         Pre-computed loadings DataFrame (shape ``(n_genes, n_dims)``).
         If ``None``, ``model`` must be provided.
     model:
-        Fitted spVIPES model used to fetch loadings when ``loadings_df`` is
+        Fitted spVIPESmulti model used to fetch loadings when ``loadings_df`` is
         ``None``.
     group_idx:
         Group (dataset) index for ``model.get_loadings()``.
@@ -79,7 +79,7 @@ def heatmap_loadings(
 
     Examples
     --------
-    >>> ax = spVIPES.pl.heatmap_loadings(model=model, n_top=10)
+    >>> ax = spVIPESmulti.pl.heatmap_loadings(model=model, n_top=10)
     >>> ax.figure.savefig("loadings.pdf")
     """
     try:
@@ -134,13 +134,13 @@ def heatmap_loadings(
 def umap_shared(
     adata: "AnnData",
     color: Union[str, list[str]],
-    basis: str = "X_umap_spvipes_shared",
+    basis: str = "X_umap_spvipesmulti_shared",
     **kwargs,
 ) -> None:
     """Plot the shared latent UMAP embedding.
 
     Thin wrapper around :func:`scanpy.pl.embedding` that defaults ``basis``
-    to the key written by :func:`~spVIPES.utils.compute_shared_umap`.
+    to the key written by :func:`~spVIPESmulti.utils.compute_shared_umap`.
 
     Parameters
     ----------
@@ -155,7 +155,7 @@ def umap_shared(
 
     Examples
     --------
-    >>> spVIPES.pl.umap_shared(adata, color=["cell_type", "groups"])
+    >>> spVIPESmulti.pl.umap_shared(adata, color=["cell_type", "groups"])
     """
     import scanpy as sc
 
@@ -170,7 +170,7 @@ def umap_shared(
 def umap_private(
     adatas_per_group: dict[str, "AnnData"],
     color: Union[str, list[str]],
-    basis: str = "X_umap_spvipes_private",
+    basis: str = "X_umap_spvipesmulti_private",
     ncols: int = 3,
     figsize: Optional[tuple[float, float]] = None,
     **kwargs,
@@ -182,7 +182,7 @@ def umap_private(
     adatas_per_group:
         Mapping ``{group_name: AnnData}`` where each AnnData has ``basis``
         in its ``obsm``.  Built with
-        :func:`~spVIPES.utils.compute_private_umaps`.
+        :func:`~spVIPESmulti.utils.compute_private_umaps`.
     color:
         Single key in ``adata.obs`` or gene name to colour each panel.
         Lists are not supported here (one ``color`` per panel).
@@ -202,7 +202,7 @@ def umap_private(
 
     Examples
     --------
-    >>> fig = spVIPES.pl.umap_private(adatas, color="cell_type")
+    >>> fig = spVIPESmulti.pl.umap_private(adatas, color="cell_type")
     >>> fig.savefig("private_umaps.pdf")
     """
     import matplotlib.pyplot as plt
@@ -254,7 +254,7 @@ def factor_violin(
     """Violin plot of a single latent factor stratified by a metadata column.
 
     If the factor column is not yet in ``adata.obs``, it is added automatically
-    via :func:`~spVIPES.utils.score_cells_on_factor`.
+    via :func:`~spVIPESmulti.utils.score_cells_on_factor`.
 
     Parameters
     ----------
@@ -276,8 +276,8 @@ def factor_violin(
 
     Examples
     --------
-    >>> spVIPES.pl.factor_violin(adata_g0, dim_idx=1, groupby="cell_type",
-    ...                          obsm_key="X_spVIPES_private_g0")
+    >>> spVIPESmulti.pl.factor_violin(adata_g0, dim_idx=1, groupby="cell_type",
+    ...                          obsm_key="X_spVIPESmulti_private_g0")
     """
     import scanpy as sc
 
@@ -298,12 +298,12 @@ def training_curves(
     metrics: Optional[list[str]] = None,
     figsize: Optional[tuple[float, float]] = None,
 ) -> "plt.Figure":
-    """Multi-panel plot of spVIPES training history.
+    """Multi-panel plot of spVIPESmulti training history.
 
     Parameters
     ----------
     model:
-        Fitted spVIPES model with a ``history`` attribute.
+        Fitted spVIPESmulti model with a ``history`` attribute.
     metrics:
         List of keys in ``model.history`` to plot. ``None`` plots all
         available keys.
@@ -317,7 +317,7 @@ def training_curves(
 
     Examples
     --------
-    >>> fig = spVIPES.pl.training_curves(model)
+    >>> fig = spVIPESmulti.pl.training_curves(model)
     >>> fig.savefig("training.pdf")
     """
     import matplotlib.pyplot as plt
@@ -391,7 +391,7 @@ def loadings_dotplot(
     loadings_df:
         Pre-computed loadings DataFrame. If ``None``, ``model`` must be provided.
     model:
-        Fitted spVIPES model.
+        Fitted spVIPESmulti model.
     group_idx:
         Group index for ``model.get_loadings()``.
     latent_type:
@@ -403,7 +403,7 @@ def loadings_dotplot(
 
     Examples
     --------
-    >>> spVIPES.pl.loadings_dotplot(
+    >>> spVIPESmulti.pl.loadings_dotplot(
     ...     adata, dims=[0, 1, 2], groupby="cell_type", model=model, n_top=8
     ... )
     """

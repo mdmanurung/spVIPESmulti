@@ -12,7 +12,7 @@ from .utils import one_hot
 # Encoder without covariates
 class Encoder(nn.Module):
     """
-    Variational encoder network for spVIPES.
+    Variational encoder network for spVIPESmulti.
 
     This encoder maps input gene expression data to latent representations using
     a variational approach. It outputs both mean and variance parameters for the
@@ -142,7 +142,7 @@ class Encoder(nn.Module):
 
 class LinearDecoderSPVIPE(nn.Module):
     """
-    Linear decoder for spVIPES with shared-private latent space decomposition.
+    Linear decoder for spVIPESmulti with shared-private latent space decomposition.
 
     This decoder takes separate shared and private latent representations and
     decodes them into gene expression parameters. It implements a mixture model

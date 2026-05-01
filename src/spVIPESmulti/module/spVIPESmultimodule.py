@@ -12,15 +12,15 @@ from torch.distributions import Normal
 from torch.distributions import kl_divergence as kl
 
 from scvi.nn import FCLayers
-from spVIPES.nn.networks import Encoder, LinearDecoderSPVIPE
-from spVIPES.module.utils import gradient_reversal
+from spVIPESmulti.nn.networks import Encoder, LinearDecoderSPVIPE
+from spVIPESmulti.module.utils import gradient_reversal
 
 torch.backends.cudnn.benchmark = True
 
 
-class spVIPESmodule(BaseModuleClass):
+class spVIPESmultimodule(BaseModuleClass):
     """
-    PyTorch implementation of spVIPES variational autoencoder module.
+    PyTorch implementation of spVIPESmulti variational autoencoder module.
 
     This module implements the core variational autoencoder with Product of Experts (PoE)
     for shared-private latent space learning. It extends scVI's underlying VAE architecture
@@ -66,7 +66,7 @@ class spVIPESmodule(BaseModuleClass):
     Notes
     -----
     This module is based on the scVI framework and implements the variational inference
-    described in the spVIPES paper. The Product of Experts mechanism allows for flexible
+    described in the spVIPESmulti paper. The Product of Experts mechanism allows for flexible
     integration of multiple single-cell datasets with different feature sets.
     """
 
@@ -113,7 +113,7 @@ class spVIPESmodule(BaseModuleClass):
         contrastive_temperature: float = 0.1,
     ):
         """
-        Initialize the spVIPES variational autoencoder module.
+        Initialize the spVIPESmulti variational autoencoder module.
 
         This method sets up the neural network components including encoders and decoders
         for each group, and configures the Product of Experts mechanism based on the
@@ -332,109 +332,6 @@ class spVIPESmodule(BaseModuleClass):
 
     def _cluster_based_poe(self, *args, **kwargs):
         raise NotImplementedError("Cluster-based PoE has been removed. Use label-based PoE (label_key=...) instead.")
-
-    def _cluster_based_poe_removed(
-        self, shared_stats: dict, batch_transport_plans: dict, processed_labels: list
-    ):
-        if len(shared_stats) != 2:
-            raise ValueError(
-                f"Cluster-based PoE only supports exactly 2 groups, got {len(shared_stats)}. "
-                "Use label-based PoE for more than 2 groups."
-            )
-        groups_1_stats, groups_2_stats = shared_stats.values()
-        groups_1_stats = {
-            k: groups_1_stats[k] for k in ["logtheta_loc", "logtheta_logvar", "logtheta_scale"] if k in groups_1_stats
-        }
-        groups_2_stats = {
-            k: groups_2_stats[k] for k in ["logtheta_loc", "logtheta_logvar", "logtheta_scale"] if k in groups_2_stats
-        }
-
-        # The processed_labels are already batched, so we can use them directly
-        batch_labels_1 = processed_labels[0]  # Labels for group 1
-        batch_labels_2 = processed_labels[1]  # Labels for group 2
-
-        poe_stats_per_component = {}
-        unique_components = torch.unique(torch.cat([batch_labels_1, batch_labels_2]))
-        for component in unique_components:
-            mask_1 = (batch_labels_1 == component).squeeze()
-            mask_2 = (batch_labels_2 == component).squeeze()
-
-            if torch.any(mask_1) and torch.any(mask_2):
-                # Extract the relevant part of the batch transport plan for each dataset
-                component_plan_1 = batch_transport_plans[0][mask_1][:, mask_2]
-                component_plan_2 = batch_transport_plans[1][mask_2][:, mask_1]
-
-                # Normalize the component plans while preserving zeros
-                def normalize_plan(plan):
-                    row_sums = plan.sum(dim=1, keepdim=True)
-                    row_sums = row_sums.clamp(min=1e-10)  # Avoid division by zero
-                    return torch.where(plan > 0, plan / row_sums, plan)
-
-                normalized_plan_1 = normalize_plan(component_plan_1)
-                normalized_plan_2 = normalize_plan(component_plan_2)
-
-                # Compute weighted average for group 1
-                component_stats_1 = {}
-                for k, v in groups_1_stats.items():
-                    weighted_v = torch.matmul(normalized_plan_1, v[mask_2])
-                    component_stats_1[k] = weighted_v
-
-                # Compute weighted average for group 2
-                component_stats_2 = {}
-                for k, v in groups_2_stats.items():
-                    weighted_v = torch.matmul(normalized_plan_2, v[mask_1])
-                    component_stats_2[k] = weighted_v
-
-                # Perform PoE
-                poe_stats_per_component[component.item()] = self._poe_n({0: component_stats_1, 1: component_stats_2})
-            else:
-                # Handle unmatched cells
-                if torch.any(mask_1):
-                    poe_stats_per_component[component.item()] = {
-                        0: {k: v[mask_1] for k, v in groups_1_stats.items()},
-                        1: {k: torch.empty((0, v.shape[1]), device=v.device) for k, v in groups_2_stats.items()},
-                    }
-                if torch.any(mask_2):
-                    poe_stats_per_component[component.item()] = {
-                        0: {k: torch.empty((0, v.shape[1]), device=v.device) for k, v in groups_1_stats.items()},
-                        1: {k: v[mask_2] for k, v in groups_2_stats.items()},
-                    }
-
-        # Initialize the output tensors
-        groups_1_output = {
-            k: torch.empty(groups_1_stats[k].shape, dtype=torch.float32, device=groups_1_stats[k].device)
-            for k in groups_1_stats
-        }
-        groups_2_output = {
-            k: torch.empty(groups_2_stats[k].shape, dtype=torch.float32, device=groups_2_stats[k].device)
-            for k in groups_2_stats
-        }
-
-        # Fill the output tensors while maintaining the original cell order
-        for group, labels, output in [(0, batch_labels_1, groups_1_output), (1, batch_labels_2, groups_2_output)]:
-            component_count = {}
-            for i, component in enumerate(labels):
-                component = component.item()
-                count = component_count.get(component, 0)
-                component_count[component] = count + 1
-
-                component_stats = poe_stats_per_component[component][group]
-                tensor_index = count % component_stats["logtheta_loc"].size(0)
-
-                for k in output:
-                    output[k][i] = component_stats[k][tensor_index]
-
-        concat_poe_stats = {0: groups_1_output, 1: groups_2_output}
-
-        # Compute qz and theta for both groups
-        for group in [0, 1]:
-            concat_poe_stats[group]["logtheta_qz"] = Normal(
-                concat_poe_stats[group]["logtheta_loc"], concat_poe_stats[group]["logtheta_scale"].clamp(min=1e-6)
-            )
-            concat_poe_stats[group]["logtheta_log_z"] = concat_poe_stats[group]["logtheta_qz"].rsample()
-            concat_poe_stats[group]["logtheta_theta"] = F.softmax(concat_poe_stats[group]["logtheta_log_z"], -1)
-
-        return concat_poe_stats
 
     def _poe_n(self, shared_stats: dict):
         """Generic N-group Product of Experts.
@@ -740,73 +637,6 @@ class spVIPESmodule(BaseModuleClass):
     def _paired_poe(self, *args, **kwargs):
         raise NotImplementedError("Paired PoE has been removed. Use label-based PoE (label_key=...) instead.")
 
-    def _paired_poe_removed(self, shared_stats: dict, transport_plan: torch.Tensor):
-        if len(shared_stats) != 2:
-            raise ValueError(
-                f"Paired PoE only supports exactly 2 groups, got {len(shared_stats)}. "
-                "Use label-based PoE for more than 2 groups."
-            )
-        groups_1_stats, groups_2_stats = shared_stats.values()
-        groups_1_stats = {
-            k: groups_1_stats[k] for k in ["logtheta_loc", "logtheta_logvar", "logtheta_scale"] if k in groups_1_stats
-        }
-        groups_2_stats = {
-            k: groups_2_stats[k] for k in ["logtheta_loc", "logtheta_logvar", "logtheta_scale"] if k in groups_2_stats
-        }
-
-        # Ensure both groups have the same number of cells
-        assert (
-            groups_1_stats["logtheta_loc"].shape[0] == groups_2_stats["logtheta_loc"].shape[0]
-        ), "Paired PoE requires equal number of cells from both groups"
-
-        # Find the index of the maximum value for each row in the transport plan
-        max_indices_1to2 = torch.argmax(transport_plan, dim=1)
-        max_indices_2to1 = torch.argmax(transport_plan, dim=0)
-
-        # Use these indices to select the corresponding cells from the other dataset
-        matched_stats_1 = {}
-        matched_stats_2 = {}
-        for k in groups_1_stats:
-            matched_stats_1[k] = groups_2_stats[k][max_indices_1to2]
-            matched_stats_2[k] = groups_1_stats[k][max_indices_2to1]
-
-        # Compute joint statistics for group 1
-        mus_1 = torch.stack([groups_1_stats["logtheta_loc"], matched_stats_1["logtheta_loc"]], dim=0)
-        logvars_1 = torch.stack([groups_1_stats["logtheta_logvar"], matched_stats_1["logtheta_logvar"]], dim=0)
-        mus_joint_1, logvars_joint_1 = self._product_of_experts(mus_1, logvars_1)
-
-        # Compute joint statistics for group 2
-        mus_2 = torch.stack([matched_stats_2["logtheta_loc"], groups_2_stats["logtheta_loc"]], dim=0)
-        logvars_2 = torch.stack([matched_stats_2["logtheta_logvar"], groups_2_stats["logtheta_logvar"]], dim=0)
-        mus_joint_2, logvars_joint_2 = self._product_of_experts(mus_2, logvars_2)
-
-        # Compute scales from logvars
-        scale_joint_1 = torch.exp(0.5 * logvars_joint_1)
-        scale_joint_2 = torch.exp(0.5 * logvars_joint_2)
-
-        poe_stats = {
-            0: {
-                "logtheta_loc": mus_joint_1,
-                "logtheta_logvar": logvars_joint_1,
-                "logtheta_scale": scale_joint_1,
-            },
-            1: {
-                "logtheta_loc": mus_joint_2,
-                "logtheta_logvar": logvars_joint_2,
-                "logtheta_scale": scale_joint_2,
-            },
-        }
-
-        # Compute qz and theta for both groups
-        for group in [0, 1]:
-            poe_stats[group]["logtheta_qz"] = Normal(
-                poe_stats[group]["logtheta_loc"], poe_stats[group]["logtheta_scale"].clamp(min=1e-6)
-            )
-            poe_stats[group]["logtheta_log_z"] = poe_stats[group]["logtheta_qz"].rsample()
-            poe_stats[group]["logtheta_theta"] = F.softmax(poe_stats[group]["logtheta_log_z"], -1)
-
-        return poe_stats
-
     def _jeffreys_divergence_loss(self, mu1, logvar1, mu2, logvar2):
         """Symmetric KL (Jeffreys divergence) between two batches of Gaussian posteriors.
 
@@ -1059,7 +889,7 @@ class spVIPESmodule(BaseModuleClass):
 
     def _generative_multimodal(self, private_stats, shared_stats, poe_stats, library, groups, batch_index, **kwargs):
         """Multimodal generative model: per-(group, modality) decoding."""
-        from spVIPES.module.utils import build_likelihood
+        from spVIPESmulti.module.utils import build_likelihood
 
         per_modality_private = kwargs.get("per_modality_private", {})
         n_groups = len(poe_stats)
@@ -1117,7 +947,6 @@ class spVIPESmodule(BaseModuleClass):
     def get_loadings(self, dataset: int, type_latent: str) -> np.ndarray:
         """Extract per-gene weights (for each Z, shape is genes by dim(Z)) in the linear decoder."""
         # This is BW, where B is diag(b) batch norm, W is weight matrix
-        self.use_batch_norm = True  # REMOVE LATER
         if type_latent not in ["shared", "private"]:
             raise ValueError(f"Invalid value for type_latent: {type_latent}. It can only be 'shared' or 'private'")
         if self.use_batch_norm is True:
