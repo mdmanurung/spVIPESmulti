@@ -19,13 +19,12 @@ An optional **disentanglement objective** (inspired by CellDISECT and Multi-Cont
 
 ### Integration Strategies
 
-spVIPESmulti provides three complementary approaches for dataset alignment, selected automatically based on what you pass to `setup_anndata`:
+spVIPESmulti aligns groups via a label-supervised Product of Experts (PoE) framework. Cell-type labels guide the PoE integration and support N ≥ 2 groups:
 
 | Method | How it's selected | Best use case |
 | --- | --- | --- |
 | **Label-based PoE** | `label_key` provided | High-quality cell type labels; supports N ≥ 2 groups |
-| **OT Paired PoE** | `transport_plan_key` + `match_clusters=False` | Known cell-to-cell correspondences (e.g., time series); exactly 2 groups |
-| **OT Cluster-based PoE** | `transport_plan_key` + `match_clusters=True` | Similar populations, no direct correspondences; exactly 2 groups |
+| **Unsupervised PoE** | `label_key` omitted | No label annotations available; integration quality depends on data overlap |
 
 ## Installation
 
@@ -91,18 +90,20 @@ spVIPESmulti.model.spVIPESmulti.setup_anndata(
 )
 
 # 2. Build and train
+group_indices_list = [list(map(int, g)) for g in combined.uns["groups_obs_indices"]]
 model = spVIPESmulti.model.spVIPESmulti(combined)
-model.train(max_epochs=200)
+model.train(group_indices_list, max_epochs=200)
 
 # 3. Extract representations
-combined.obsm["X_spVIPESmulti_shared"]  = model.get_latent_representation(representation="shared")
-combined.obsm["X_spVIPESmulti_private"] = model.get_latent_representation(representation="private")
+latents = model.get_latent_representation(group_indices_list, batch_size=512)
+spVIPESmulti.utils.store_latents(combined, latents, group_indices_list)
+# writes: combined.obsm["X_spVIPESmulti_shared"], combined.obsm["X_spVIPESmulti_private_g0"], ...
 ```
 
 ### Integration Strategies
 
 <details>
-<summary><b>Label-based Integration (N ≥ 2 groups)</b></summary>
+<summary><b>Label-based Integration (recommended, N ≥ 2 groups)</b></summary>
 
 ```python
 spVIPESmulti.model.spVIPESmulti.setup_anndata(
@@ -116,29 +117,13 @@ spVIPESmulti.model.spVIPESmulti.setup_anndata(
 </details>
 
 <details>
-<summary><b>Optimal Transport — Paired Cells (exactly 2 groups)</b></summary>
-
-```python
-# transport plan stored in combined.uns["transport_plan"]
-spVIPESmulti.model.spVIPESmulti.setup_anndata(
-    combined,
-    groups_key="groups",
-    transport_plan_key="transport_plan",
-    match_clusters=False,
-)
-```
-
-</details>
-
-<details>
-<summary><b>Optimal Transport — Cluster Matching (exactly 2 groups)</b></summary>
+<summary><b>Unsupervised Integration (no labels)</b></summary>
 
 ```python
 spVIPESmulti.model.spVIPESmulti.setup_anndata(
     combined,
     groups_key="groups",
-    transport_plan_key="transport_plan",
-    match_clusters=True,   # Leiden + linear assignment
+    # omit label_key for unsupervised PoE
 )
 ```
 
@@ -167,6 +152,7 @@ model = spVIPESmulti.model.spVIPESmulti(
 
 ```python
 model.train(
+    group_indices_list,
     max_epochs=300,
     batch_size=512,
     early_stopping=True,
@@ -377,8 +363,6 @@ fig.savefig("training.pdf")
 
 -   [Basic Tutorial](docs/notebooks/Tutorial.ipynb) — Complete walkthrough of spVIPESmulti functionality
 -   [Disentanglement ablation](docs/notebooks/disentangle_ablation.ipynb) — Per-component ablation of the disentanglement objective
--   [DIALOGUE multi-group](docs/notebooks/dialogue_multigroup_vignette.ipynb) — N ≥ 2 group integration using clinical status
--   [Kidney IRI time-course](docs/notebooks/iri_days_vignette.ipynb) — Three-day post-injury comparison
 -   [PBMC CITE-seq vaccination](docs/notebooks/pbmc_citeseq_tutorial.ipynb) — Three time-point integration + multimodal appendix
 -   [CINEMA-OT + NF prior](docs/notebooks/cinemaot_nf_vignette.ipynb) — Gaussian vs. NSF prior vs. disentanglement
 -   [Plasmodium liver-stage](docs/notebooks/biolord_comparison_plasmodium_tutorial.ipynb) — Comparison with biolord

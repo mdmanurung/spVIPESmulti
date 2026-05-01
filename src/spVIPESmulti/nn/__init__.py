@@ -3,5 +3,6 @@ from .utils import one_hot
 
 __all__ = [
     "Encoder",
-    "LinearDecoderSPVIPE" "one_hot",
+    "LinearDecoderSPVIPE",
+    "one_hot",
 ]

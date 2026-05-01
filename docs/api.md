@@ -128,10 +128,9 @@ Registers fields on `adata` via `AnnDataManager` and selects the PoE strategy.
 | Condition | Strategy | Group limit |
 |---|---|---|
 | `label_key` provided | Label-based PoE | N ≥ 2 |
-| `transport_plan_key` + `match_clusters=False` | OT-paired PoE | exactly 2 |
-| `transport_plan_key` + `match_clusters=True` | OT-cluster PoE | exactly 2 |
+| `label_key` omitted | Unsupervised PoE | N ≥ 2 |
 
-For multimodal data or N > 2 groups, always use label-based PoE.
+For multimodal data or N > 2 groups, label-based PoE is recommended.
 
 ---
 
