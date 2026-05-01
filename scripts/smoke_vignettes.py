@@ -1,4 +1,4 @@
-"""Smoke-test the distinct spVIPES API combinations exercised by the vignettes.
+"""Smoke-test the distinct spVIPESmulti API combinations exercised by the vignettes.
 
 Each vignette in `docs/notebooks/` exercises a particular combination of:
 
@@ -10,7 +10,7 @@ Each vignette in `docs/notebooks/` exercises a particular combination of:
 
 Re-running every notebook here is impractical because:
   - 3 vignettes (cinemaot_nf, dialogue_multigroup, disentangle_ablation) require
-    pertpy 1.x, which pulls in jax >= 0.6.1 and conflicts with spVIPES' jax==0.4.27 pin.
+    pertpy 1.x, which pulls in jax >= 0.6.1 and conflicts with spVIPESmulti' jax==0.4.27 pin.
   - 3 vignettes need local h5ad files not bundled in the repo (Tutorial splatter
     simulation, IRI time-course, Plasmodium liver-stage).
 
@@ -37,7 +37,7 @@ import scipy.sparse as sp
 import scvi
 import torch
 
-import spVIPES
+import spVIPESmulti
 
 # Vignette --> combination mapping for the report.
 MAPPING = {
@@ -168,7 +168,7 @@ def split_modalities(adata):
 
 def build_and_train(prepared, *, epochs, batch_size, **model_kwargs):
     set_seeds(0)
-    model = spVIPES.model.spVIPES(prepared, n_hidden=64, n_dimensions_shared=12,
+    model = spVIPESmulti.model.spVIPESmulti(prepared, n_hidden=64, n_dimensions_shared=12,
                                   n_dimensions_private=6, dropout_rate=0.1,
                                   **model_kwargs)
     gi = [list(map(int, g)) for g in prepared.uns["groups_obs_indices"]]
@@ -188,45 +188,45 @@ def build_and_train(prepared, *, epochs, batch_size, **model_kwargs):
 # ----------------------------------------------------------------------
 
 def case_single_2g_label_off(adata2, args):
-    prepared = spVIPES.data.prepare_adatas(make_groups_dict(adata2, "donor"))
-    spVIPES.model.spVIPES.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
+    prepared = spVIPESmulti.data.prepare_adatas(make_groups_dict(adata2, "donor"))
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
     build_and_train(prepared, epochs=args.epochs, batch_size=128, disentangle_preset="off")
 
 
 def case_single_2g_nsf_off(adata2, args):
-    prepared = spVIPES.data.prepare_adatas(make_groups_dict(adata2, "donor"))
-    spVIPES.model.spVIPES.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
+    prepared = spVIPESmulti.data.prepare_adatas(make_groups_dict(adata2, "donor"))
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
     build_and_train(prepared, epochs=args.epochs, batch_size=128,
                     use_nf_prior=True, nf_type="NSF", nf_transforms=2, nf_target="shared",
                     disentangle_preset="off")
 
 
 def case_single_2g_nsf_full(adata2, args):
-    prepared = spVIPES.data.prepare_adatas(make_groups_dict(adata2, "donor"))
-    spVIPES.model.spVIPES.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
+    prepared = spVIPESmulti.data.prepare_adatas(make_groups_dict(adata2, "donor"))
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
     build_and_train(prepared, epochs=args.epochs, batch_size=128,
                     use_nf_prior=True, nf_type="NSF", nf_transforms=2, nf_target="shared",
                     disentangle_preset="full")
 
 
 def case_single_3g_label_off(adata3, args):
-    prepared = spVIPES.data.prepare_adatas(make_groups_dict(adata3, "donor_tissue"))
-    spVIPES.model.spVIPES.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
+    prepared = spVIPESmulti.data.prepare_adatas(make_groups_dict(adata3, "donor_tissue"))
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
     build_and_train(prepared, epochs=args.epochs, batch_size=128, disentangle_preset="off")
 
 
 def case_single_3g_label_full(adata3, args):
-    prepared = spVIPES.data.prepare_adatas(make_groups_dict(adata3, "donor_tissue"))
-    spVIPES.model.spVIPES.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
+    prepared = spVIPESmulti.data.prepare_adatas(make_groups_dict(adata3, "donor_tissue"))
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
     build_and_train(prepared, epochs=args.epochs, batch_size=128, disentangle_preset="full")
 
 
 def case_multimodal_3g_nsf_off(adata3, args):
     adatas_dict = split_modalities(adata3)
-    prepared = spVIPES.data.prepare_multimodal_adatas(
+    prepared = spVIPESmulti.data.prepare_multimodal_adatas(
         adatas_dict, modality_likelihoods={"rna": "nb", "protein": "nb"}
     )
-    spVIPES.model.spVIPES.setup_anndata(
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(
         prepared, groups_key="groups", label_key="cell_types",
         modality_likelihoods={"rna": "nb", "protein": "nb"},
     )
@@ -238,10 +238,10 @@ def case_multimodal_3g_nsf_off(adata3, args):
 def case_multimodal_3g_disentangle_full(adata3, args):
     """P8: multimodal + disentangle_preset='full'. Trains end-to-end."""
     adatas_dict = split_modalities(adata3)
-    prepared = spVIPES.data.prepare_multimodal_adatas(
+    prepared = spVIPESmulti.data.prepare_multimodal_adatas(
         adatas_dict, modality_likelihoods={"rna": "nb", "protein": "nb"}
     )
-    spVIPES.model.spVIPES.setup_anndata(
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(
         prepared, groups_key="groups", label_key="cell_types",
         modality_likelihoods={"rna": "nb", "protein": "nb"},
     )
@@ -263,7 +263,7 @@ CASES = [
 def main():
     args = parse_args()
     print("=" * 78)
-    print(" spVIPES vignette smoke tests")
+    print(" spVIPESmulti vignette smoke tests")
     print("=" * 78)
     print(f"  epochs={args.epochs}  cells/group={args.cells_per_group}  HVGs={args.n_hvg}")
 

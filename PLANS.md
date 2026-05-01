@@ -70,9 +70,9 @@ structure in `adata.uns`.
 
 **Scope:**
 - `data/_utils.py`: extend `prepare_adatas` to accept multiple covariate keys.
-- `module/spVIPESmodule.py`: replace single `groups_lengths` dict with nested
+- `module/spVIPESmultimodule.py`: replace single `groups_lengths` dict with nested
   `covariates_lengths: dict[str, dict]`.
-- `model/spvipes.py`: accept `covariate_keys: list[str]` alongside `groups_key`.
+- `model/spvipesmulti.py`: accept `covariate_keys: list[str]` alongside `groups_key`.
 - Disentanglement classifiers: scale to `C(C+1)` auxiliary networks for `C` covariates.
 
 ---

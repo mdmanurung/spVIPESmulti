@@ -1,4 +1,4 @@
-"""AST-based tests verifying scvi-tools 1.x compatibility of spVIPES source files.
+"""AST-based tests verifying scvi-tools 1.x compatibility of spVIPESmulti source files.
 
 These tests parse Python source files directly with the `ast` module so they
 run without scvi installed.  Integration tests (marked ``integration``) require
@@ -10,7 +10,7 @@ import pathlib
 
 import pytest
 
-SRC = pathlib.Path(__file__).parent.parent / "src" / "spVIPES"
+SRC = pathlib.Path(__file__).parent.parent / "src" / "spVIPESmulti"
 
 
 def _collect_imports(path: pathlib.Path):
@@ -40,12 +40,12 @@ class TestBaseFieldImports:
             if kind == "from" and module == "scvi.data":
                 assert "_constants" not in names, (
                     "Found 'from scvi.data import _constants' — "
-                    "must redirect to 'from spVIPES.data import _constants'"
+                    "must redirect to 'from spVIPESmulti.data import _constants'"
                 )
             if kind == "from":
                 assert not module.startswith("scvi.data._constants"), (
                     "Found import from 'scvi.data._constants' — "
-                    "must use local spVIPES.data._constants"
+                    "must use local spVIPESmulti.data._constants"
                 )
 
     def test_no_scvi_data_utils_get_anndata_attribute(self):
@@ -54,26 +54,26 @@ class TestBaseFieldImports:
             if kind == "from" and module.startswith("scvi.data._utils"):
                 assert "get_anndata_attribute" not in names, (
                     "Found 'from scvi.data._utils import get_anndata_attribute' — "
-                    "must redirect to local spVIPES.data._utils"
+                    "must redirect to local spVIPESmulti.data._utils"
                 )
 
     def test_local_constants_imported(self):
-        """from spVIPES.data import _constants must be present."""
+        """from spVIPESmulti.data import _constants must be present."""
         found = any(
-            kind == "from" and module == "spVIPES.data" and "_constants" in names
+            kind == "from" and module == "spVIPESmulti.data" and "_constants" in names
             for kind, module, names in _collect_imports(self.PATH)
         )
-        assert found, "Missing 'from spVIPES.data import _constants' in _base_field.py"
+        assert found, "Missing 'from spVIPESmulti.data import _constants' in _base_field.py"
 
     def test_local_utils_imported(self):
-        """from spVIPES.data._utils import get_anndata_attribute must be present."""
+        """from spVIPESmulti.data._utils import get_anndata_attribute must be present."""
         found = any(
             kind == "from"
-            and module == "spVIPES.data._utils"
+            and module == "spVIPESmulti.data._utils"
             and "get_anndata_attribute" in names
             for kind, module, names in _collect_imports(self.PATH)
         )
-        assert found, "Missing 'from spVIPES.data._utils import get_anndata_attribute' in _base_field.py"
+        assert found, "Missing 'from spVIPESmulti.data._utils import get_anndata_attribute' in _base_field.py"
 
 
 # ---------------------------------------------------------------------------
@@ -232,15 +232,15 @@ class TestVendoredTypes:
 
     @pytest.mark.parametrize("path", FILES, ids=lambda p: p.name)
     def test_no_scvi_private_types_import(self, path):
-        """``from scvi._types import ...`` must be replaced by spVIPES.data._types."""
+        """``from scvi._types import ...`` must be replaced by spVIPESmulti.data._types."""
         for kind, module, _ in _collect_imports(path):
             assert not (kind == "from" and module == "scvi._types"), (
                 f"{path.name} still imports from private 'scvi._types' — "
-                "use 'spVIPES.data._types' instead"
+                "use 'spVIPESmulti.data._types' instead"
             )
 
     def test_local_types_module_exposes_aliases(self):
-        """spVIPES.data._types must define AnnOrMuData and MinifiedDataType."""
+        """spVIPESmulti.data._types must define AnnOrMuData and MinifiedDataType."""
         text = (SRC / "data" / "_types.py").read_text()
         tree = ast.parse(text)
         defined = {
@@ -251,7 +251,7 @@ class TestVendoredTypes:
             if isinstance(target, ast.Name)
         }
         assert {"AnnOrMuData", "MinifiedDataType"}.issubset(defined), (
-            f"spVIPES.data._types missing aliases: {defined}"
+            f"spVIPESmulti.data._types missing aliases: {defined}"
         )
 
 
@@ -316,9 +316,9 @@ class TestIntegration:
         with pytest.raises(ImportError):
             from scvi.model._utils import parse_use_gpu_arg  # noqa: F401
 
-    def test_spvipes_importable(self):
+    def test_spvipesmulti_importable(self):
         pytest.importorskip("scvi")
-        import spVIPES  # noqa: F401
+        import spVIPESmulti  # noqa: F401
 
     def test_multigroup_datasplitter_constructs(self):
         """Smoke test: data splitter accepts a registered AnnDataManager and computes split sizes."""
@@ -327,8 +327,8 @@ class TestIntegration:
         from anndata import AnnData
         from scvi.data.fields import LayerField
 
-        from spVIPES.data import AnnDataManager
-        from spVIPES.data._multi_datasplitter import MultiGroupDataSplitter
+        from spVIPESmulti.data import AnnDataManager
+        from spVIPESmulti.data._multi_datasplitter import MultiGroupDataSplitter
 
         rng = np.random.default_rng(0)
         adata = AnnData(X=rng.poisson(1.0, size=(40, 5)).astype("float32"))

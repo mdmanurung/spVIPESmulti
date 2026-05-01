@@ -8,8 +8,8 @@ import numpy as np
 import torch
 from scvi import settings
 
-from spVIPES.data._manager import AnnDataManager
-from spVIPES.dataloaders._concat_dataloader import ConcatDataLoader
+from spVIPESmulti.data._manager import AnnDataManager
+from spVIPESmulti.dataloaders._concat_dataloader import ConcatDataLoader
 
 
 def _validate_data_split(n_samples: int, train_size: float, validation_size: Optional[float] = None) -> tuple[int, int]:

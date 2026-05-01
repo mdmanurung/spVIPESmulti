@@ -35,10 +35,10 @@ def _load_module(name, filepath):
 # ============================================================
 
 def _make_decoder(n_private=10, n_shared=25, n_output=50):
-    """Instantiate a LinearDecoderSPVIPE without triggering full spVIPES init."""
+    """Instantiate a LinearDecoderSPVIPE without triggering full spVIPESmulti init."""
     import sys
     sys.path.insert(0, _SRC)
-    from spVIPES.nn.networks import LinearDecoderSPVIPE
+    from spVIPESmulti.nn.networks import LinearDecoderSPVIPE
     return LinearDecoderSPVIPE(
         n_input_private=n_private,
         n_input_shared=n_shared,
@@ -51,10 +51,10 @@ def _make_decoder(n_private=10, n_shared=25, n_output=50):
 
 
 def _make_module(n_private=10, n_shared=25, n_genes=40, n_cells=30, n_groups=2):
-    """Instantiate a minimal spVIPESmodule for use in unit tests."""
+    """Instantiate a minimal spVIPESmultimodule for use in unit tests."""
     import sys
     sys.path.insert(0, _SRC)
-    from spVIPES.module.spVIPESmodule import spVIPESmodule
+    from spVIPESmulti.module.spVIPESmultimodule import spVIPESmultimodule
 
     groups_lengths = {i: n_genes for i in range(n_groups)}
     groups_obs_names = [list(range(n_cells))] * n_groups
@@ -62,7 +62,7 @@ def _make_module(n_private=10, n_shared=25, n_genes=40, n_cells=30, n_groups=2):
     groups_obs_indices = [list(range(n_cells))] * n_groups
     groups_var_indices = [list(range(n_genes))] * n_groups
 
-    return spVIPESmodule(
+    return spVIPESmultimodule(
         groups_lengths=groups_lengths,
         groups_obs_names=groups_obs_names,
         groups_var_names=groups_var_names,
@@ -254,11 +254,11 @@ class TestNLabelsGuard:
         """use_labels=True with n_labels=None should raise ValueError immediately."""
         import sys
         sys.path.insert(0, _SRC)
-        from spVIPES.module.spVIPESmodule import spVIPESmodule
+        from spVIPESmulti.module.spVIPESmultimodule import spVIPESmultimodule
 
         groups_lengths = {0: 20, 1: 20}
         with pytest.raises(ValueError, match="n_labels must be provided"):
-            spVIPESmodule(
+            spVIPESmultimodule(
                 groups_lengths=groups_lengths,
                 groups_obs_names=[[]] * 2,
                 groups_var_names=[[]] * 2,
@@ -321,7 +321,7 @@ class TestDisentanglePresets:
     def test_all_presets_have_required_keys(self):
         import sys
         sys.path.insert(0, _SRC)
-        from spVIPES.model._disentangle_presets import DISENTANGLE_PRESETS, _REQUIRED_PRESET_KEYS
+        from spVIPESmulti.model._disentangle_presets import DISENTANGLE_PRESETS, _REQUIRED_PRESET_KEYS
 
         for name, preset in DISENTANGLE_PRESETS.items():
             missing = _REQUIRED_PRESET_KEYS - preset.keys()
@@ -330,7 +330,7 @@ class TestDisentanglePresets:
     def test_preset_values_are_non_negative(self):
         import sys
         sys.path.insert(0, _SRC)
-        from spVIPES.model._disentangle_presets import DISENTANGLE_PRESETS
+        from spVIPESmulti.model._disentangle_presets import DISENTANGLE_PRESETS
 
         for name, preset in DISENTANGLE_PRESETS.items():
             for key, val in preset.items():
@@ -338,14 +338,14 @@ class TestDisentanglePresets:
 
 
 # ============================================================
-# Phase 3.3 — Negative weight guard (requires full spVIPES)
+# Phase 3.3 — Negative weight guard (requires full spVIPESmulti)
 # ============================================================
 
 class TestNegativeWeightGuard:
     @pytest.mark.integration
     def test_negative_weight_raises(self):
         """Passing a negative disentangle weight should raise ValueError."""
-        import spVIPES
+        import spVIPESmulti
         import anndata as ad
         from scipy.sparse import csr_matrix
 
@@ -357,11 +357,11 @@ class TestNegativeWeightGuard:
         adata.obs["group"] = ["A"] * 20 + ["B"] * 20
         adata.obs["idx"] = list(range(40))
 
-        prepared = spVIPES.data.prepare_adatas({"A": adata[:20].copy(), "B": adata[20:].copy()})
-        spVIPES.model.spVIPES.setup_anndata(prepared, groups_key="groups")
+        prepared = spVIPESmulti.data.prepare_adatas({"A": adata[:20].copy(), "B": adata[20:].copy()})
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups")
 
         with pytest.raises(ValueError, match="must be >= 0"):
-            spVIPES.model.spVIPES(
+            spVIPESmulti.model.spVIPESmulti(
                 prepared,
                 disentangle_preset="off",
                 disentangle_group_shared_weight=-1.0,
@@ -376,7 +376,7 @@ class TestConcatDataLoaderGuard:
     @pytest.mark.integration
     def test_empty_indices_list_raises(self):
         """ConcatDataLoader with empty indices_list should raise ValueError."""
-        import spVIPES
+        import spVIPESmulti
         import anndata as ad
         from scipy.sparse import csr_matrix
 
@@ -388,21 +388,21 @@ class TestConcatDataLoaderGuard:
         adata.obs["group"] = ["A"] * 20 + ["B"] * 20
         adata.obs["idx"] = list(range(40))
 
-        prepared = spVIPES.data.prepare_adatas({"A": adata[:20].copy(), "B": adata[20:].copy()})
-        spVIPES.model.spVIPES.setup_anndata(prepared, groups_key="groups")
-        model = spVIPES.model.spVIPES(prepared)
+        prepared = spVIPESmulti.data.prepare_adatas({"A": adata[:20].copy(), "B": adata[20:].copy()})
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups")
+        model = spVIPESmulti.model.spVIPESmulti(prepared)
 
-        from spVIPES.dataloaders._concat_dataloader import ConcatDataLoader
+        from spVIPESmulti.dataloaders._concat_dataloader import ConcatDataLoader
         with pytest.raises(ValueError, match="empty"):
             ConcatDataLoader(model.adata_manager, indices_list=[])
 
     @pytest.mark.integration
     def test_all_groups_represented_each_batch(self):
         """Every batch from ConcatDataLoader should contain cells from all groups."""
-        import spVIPES
+        import spVIPESmulti
         import anndata as ad
         from scipy.sparse import csr_matrix
-        from spVIPES.dataloaders._concat_dataloader import ConcatDataLoader
+        from spVIPESmulti.dataloaders._concat_dataloader import ConcatDataLoader
 
         rng = np.random.default_rng(0)
         X = rng.poisson(5, size=(80, 30)).astype(np.float32)
@@ -412,9 +412,9 @@ class TestConcatDataLoaderGuard:
         adata.obs["group"] = ["A"] * 40 + ["B"] * 40
         adata.obs["idx"] = list(range(80))
 
-        prepared = spVIPES.data.prepare_adatas({"A": adata[:40].copy(), "B": adata[40:].copy()})
-        spVIPES.model.spVIPES.setup_anndata(prepared, groups_key="groups")
-        model = spVIPES.model.spVIPES(prepared)
+        prepared = spVIPESmulti.data.prepare_adatas({"A": adata[:40].copy(), "B": adata[40:].copy()})
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups")
+        model = spVIPESmulti.model.spVIPESmulti(prepared)
 
         gi = [list(map(int, g)) for g in prepared.uns["groups_obs_indices"]]
         dl = ConcatDataLoader(model.adata_manager, indices_list=gi, shuffle=False, batch_size=16)
@@ -433,11 +433,11 @@ class TestGradientPropagation:
     @pytest.mark.integration
     def test_grad_flows_to_encoder_parameters(self):
         """loss.backward() must produce non-zero gradients on model parameters."""
-        import spVIPES
+        import spVIPESmulti
         import anndata as ad
         import pandas as pd
         from scipy.sparse import csr_matrix
-        from spVIPES.dataloaders._concat_dataloader import ConcatDataLoader
+        from spVIPESmulti.dataloaders._concat_dataloader import ConcatDataLoader
 
         def _make_mod(n_obs, n_vars, seed):
             rng = np.random.default_rng(seed)
@@ -460,14 +460,14 @@ class TestGradientPropagation:
             prot.obs["cell_types"] = cts
             groups[gname] = {"rna": rna, "protein": prot}
 
-        prepared = spVIPES.data.prepare_multimodal_adatas(
+        prepared = spVIPESmulti.data.prepare_multimodal_adatas(
             groups, modality_likelihoods={"rna": "nb", "protein": "nb"}
         )
-        spVIPES.model.spVIPES.setup_anndata(
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(
             prepared, groups_key="groups", label_key="cell_types",
             modality_likelihoods={"rna": "nb", "protein": "nb"},
         )
-        model = spVIPES.model.spVIPES(
+        model = spVIPESmulti.model.spVIPESmulti(
             prepared, n_hidden=32, n_dimensions_shared=8, n_dimensions_private=4,
             disentangle_preset="full",
         )
@@ -498,7 +498,7 @@ class TestGradientPropagation:
 class TestDisentanglePresetEdgeCases:
     @pytest.mark.integration
     def test_invalid_preset_raises(self):
-        import spVIPES
+        import spVIPESmulti
         import anndata as ad
         from scipy.sparse import csr_matrix
 
@@ -510,16 +510,16 @@ class TestDisentanglePresetEdgeCases:
         adata.obs["group"] = ["A"] * 20 + ["B"] * 20
         adata.obs["idx"] = list(range(40))
 
-        prepared = spVIPES.data.prepare_adatas({"A": adata[:20].copy(), "B": adata[20:].copy()})
-        spVIPES.model.spVIPES.setup_anndata(prepared, groups_key="groups")
+        prepared = spVIPESmulti.data.prepare_adatas({"A": adata[:20].copy(), "B": adata[20:].copy()})
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups")
 
         with pytest.raises(ValueError, match="Unknown disentangle_preset"):
-            spVIPES.model.spVIPES(prepared, disentangle_preset="does_not_exist")
+            spVIPESmulti.model.spVIPESmulti(prepared, disentangle_preset="does_not_exist")
 
     @pytest.mark.integration
     def test_preset_off_with_weight_override_works(self):
         """Preset='off' with a weight override should construct cleanly."""
-        import spVIPES
+        import spVIPESmulti
         import anndata as ad
         from scipy.sparse import csr_matrix
 
@@ -531,10 +531,10 @@ class TestDisentanglePresetEdgeCases:
         adata.obs["group"] = ["A"] * 20 + ["B"] * 20
         adata.obs["idx"] = list(range(40))
 
-        prepared = spVIPES.data.prepare_adatas({"A": adata[:20].copy(), "B": adata[20:].copy()})
-        spVIPES.model.spVIPES.setup_anndata(prepared, groups_key="groups")
+        prepared = spVIPESmulti.data.prepare_adatas({"A": adata[:20].copy(), "B": adata[20:].copy()})
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups")
 
-        model = spVIPES.model.spVIPES(
+        model = spVIPESmulti.model.spVIPESmulti(
             prepared,
             disentangle_preset="off",
             disentangle_group_shared_weight=0.5,  # override one weight
@@ -551,7 +551,7 @@ class TestLatentRepresentationCompleteness:
     @pytest.mark.integration
     def test_output_size_matches_n_cells(self):
         """Latent output arrays must have exactly n_cells rows for each group."""
-        import spVIPES
+        import spVIPESmulti
         import anndata as ad
         from scipy.sparse import csr_matrix
 
@@ -565,9 +565,9 @@ class TestLatentRepresentationCompleteness:
             a.var_names = [f"gene{j}" for j in range(20)]
             adatas[f"g{i}"] = a
 
-        prepared = spVIPES.data.prepare_adatas(adatas)
-        spVIPES.model.spVIPES.setup_anndata(prepared, groups_key="groups")
-        model = spVIPES.model.spVIPES(prepared, n_hidden=32, n_dimensions_shared=8, n_dimensions_private=4)
+        prepared = spVIPESmulti.data.prepare_adatas(adatas)
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups")
+        model = spVIPESmulti.model.spVIPESmulti(prepared, n_hidden=32, n_dimensions_shared=8, n_dimensions_private=4)
 
         gi = [list(map(int, g)) for g in prepared.uns["groups_obs_indices"]]
         result = model.get_latent_representation(gi, batch_size=16)

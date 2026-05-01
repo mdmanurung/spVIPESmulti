@@ -4,8 +4,8 @@ from typing import Optional, Union
 import numpy as np
 from torch.utils.data import DataLoader
 
-from spVIPES.data import AnnDataManager
-from spVIPES.dataloaders._ann_dataloader import AnnDataLoader
+from spVIPESmulti.data import AnnDataManager
+from spVIPESmulti.dataloaders._ann_dataloader import AnnDataLoader
 
 
 class ConcatDataLoader(DataLoader):

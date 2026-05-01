@@ -1,4 +1,4 @@
-"""Tests for multi-group (N >= 2) and multimodal support in spVIPES."""
+"""Tests for multi-group (N >= 2) and multimodal support in spVIPESmulti."""
 
 import importlib.util
 import os
@@ -10,7 +10,7 @@ from scipy.sparse import csr_matrix
 
 import anndata as ad
 
-# Direct module loaders to avoid triggering spVIPES.__init__ (which requires scvi-tools >=1.0)
+# Direct module loaders to avoid triggering spVIPESmulti.__init__ (which requires scvi-tools >=1.0)
 _SRC = os.path.join(os.path.dirname(__file__), "..", "src")
 
 
@@ -23,7 +23,7 @@ def _load_module(module_name, filepath):
 
 
 _prepare_adatas_mod = _load_module(
-    "prepare_adatas", os.path.join(_SRC, "spVIPES", "data", "prepare_adatas.py")
+    "prepare_adatas", os.path.join(_SRC, "spVIPESmulti", "data", "prepare_adatas.py")
 )
 prepare_adatas = _prepare_adatas_mod.prepare_adatas
 prepare_multimodal_adatas = _prepare_adatas_mod.prepare_multimodal_adatas
@@ -237,7 +237,7 @@ class TestPoEGeneralization:
         import torch
         from torch.distributions import Normal
 
-        # We can't easily instantiate spVIPESmodule without all the scvi deps,
+        # We can't easily instantiate spVIPESmultimodule without all the scvi deps,
         # but we can test _product_of_experts directly since it's pure math
         # Test the Gaussian PoE formula manually
 
@@ -347,7 +347,7 @@ class TestLikelihoodFactory:
     def _load_build_likelihood(self):
         """Try to load build_likelihood; skip if scvi not compatible."""
         try:
-            mod = _load_module("spvipes_utils", os.path.join(_SRC, "spVIPES", "module", "utils.py"))
+            mod = _load_module("spvipesmulti_utils", os.path.join(_SRC, "spVIPESmulti", "module", "utils.py"))
             self.build_likelihood = mod.build_likelihood
         except Exception:
             pytest.skip("scvi-tools version incompatible with this environment")

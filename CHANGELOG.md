@@ -1,6 +1,7 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+Maintained by **Mikhael Dito Manurung** (fork of [spVIPES](https://github.com/nrclaudio/spVIPES) by Claudio Novella Rausell).
 
 The format is based on [Keep a Changelog][],
 and this project adheres to [Semantic Versioning][].
@@ -8,7 +9,7 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [Unreleased]
+## [1.0.0] — 2026-05-01
 
 ### Changed (breaking)
 
@@ -16,7 +17,7 @@ and this project adheres to [Semantic Versioning][].
     is now 3.10. Several private scvi-tools modules removed in 1.x (`scvi.data._constants`,
     `scvi.data._utils.get_anndata_attribute`, `scvi.dataloaders._anntorchdataset`,
     `scvi.dataloaders._data_splitting.validate_data_split`, `scvi._types`) are now
-    vendored under `spVIPES.data`. `pytorch_lightning` was replaced with
+    vendored under `spVIPESmulti.data`. `pytorch_lightning` was replaced with
     `lightning.pytorch`.
 -   **`MultiGroupTrainingMixin.train(...)` no longer accepts `use_gpu`.** scvi-tools 1.x
     routes accelerator selection through `pl.Trainer`. Pass `accelerator="gpu"` (or
@@ -39,7 +40,7 @@ and this project adheres to [Semantic Versioning][].
     mode" appendix that wires up `prepare_multimodal_adatas` on the same
     data as a forward pointer to the dedicated multimodal vignette.
 -   **`docs/api.md`** now documents
-    `spVIPES.data.prepare_adatas.prepare_multimodal_adatas` alongside the
+    `spVIPESmulti.data.prepare_adatas.prepare_multimodal_adatas` alongside the
     single-modality `prepare_adatas`.
 -   **Disentanglement objective** (inspired by CellDISECT's cross-covariate
     decoupling MLPs and Multi-ContrastiveVAE). Four auxiliary classifiers + an
@@ -60,7 +61,7 @@ and this project adheres to [Semantic Versioning][].
     lower bounds.
 
     All weights default to `0.0` (fully backward-compatible). New
-    `spVIPESmodule` parameters: `disentangle_group_shared_weight`,
+    `spVIPESmultimodule` parameters: `disentangle_group_shared_weight`,
     `disentangle_label_shared_weight`, `disentangle_group_private_weight`,
     `disentangle_label_private_weight`, `contrastive_weight`,
     `contrastive_temperature`.
@@ -71,9 +72,9 @@ and this project adheres to [Semantic Versioning][].
     groups.
 
 -   `gradient_reversal()` utility function and `_GradientReversalFunction`
-    added to `spVIPES.module.utils`.
+    added to `spVIPESmulti.module.utils`.
 
--   **`disentangle_preset` kwarg** on `spVIPES` model, with named
+-   **`disentangle_preset` kwarg** on `spVIPESmulti` model, with named
     configurations: `"off"` (default), `"full"`, `"shared_only"`,
     `"private_only"`, `"adversarial_only"`, `"supervised_only"`,
     `"no_contrastive"`. Per-component weight kwargs
@@ -85,7 +86,7 @@ and this project adheres to [Semantic Versioning][].
     showing how to enable/disable each component via presets and per-weight
     overrides.
 
--   `_compute_disentangle_losses()` helper method on `spVIPESmodule` —
+-   `_compute_disentangle_losses()` helper method on `spVIPESmultimodule` —
     extracts the disentanglement loss block from `loss()` for cleaner
     ablation workflow. Each component reads as one isolated
     `if self.q_X is not None` branch.
@@ -106,12 +107,12 @@ and this project adheres to [Semantic Versioning][].
 ### Fixed
 
 -   **`register_buffer("prototypes", ...)` crash on PyTorch 2.x** in
-    `spVIPESmodule.__init__`. The previous code assigned `self.prototypes = None`
+    `spVIPESmultimodule.__init__`. The previous code assigned `self.prototypes = None`
     before conditionally calling `register_buffer`; on PyTorch >= 2.x this
     raises `KeyError: "attribute 'prototypes' already exists"` on the second
     instantiation in the same process. Fix: always call `register_buffer`
     (with `None` in the off branch) so the attribute is owned by
-    `nn.Module._buffers`. Affects any workflow that builds two `spVIPES`
+    `nn.Module._buffers`. Affects any workflow that builds two `spVIPESmulti`
     models in the same process (e.g., `scripts/validate_disentanglement.py`,
     the ablation notebook). (PLANS.md P0, fix 1)
 -   **`IndexError: tensors used as indices must be long, int, byte or bool`**

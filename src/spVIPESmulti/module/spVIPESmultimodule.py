@@ -12,15 +12,15 @@ from torch.distributions import Normal
 from torch.distributions import kl_divergence as kl
 
 from scvi.nn import FCLayers
-from spVIPES.nn.networks import Encoder, LinearDecoderSPVIPE
-from spVIPES.module.utils import gradient_reversal
+from spVIPESmulti.nn.networks import Encoder, LinearDecoderSPVIPE
+from spVIPESmulti.module.utils import gradient_reversal
 
 torch.backends.cudnn.benchmark = True
 
 
-class spVIPESmodule(BaseModuleClass):
+class spVIPESmultimodule(BaseModuleClass):
     """
-    PyTorch implementation of spVIPES variational autoencoder module.
+    PyTorch implementation of spVIPESmulti variational autoencoder module.
 
     This module implements the core variational autoencoder with Product of Experts (PoE)
     for shared-private latent space learning. It extends scVI's underlying VAE architecture
@@ -66,7 +66,7 @@ class spVIPESmodule(BaseModuleClass):
     Notes
     -----
     This module is based on the scVI framework and implements the variational inference
-    described in the spVIPES paper. The Product of Experts mechanism allows for flexible
+    described in the spVIPESmulti paper. The Product of Experts mechanism allows for flexible
     integration of multiple single-cell datasets with different feature sets.
     """
 
@@ -113,7 +113,7 @@ class spVIPESmodule(BaseModuleClass):
         contrastive_temperature: float = 0.1,
     ):
         """
-        Initialize the spVIPES variational autoencoder module.
+        Initialize the spVIPESmulti variational autoencoder module.
 
         This method sets up the neural network components including encoders and decoders
         for each group, and configures the Product of Experts mechanism based on the
@@ -1059,7 +1059,7 @@ class spVIPESmodule(BaseModuleClass):
 
     def _generative_multimodal(self, private_stats, shared_stats, poe_stats, library, groups, batch_index, **kwargs):
         """Multimodal generative model: per-(group, modality) decoding."""
-        from spVIPES.module.utils import build_likelihood
+        from spVIPESmulti.module.utils import build_likelihood
 
         per_modality_private = kwargs.get("per_modality_private", {})
         n_groups = len(poe_stats)

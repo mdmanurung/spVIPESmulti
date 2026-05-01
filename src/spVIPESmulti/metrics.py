@@ -1,4 +1,4 @@
-"""Integration quality metrics for spVIPES latent spaces.
+"""Integration quality metrics for spVIPESmulti latent spaces.
 
 All metrics work on raw NumPy arrays (no AnnData dependency) and use only
 NumPy, pandas, and scikit-learn — all of which are available transitively
@@ -243,7 +243,7 @@ def integration_report(
     k: int = 20,
     leiden_resolution: float = 0.8,
 ) -> pd.DataFrame:
-    """Compute a full integration-quality report for a trained spVIPES model.
+    """Compute a full integration-quality report for a trained spVIPESmulti model.
 
     Evaluates group mixing and label preservation on the shared latent space,
     and (optionally) group separability on per-group private latent spaces.
@@ -291,7 +291,7 @@ def integration_report(
 
     Examples
     --------
-    >>> report = spVIPES.metrics.integration_report(
+    >>> report = spVIPESmulti.metrics.integration_report(
     ...     z_shared, adata.obs["groups"].values, adata.obs["cell_types"].values,
     ...     z_private_dict={"SLN111": z_priv_0, "SLN208": z_priv_1},
     ... )

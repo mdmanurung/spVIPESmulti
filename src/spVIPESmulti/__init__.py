@@ -1,4 +1,4 @@
-"""spVIPES setup file. setup file adapter from the scvi-tools-skeleton repo."""
+"""spVIPESmulti setup file. setup file adapter from the scvi-tools-skeleton repo."""
 
 import logging
 
@@ -17,7 +17,7 @@ try:
 except ModuleNotFoundError:
     import importlib_metadata
 
-package_name = "spVIPES"
+package_name = "spVIPESmulti"
 __version__ = importlib_metadata.version(package_name)
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ logger.setLevel(logging.INFO)
 console = Console(force_terminal=True)
 console.is_jupyter = False
 ch = RichHandler(show_path=False, console=console, show_time=False)
-formatter = logging.Formatter("spVIPES: %(message)s")
+formatter = logging.Formatter("spVIPESmulti: %(message)s")
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 

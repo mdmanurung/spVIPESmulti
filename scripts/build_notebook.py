@@ -14,16 +14,16 @@ def code(src):
 # ------------------------------------------------------------------
 # Section A — Front matter
 # ------------------------------------------------------------------
-md("""# spVIPES — Multi-group, Multimodal, and Normalizing-Flow-Prior Tutorial
+md("""# spVIPESmulti — Multi-group, Multimodal, and Normalizing-Flow-Prior Tutorial
 
-This notebook showcases three features added to **spVIPES** in the
+This notebook showcases three features added to **spVIPESmulti** in the
 `multigroup-multimodal-support` branch:
 
 | Feature | API |
 |---|---|
-| **N ≥ 2 groups** for disentanglement | `spVIPES.data.prepare_adatas` — generalised beyond 2 groups |
-| **Multimodal (RNA + protein) integration** | `spVIPES.data.prepare_multimodal_adatas`, two-level Product of Experts (intra-group across modalities, inter-group across groups), per-modality likelihoods |
-| **Zuko normalizing-flow prior** (NSF / MAF) on shared or private latents | `use_nf_prior`, `nf_type`, `nf_transforms`, `nf_target` on `spVIPES.model.spVIPES` |
+| **N ≥ 2 groups** for disentanglement | `spVIPESmulti.data.prepare_adatas` — generalised beyond 2 groups |
+| **Multimodal (RNA + protein) integration** | `spVIPESmulti.data.prepare_multimodal_adatas`, two-level Product of Experts (intra-group across modalities, inter-group across groups), per-modality likelihoods |
+| **Zuko normalizing-flow prior** (NSF / MAF) on shared or private latents | `use_nf_prior`, `nf_type`, `nf_transforms`, `nf_target` on `spVIPESmulti.model.spVIPESmulti` |
 
 We exercise all three features on a single public CITE-seq dataset
 (`scvi.data.spleen_lymph_cite_seq()`), splitting the data into **three** groups
@@ -56,13 +56,13 @@ import matplotlib.pyplot as plt
 import anndata as ad
 import scipy.sparse as sp
 
-import spVIPES
+import spVIPESmulti
 
 np.random.seed(0)
 torch.manual_seed(0)
 sc.settings.set_figure_params(dpi=80, frameon=False)
 
-print(f"spVIPES  : {spVIPES.__version__}")
+print(f"spVIPESmulti  : {spVIPESmulti.__version__}")
 print(f"scvi-tools: {scvi.__version__}")
 print(f"scanpy   : {sc.__version__}")
 print(f"torch    : {torch.__version__} (CUDA available: {torch.cuda.is_available()})")
@@ -97,7 +97,7 @@ print("Tissues :", adata_full.obs["tissue"].value_counts().to_dict())""")
 # ------------------------------------------------------------------
 md("""## 3. Construct three groups
 
-The original spVIPES code path was limited to exactly two groups; the new
+The original spVIPESmulti code path was limited to exactly two groups; the new
 release generalises PoE to any N ≥ 2. We construct **three** groups by
 crossing donor (`SLN111`, `SLN208`) with `tissue` (`Spleen`, `Lymph_Node`)
 and **deliberately drop the `SLN208 × Lymph_Node` bucket**. This creates a
@@ -180,7 +180,7 @@ md("""## 5. Build the per-group, per-modality dict
 
 We split each group into one RNA AnnData (raw counts from `.X`) and one
 protein AnnData (counts taken from `obsm["protein_expression"]`). Cells are
-shared across modalities within a group — spVIPES' inner PoE is what
+shared across modalities within a group — spVIPESmulti' inner PoE is what
 integrates them.
 """)
 
@@ -210,11 +210,11 @@ md("""## 6. `prepare_multimodal_adatas`
 
 The new helper concatenates all (group, modality) AnnData objects into a
 single AnnData and writes the per-group, per-modality bookkeeping needed by
-the spVIPES module into `.uns`. Both modalities here are count data, so we
+the spVIPESmulti module into `.uns`. Both modalities here are count data, so we
 use the Negative Binomial likelihood for both.
 """)
 
-code("""mdata = spVIPES.data.prepare_multimodal_adatas(
+code("""mdata = spVIPESmulti.data.prepare_multimodal_adatas(
     adatas_dict,
     modality_likelihoods={"rna": "nb", "protein": "nb"},
 )
@@ -236,11 +236,11 @@ for g, mod_dict in mdata.uns["groups_modality_lengths"].items():
 md("""## 7. `setup_anndata` — label-based PoE
 
 With **three** groups we must use the **label-based** PoE variant: the
-optimal-transport variants in spVIPES are 2-group-only by construction.
+optimal-transport variants in spVIPESmulti are 2-group-only by construction.
 `setup_anndata` will print which PoE strategy was selected.
 """)
 
-code("""spVIPES.model.spVIPES.setup_anndata(
+code("""spVIPESmulti.model.spVIPESmulti.setup_anndata(
     mdata,
     groups_key="groups",
     label_key="cell_types",
@@ -261,7 +261,7 @@ MAX_EPOCHS = 25
 BATCH_SIZE = 128
 KL_WARMUP  = 20
 
-model_base = spVIPES.model.spVIPES(
+model_base = spVIPESmulti.model.spVIPESmulti(
     mdata,
     n_hidden=N_HIDDEN,
     n_dimensions_shared=N_SHARED,
@@ -389,7 +389,7 @@ training optimiser — no extra warm-up schedule is needed.
 code("""torch.manual_seed(0)
 np.random.seed(0)
 
-model_nf = spVIPES.model.spVIPES(
+model_nf = spVIPESmulti.model.spVIPESmulti(
     mdata,
     n_hidden=N_HIDDEN,
     n_dimensions_shared=N_SHARED,
@@ -510,7 +510,7 @@ md("""> **Interpretation.** At this subsample size and epoch budget both priors
 # ------------------------------------------------------------------
 md("""## 12. Per-(group, modality) decoder loadings
 
-spVIPES exposes linear-decoder loadings that link latent factors back to
+spVIPESmulti exposes linear-decoder loadings that link latent factors back to
 features. **Note:** the top-level `model.get_loadings()` helper currently
 assumes the single-modality code path (integer decoder keys), so in
 multimodal mode we reach into the module and read the decoder weights
@@ -521,7 +521,7 @@ directly — one `LinearDecoderSPVIPE` per `(group, modality)` pair. Wiring
 code("""def multimodal_loadings(model, group_idx, modality, kind="shared"):
     \"\"\"Return a (n_features x n_latent) DataFrame of BW loadings for one (group, modality) decoder.
 
-    This mirrors what spVIPESmodule.get_loadings does for the single-modality case,
+    This mirrors what spVIPESmultimodule.get_loadings does for the single-modality case,
     but indexes the decoders dict by the (group, modality) tuple that the multimodal
     path uses.
     \"\"\"
@@ -575,7 +575,7 @@ md("""## 13. Footguns and open knobs
   barcodes across the two donors; call `obs_names_make_unique()` before
   subsetting.
 - **`get_latent_representation(batch_size=...)`** — unlike scvi-tools'
-  defaults, spVIPES needs an explicit `batch_size` here.
+  defaults, spVIPESmulti needs an explicit `batch_size` here.
 """)
 
 # ------------------------------------------------------------------

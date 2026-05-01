@@ -1,65 +1,67 @@
 # API Reference
 
-spVIPES v0.3.0 — shared-private Variational Inference with Product of Experts and Supervision.
+spVIPESmulti v1.0.0 — shared-private Variational Inference with Product of Experts and Supervision.
+
+**Authors:** Mikhael Dito Manurung · Claudio Novella Rausell · D.J.M. Peters · A. Mahfouz
 
 ## Quick reference
 
 | Symbol | Kind | Import path |
 |---|---|---|
-| `spVIPES` | Model class | `spVIPES.model.spVIPES` |
-| `setup_anndata` | Class method | `spVIPES.model.spVIPES.setup_anndata` |
+| `spVIPESmulti` | Model class | `spVIPESmulti.model.spVIPESmulti` |
+| `setup_anndata` | Class method | `spVIPESmulti.model.spVIPESmulti.setup_anndata` |
 | `train` | Instance method | `model.train(...)` |
 | `get_latent_representation` | Instance method | `model.get_latent_representation(...)` |
 | `get_loadings` | Instance method | `model.get_loadings()` |
-| `prepare_adatas` | Function | `spVIPES.data.prepare_adatas` |
-| `prepare_multimodal_adatas` | Function | `spVIPES.data.prepare_multimodal_adatas` |
-| `store_latents` | Function | `spVIPES.utils.store_latents` |
-| `add_latent_dims_to_obs` | Function | `spVIPES.utils.add_latent_dims_to_obs` |
-| `compute_shared_umap` | Function | `spVIPES.utils.compute_shared_umap` |
-| `compute_private_umaps` | Function | `spVIPES.utils.compute_private_umaps` |
-| `get_top_genes` | Function | `spVIPES.utils.get_top_genes` |
-| `score_cells_on_factor` | Function | `spVIPES.utils.score_cells_on_factor` |
-| `heatmap_loadings` | Function | `spVIPES.pl.heatmap_loadings` |
-| `umap_shared` | Function | `spVIPES.pl.umap_shared` |
-| `umap_private` | Function | `spVIPES.pl.umap_private` |
-| `factor_violin` | Function | `spVIPES.pl.factor_violin` |
-| `training_curves` | Function | `spVIPES.pl.training_curves` |
-| `loadings_dotplot` | Function | `spVIPES.pl.loadings_dotplot` |
-| `spVIPESmodule` | PyTorch module | `spVIPES.module.spVIPESmodule` |
-| `Encoder` | Neural network | `spVIPES.nn.Encoder` |
-| `LinearDecoderSPVIPE` | Neural network | `spVIPES.nn.LinearDecoderSPVIPE` |
-| `ConcatDataLoader` | DataLoader | `spVIPES.dataloaders.ConcatDataLoader` |
+| `prepare_adatas` | Function | `spVIPESmulti.data.prepare_adatas` |
+| `prepare_multimodal_adatas` | Function | `spVIPESmulti.data.prepare_multimodal_adatas` |
+| `store_latents` | Function | `spVIPESmulti.utils.store_latents` |
+| `add_latent_dims_to_obs` | Function | `spVIPESmulti.utils.add_latent_dims_to_obs` |
+| `compute_shared_umap` | Function | `spVIPESmulti.utils.compute_shared_umap` |
+| `compute_private_umaps` | Function | `spVIPESmulti.utils.compute_private_umaps` |
+| `get_top_genes` | Function | `spVIPESmulti.utils.get_top_genes` |
+| `score_cells_on_factor` | Function | `spVIPESmulti.utils.score_cells_on_factor` |
+| `heatmap_loadings` | Function | `spVIPESmulti.pl.heatmap_loadings` |
+| `umap_shared` | Function | `spVIPESmulti.pl.umap_shared` |
+| `umap_private` | Function | `spVIPESmulti.pl.umap_private` |
+| `factor_violin` | Function | `spVIPESmulti.pl.factor_violin` |
+| `training_curves` | Function | `spVIPESmulti.pl.training_curves` |
+| `loadings_dotplot` | Function | `spVIPESmulti.pl.loadings_dotplot` |
+| `spVIPESmultimodule` | PyTorch module | `spVIPESmulti.module.spVIPESmultimodule` |
+| `Encoder` | Neural network | `spVIPESmulti.nn.Encoder` |
+| `LinearDecoderSPVIPE` | Neural network | `spVIPESmulti.nn.LinearDecoderSPVIPE` |
+| `ConcatDataLoader` | DataLoader | `spVIPESmulti.dataloaders.ConcatDataLoader` |
 
 ---
 
 ## Model
 
-### `spVIPES`
+### `spVIPESmulti`
 
 The main user-facing model class. Extends `scvi.model.base.BaseModelClass` and
 `MultiGroupTrainingMixin`. Call `setup_anndata` first, then construct the model,
 then call `train`.
 
 ```python
-import spVIPES
+import spVIPESmulti
 
-adata = spVIPES.data.prepare_adatas({"ctrl": adata_ctrl, "treat": adata_treat})
-spVIPES.model.spVIPES.setup_anndata(adata, groups_key="groups", label_key="cell_type")
-model = spVIPES.model.spVIPES(adata)
+adata = spVIPESmulti.data.prepare_adatas({"ctrl": adata_ctrl, "treat": adata_treat})
+spVIPESmulti.model.spVIPESmulti.setup_anndata(adata, groups_key="groups", label_key="cell_type")
+model = spVIPESmulti.model.spVIPESmulti(adata)
 model.train(group_indices_list=group_indices_list, max_epochs=100)
 latents = model.get_latent_representation(group_indices_list=group_indices_list, batch_size=512)
 ```
 
 ```{eval-rst}
-.. currentmodule:: spVIPES
+.. currentmodule:: spVIPESmulti
 
 .. autosummary::
     :toctree: generated
     :template: class.rst
 
-    model.spvipes.spVIPES
+    model.spvipesmulti.spVIPESmulti
 
-.. autoclass:: spVIPES.model.spvipes.spVIPES
+.. autoclass:: spVIPESmulti.model.spvipesmulti.spVIPESmulti
     :members:
     :undoc-members:
     :show-inheritance:
@@ -89,10 +91,10 @@ latents = model.get_latent_representation(group_indices_list=group_indices_list,
 | `modality_loss_weights` | `dict[str, float] or None` | `None` | Per-modality scalar multipliers on the reconstruction loss. E.g. `{"rna": 1.0, "protein": 5.0}` to up-weight the protein term. Multimodal mode only. |
 | `use_jeffreys_integ` | `bool` | `False` | Add a Jeffreys (symmetric KL) integration loss between every pair of group PoE posteriors on z_shared. |
 | `jeffreys_integ_weight` | `float` | `1.0` | Scalar multiplier on the Jeffreys integration loss. |
-| `**model_kwargs` | | | Forwarded to `spVIPESmodule`. |
+| `**model_kwargs` | | | Forwarded to `spVIPESmultimodule`. |
 
 > **Tip:** Individual weight overrides stack on top of a preset.
-> `spVIPES(adata, disentangle_preset="full", contrastive_weight=0.0)` enables
+> `spVIPESmulti(adata, disentangle_preset="full", contrastive_weight=0.0)` enables
 > all classifiers but turns off the InfoNCE term.
 
 ---
@@ -100,7 +102,7 @@ latents = model.get_latent_representation(group_indices_list=group_indices_list,
 ### `setup_anndata`
 
 ```python
-spVIPES.model.spVIPES.setup_anndata(
+spVIPESmulti.model.spVIPESmulti.setup_anndata(
     adata,
     groups_key,
     label_key=None,
@@ -227,13 +229,13 @@ batch-normalisation-scaled weights from the linear decoder.
 ### `prepare_adatas`
 
 ```python
-from spVIPES.data import prepare_adatas
+from spVIPESmulti.data import prepare_adatas
 
 mdata = prepare_adatas(adatas, layers=None)
 ```
 
 Concatenates multiple single-modality AnnData objects into one AnnData suitable
-for spVIPES. At least 2 groups are required.
+for spVIPESmulti. At least 2 groups are required.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -265,7 +267,7 @@ for spVIPES. At least 2 groups are required.
 
     data.prepare_adatas.prepare_adatas
 
-.. autofunction:: spVIPES.data.prepare_adatas.prepare_adatas
+.. autofunction:: spVIPESmulti.data.prepare_adatas.prepare_adatas
 ```
 
 ---
@@ -273,13 +275,13 @@ for spVIPES. At least 2 groups are required.
 ### `prepare_multimodal_adatas`
 
 ```python
-from spVIPES.data import prepare_multimodal_adatas
+from spVIPESmulti.data import prepare_multimodal_adatas
 
 mdata = prepare_multimodal_adatas(adatas, modality_likelihoods=None)
 ```
 
 Concatenates a nested `{group: {modality: AnnData}}` dict into one AnnData
-for multimodal spVIPES runs. At least 2 groups are required.
+for multimodal spVIPESmulti runs. At least 2 groups are required.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -304,18 +306,18 @@ adatas_dict = {
     "spleen": {"rna": adata_rna_sp, "protein": adata_prot_sp},
     "lymph":  {"rna": adata_rna_ln, "protein": adata_prot_ln},
 }
-mdata = spVIPES.data.prepare_multimodal_adatas(
+mdata = spVIPESmulti.data.prepare_multimodal_adatas(
     adatas_dict,
     modality_likelihoods={"rna": "nb", "protein": "nb"},
 )
-spVIPES.model.spVIPES.setup_anndata(
+spVIPESmulti.model.spVIPESmulti.setup_anndata(
     mdata,
     groups_key="tissue",
     label_key="cell_types",
     modality_likelihoods={"rna": "nb", "protein": "nb"},
 )
 group_indices_list = [list(map(int, g)) for g in mdata.uns["groups_obs_indices"]]
-model = spVIPES.model.spVIPES(mdata, use_nf_prior=True, nf_type="NSF")
+model = spVIPESmulti.model.spVIPESmulti(mdata, use_nf_prior=True, nf_type="NSF")
 model.train(group_indices_list=group_indices_list, max_epochs=100, batch_size=512)
 ```
 
@@ -325,7 +327,7 @@ model.train(group_indices_list=group_indices_list, max_epochs=100, batch_size=51
 
     data.prepare_adatas.prepare_multimodal_adatas
 
-.. autofunction:: spVIPES.data.prepare_adatas.prepare_multimodal_adatas
+.. autofunction:: spVIPESmulti.data.prepare_adatas.prepare_multimodal_adatas
 ```
 
 ---
@@ -367,7 +369,7 @@ in multimodal mode).
 **Example — full preset with InfoNCE disabled:**
 
 ```python
-model = spVIPES.model.spVIPES(
+model = spVIPESmulti.model.spVIPESmulti(
     mdata,
     disentangle_preset="full",
     contrastive_weight=0.0,
@@ -399,7 +401,7 @@ single ELBO objective — no separate warm-up schedule is required.
 
 ## PyTorch module
 
-### `spVIPESmodule`
+### `spVIPESmultimodule`
 
 The underlying `scvi.module.base.BaseModuleClass` that owns all PyTorch
 parameters. Access via `model.module` after construction.
@@ -409,9 +411,9 @@ parameters. Access via `model.module` after construction.
     :toctree: generated
     :template: class.rst
 
-    module.spVIPESmodule.spVIPESmodule
+    module.spVIPESmultimodule.spVIPESmultimodule
 
-.. autoclass:: spVIPES.module.spVIPESmodule.spVIPESmodule
+.. autoclass:: spVIPESmulti.module.spVIPESmultimodule.spVIPESmultimodule
     :members:
     :undoc-members:
     :show-inheritance:
@@ -446,7 +448,7 @@ over a latent space. Outputs shared and private latent statistics.
 
     nn.networks.Encoder
 
-.. autoclass:: spVIPES.nn.networks.Encoder
+.. autoclass:: spVIPESmulti.nn.networks.Encoder
     :members:
     :undoc-members:
     :show-inheritance:
@@ -465,7 +467,7 @@ reconstructions via a learned mixing weight `px_mixing`.
 
     nn.networks.LinearDecoderSPVIPE
 
-.. autoclass:: spVIPES.nn.networks.LinearDecoderSPVIPE
+.. autoclass:: spVIPESmulti.nn.networks.LinearDecoderSPVIPE
     :members:
     :undoc-members:
     :show-inheritance:
@@ -476,21 +478,21 @@ reconstructions via a learned mixing weight `px_mixing`.
 
 ## Utilities
 
-The `spVIPES.utils` module provides ready-to-use post-training helpers that
+The `spVIPESmulti.utils` module provides ready-to-use post-training helpers that
 consolidate the manual boilerplate repeated in every tutorial notebook.
 
 ```python
-import spVIPES
+import spVIPESmulti
 ```
 
 ### `store_latents`
 
 ```python
-spVIPES.utils.store_latents(
+spVIPESmulti.utils.store_latents(
     adata,
     latents,
     group_indices_list,
-    obsm_prefix="X_spVIPES",
+    obsm_prefix="X_spVIPESmulti",
 )
 ```
 
@@ -503,7 +505,7 @@ types returned by the model.
 | `adata` | `AnnData` | — | The combined AnnData passed to `setup_anndata`. |
 | `latents` | `dict` | — | Dict returned by `model.get_latent_representation(...)`. |
 | `group_indices_list` | `list[ndarray]` | — | Cell index arrays, one per group (same as used for training). |
-| `obsm_prefix` | `str` | `"X_spVIPES"` | Prefix for keys written to `adata.obsm`. |
+| `obsm_prefix` | `str` | `"X_spVIPESmulti"` | Prefix for keys written to `adata.obsm`. |
 
 **Keys written to `adata.obsm`:**
 
@@ -515,8 +517,8 @@ types returned by the model.
 
 ```python
 latents = model.get_latent_representation(group_indices_list, batch_size=512)
-spVIPES.utils.store_latents(adata, latents, group_indices_list)
-# adata.obsm["X_spVIPES_shared"] is now populated
+spVIPESmulti.utils.store_latents(adata, latents, group_indices_list)
+# adata.obsm["X_spVIPESmulti_shared"] is now populated
 ```
 
 ---
@@ -524,7 +526,7 @@ spVIPES.utils.store_latents(adata, latents, group_indices_list)
 ### `add_latent_dims_to_obs`
 
 ```python
-spVIPES.utils.add_latent_dims_to_obs(
+spVIPESmulti.utils.add_latent_dims_to_obs(
     adata,
     obsm_key,
     prefix=None,
@@ -538,15 +540,15 @@ can be used directly as `color=` arguments in scanpy plots.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `adata` | `AnnData` | — | AnnData containing `obsm_key`. |
-| `obsm_key` | `str` | — | Key in `adata.obsm` to read from (e.g. `"X_spVIPES_private_g0"`). |
+| `obsm_key` | `str` | — | Key in `adata.obsm` to read from (e.g. `"X_spVIPESmulti_private_g0"`). |
 | `prefix` | `str or None` | `None` | Column name prefix. Defaults to `obsm_key` with leading `"X_"` stripped. |
 | `max_dims` | `int or None` | `None` | Maximum number of dimensions to copy. `None` copies all. |
 
 New obs columns are named `{prefix}_0`, `{prefix}_1`, …
 
 ```python
-spVIPES.utils.add_latent_dims_to_obs(adata_g0, "X_spVIPES_private_g0", max_dims=5)
-sc.pl.violin(adata_g0, "spVIPES_private_g0_1", groupby="cell_type")
+spVIPESmulti.utils.add_latent_dims_to_obs(adata_g0, "X_spVIPESmulti_private_g0", max_dims=5)
+sc.pl.violin(adata_g0, "spVIPESmulti_private_g0_1", groupby="cell_type")
 ```
 
 ---
@@ -554,12 +556,12 @@ sc.pl.violin(adata_g0, "spVIPES_private_g0_1", groupby="cell_type")
 ### `compute_shared_umap`
 
 ```python
-spVIPES.utils.compute_shared_umap(
+spVIPESmulti.utils.compute_shared_umap(
     adata,
-    obsm_key="X_spVIPES_shared",
+    obsm_key="X_spVIPESmulti_shared",
     n_neighbors=15,
     min_dist=0.3,
-    umap_key="X_umap_spvipes_shared",
+    umap_key="X_umap_spvipesmulti_shared",
 )
 ```
 
@@ -569,14 +571,14 @@ the result under a named key, without overwriting any existing `X_umap`.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `adata` | `AnnData` | — | AnnData with `obsm_key` populated by `store_latents`. |
-| `obsm_key` | `str` | `"X_spVIPES_shared"` | Source key in `adata.obsm`. |
+| `obsm_key` | `str` | `"X_spVIPESmulti_shared"` | Source key in `adata.obsm`. |
 | `n_neighbors` | `int` | `15` | Number of neighbours for the kNN graph. |
 | `min_dist` | `float` | `0.3` | UMAP `min_dist` parameter. |
-| `umap_key` | `str` | `"X_umap_spvipes_shared"` | Destination key in `adata.obsm`. |
+| `umap_key` | `str` | `"X_umap_spvipesmulti_shared"` | Destination key in `adata.obsm`. |
 
 ```python
-spVIPES.utils.compute_shared_umap(adata)
-spVIPES.pl.umap_shared(adata, color="cell_type")
+spVIPESmulti.utils.compute_shared_umap(adata)
+spVIPESmulti.pl.umap_shared(adata, color="cell_type")
 ```
 
 ---
@@ -584,12 +586,12 @@ spVIPES.pl.umap_shared(adata, color="cell_type")
 ### `compute_private_umaps`
 
 ```python
-spVIPES.utils.compute_private_umaps(
+spVIPESmulti.utils.compute_private_umaps(
     adatas_per_group,
-    obsm_key="X_spVIPES_private",
+    obsm_key="X_spVIPESmulti_private",
     n_neighbors=15,
     min_dist=0.3,
-    umap_key="X_umap_spvipes_private",
+    umap_key="X_umap_spvipesmulti_private",
 )
 ```
 
@@ -599,15 +601,15 @@ Computes a UMAP embedding of each group's private latent. Accepts a
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `adatas_per_group` | `dict[str, AnnData]` | — | Mapping from group name to per-group AnnData. |
-| `obsm_key` | `str` | `"X_spVIPES_private"` | Source key in each group's `obsm`. |
+| `obsm_key` | `str` | `"X_spVIPESmulti_private"` | Source key in each group's `obsm`. |
 | `n_neighbors` | `int` | `15` | Number of neighbours. |
 | `min_dist` | `float` | `0.3` | UMAP `min_dist`. |
-| `umap_key` | `str` | `"X_umap_spvipes_private"` | Destination key in each group's `obsm`. |
+| `umap_key` | `str` | `"X_umap_spvipesmulti_private"` | Destination key in each group's `obsm`. |
 
 ```python
 adatas = {"day0": adata_g0, "day3": adata_g1}
-spVIPES.utils.compute_private_umaps(adatas)
-spVIPES.pl.umap_private(adatas, color="cell_type")
+spVIPESmulti.utils.compute_private_umaps(adatas)
+spVIPESmulti.pl.umap_private(adatas, color="cell_type")
 ```
 
 ---
@@ -615,7 +617,7 @@ spVIPES.pl.umap_private(adatas, color="cell_type")
 ### `get_top_genes`
 
 ```python
-spVIPES.utils.get_top_genes(
+spVIPESmulti.utils.get_top_genes(
     loadings_df=None,
     *,
     model=None,
@@ -632,7 +634,7 @@ a pre-computed DataFrame or directly from a fitted model.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `loadings_df` | `pd.DataFrame or None` | `None` | Pre-computed loadings (shape `(n_genes, n_dims)`). If `None`, `model` must be provided. |
-| `model` | object | `None` | Fitted spVIPES model used to fetch loadings automatically. |
+| `model` | object | `None` | Fitted spVIPESmulti model used to fetch loadings automatically. |
 | `group_idx` | `int` | `0` | Group index for `model.get_loadings()`. |
 | `latent_type` | `str` | `"shared"` | `"shared"` or `"private"`. |
 | `n_top` | `int` | `10` | Number of top genes per dimension. |
@@ -644,7 +646,7 @@ a pre-computed DataFrame or directly from a fitted model.
 - `top_genes` — when `signed=False`
 
 ```python
-top = spVIPES.utils.get_top_genes(model=model, n_top=5)
+top = spVIPESmulti.utils.get_top_genes(model=model, n_top=5)
 print(top[["dim", "pos_genes"]].to_string(index=False))
 ```
 
@@ -653,7 +655,7 @@ print(top[["dim", "pos_genes"]].to_string(index=False))
 ### `score_cells_on_factor`
 
 ```python
-spVIPES.utils.score_cells_on_factor(
+spVIPESmulti.utils.score_cells_on_factor(
     adata,
     dim_idx,
     obsm_key,
@@ -672,26 +674,26 @@ when you only want to colour plots by one specific factor.
 | `col_name` | `str or None` | `None` | Obs column name. Defaults to `"{obsm_key_stripped}_{dim_idx}"`. |
 
 ```python
-spVIPES.utils.score_cells_on_factor(adata_g0, dim_idx=2, obsm_key="X_spVIPES_private_g0")
-sc.pl.violin(adata_g0, "spVIPES_private_g0_2", groupby="cell_type")
+spVIPESmulti.utils.score_cells_on_factor(adata_g0, dim_idx=2, obsm_key="X_spVIPESmulti_private_g0")
+sc.pl.violin(adata_g0, "spVIPESmulti_private_g0_2", groupby="cell_type")
 ```
 
 ---
 
 ## Plotting
 
-The `spVIPES.pl` module provides standalone plotting functions that accept
+The `spVIPESmulti.pl` module provides standalone plotting functions that accept
 pre-computed arrays or AnnData objects. All functions can be used independently
 of the training workflow.
 
 ```python
-import spVIPES
+import spVIPESmulti
 ```
 
 ### `heatmap_loadings`
 
 ```python
-spVIPES.pl.heatmap_loadings(
+spVIPESmulti.pl.heatmap_loadings(
     loadings_df=None,
     *,
     model=None,
@@ -709,7 +711,7 @@ every latent dimension. Requires `seaborn`.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `loadings_df` | `pd.DataFrame or None` | `None` | Pre-computed loadings. If `None`, `model` must be provided. |
-| `model` | object | `None` | Fitted spVIPES model. |
+| `model` | object | `None` | Fitted spVIPESmulti model. |
 | `group_idx` | `int` | `0` | Group index for `model.get_loadings()`. |
 | `latent_type` | `str` | `"shared"` | `"shared"` or `"private"`. |
 | `n_top` | `int` | `5` | Number of top genes per dimension. |
@@ -719,7 +721,7 @@ every latent dimension. Requires `seaborn`.
 Returns the `Axes` object for further customisation.
 
 ```python
-ax = spVIPES.pl.heatmap_loadings(model=model, n_top=10)
+ax = spVIPESmulti.pl.heatmap_loadings(model=model, n_top=10)
 ax.figure.savefig("loadings.pdf")
 ```
 
@@ -728,7 +730,7 @@ ax.figure.savefig("loadings.pdf")
 ### `umap_shared`
 
 ```python
-spVIPES.pl.umap_shared(adata, color, basis="X_umap_spvipes_shared", **kwargs)
+spVIPESmulti.pl.umap_shared(adata, color, basis="X_umap_spvipesmulti_shared", **kwargs)
 ```
 
 Thin wrapper around `scanpy.pl.embedding` that defaults `basis` to the key
@@ -738,11 +740,11 @@ written by `compute_shared_umap`. All extra keyword arguments are forwarded.
 |---|---|---|---|
 | `adata` | `AnnData` | — | AnnData with the shared UMAP in `obsm[basis]`. |
 | `color` | `str or list[str]` | — | `adata.obs` key(s) or gene name(s) to colour by. |
-| `basis` | `str` | `"X_umap_spvipes_shared"` | Key in `adata.obsm` with 2-D coordinates. |
+| `basis` | `str` | `"X_umap_spvipesmulti_shared"` | Key in `adata.obsm` with 2-D coordinates. |
 | `**kwargs` | | | Forwarded to `scanpy.pl.embedding`. |
 
 ```python
-spVIPES.pl.umap_shared(adata, color=["cell_type", "groups"])
+spVIPESmulti.pl.umap_shared(adata, color=["cell_type", "groups"])
 ```
 
 ---
@@ -750,10 +752,10 @@ spVIPES.pl.umap_shared(adata, color=["cell_type", "groups"])
 ### `umap_private`
 
 ```python
-spVIPES.pl.umap_private(
+spVIPESmulti.pl.umap_private(
     adatas_per_group,
     color,
-    basis="X_umap_spvipes_private",
+    basis="X_umap_spvipesmulti_private",
     ncols=3,
     figsize=None,
     **kwargs,
@@ -767,13 +769,13 @@ Creates a grid of per-group private UMAP panels. Returns the
 |---|---|---|---|
 | `adatas_per_group` | `dict[str, AnnData]` | — | Mapping from group name to AnnData (built by `compute_private_umaps`). |
 | `color` | `str` | — | Single `adata.obs` key or gene name to colour all panels. |
-| `basis` | `str` | `"X_umap_spvipes_private"` | Key in each group's `obsm`. |
+| `basis` | `str` | `"X_umap_spvipesmulti_private"` | Key in each group's `obsm`. |
 | `ncols` | `int` | `3` | Number of columns in the grid. |
 | `figsize` | `tuple or None` | auto | Total figure size (defaults to `(5*ncols, 4*nrows)`). |
 | `**kwargs` | | | Forwarded to `scanpy.pl.embedding`. |
 
 ```python
-fig = spVIPES.pl.umap_private(adatas, color="cell_type")
+fig = spVIPESmulti.pl.umap_private(adatas, color="cell_type")
 fig.savefig("private_umaps.pdf")
 ```
 
@@ -782,7 +784,7 @@ fig.savefig("private_umaps.pdf")
 ### `factor_violin`
 
 ```python
-spVIPES.pl.factor_violin(
+spVIPESmulti.pl.factor_violin(
     adata,
     dim_idx,
     groupby,
@@ -808,8 +810,8 @@ via `score_cells_on_factor`.
 | `**kwargs` | | | Forwarded to `scanpy.pl.violin`. |
 
 ```python
-spVIPES.pl.factor_violin(
-    adata_g0, dim_idx=1, groupby="cell_type", obsm_key="X_spVIPES_private_g0"
+spVIPESmulti.pl.factor_violin(
+    adata_g0, dim_idx=1, groupby="cell_type", obsm_key="X_spVIPESmulti_private_g0"
 )
 ```
 
@@ -818,21 +820,21 @@ spVIPES.pl.factor_violin(
 ### `training_curves`
 
 ```python
-spVIPES.pl.training_curves(model, metrics=None, figsize=None)
+spVIPESmulti.pl.training_curves(model, metrics=None, figsize=None)
 ```
 
 Multi-panel plot of training history metrics. One sub-panel per metric.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `model` | object | — | Fitted spVIPES model with a `history` attribute. |
+| `model` | object | — | Fitted spVIPESmulti model with a `history` attribute. |
 | `metrics` | `list[str] or None` | `None` | Keys from `model.history` to plot. `None` plots all available. |
 | `figsize` | `tuple or None` | auto | Total figure size. |
 
 Returns a `matplotlib.figure.Figure`.
 
 ```python
-fig = spVIPES.pl.training_curves(model)
+fig = spVIPESmulti.pl.training_curves(model)
 fig.savefig("training.pdf")
 ```
 
@@ -841,7 +843,7 @@ fig.savefig("training.pdf")
 ### `loadings_dotplot`
 
 ```python
-spVIPES.pl.loadings_dotplot(
+spVIPESmulti.pl.loadings_dotplot(
     adata,
     dims,
     groupby,
@@ -865,14 +867,14 @@ loadings are collected and passed as `var_names`.
 | `dims` | `list[int] or list[str]` | — | Dimensions to visualise (integer indices or column name strings). |
 | `groupby` | `str` | — | Column in `adata.obs` for the y-axis grouping. |
 | `loadings_df` | `pd.DataFrame or None` | `None` | Pre-computed loadings. If `None`, `model` must be provided. |
-| `model` | object | `None` | Fitted spVIPES model. |
+| `model` | object | `None` | Fitted spVIPESmulti model. |
 | `group_idx` | `int` | `0` | Group index for `model.get_loadings()`. |
 | `latent_type` | `str` | `"shared"` | `"shared"` or `"private"`. |
 | `n_top` | `int` | `5` | Number of top genes per dimension. |
 | `**kwargs` | | | Forwarded to `scanpy.pl.dotplot`. |
 
 ```python
-spVIPES.pl.loadings_dotplot(adata, dims=[0, 2, 4], groupby="cell_type", model=model)
+spVIPESmulti.pl.loadings_dotplot(adata, dims=[0, 2, 4], groupby="cell_type", model=model)
 ```
 
 ---
@@ -880,7 +882,7 @@ spVIPES.pl.loadings_dotplot(adata, dims=[0, 2, 4], groupby="cell_type", model=mo
 ## Internals
 
 These classes are part of the public package namespace but are primarily used
-internally or by advanced users extending spVIPES.
+internally or by advanced users extending spVIPESmulti.
 
 ### `AnnDataManager`
 
@@ -894,7 +896,7 @@ registration, data retrieval, and state validation for a registered AnnData.
 
     data._manager.AnnDataManager
 
-.. autoclass:: spVIPES.data._manager.AnnDataManager
+.. autoclass:: spVIPESmulti.data._manager.AnnDataManager
     :members:
     :undoc-members:
     :show-inheritance:
@@ -913,7 +915,7 @@ groups to match the largest group size within each epoch.
 
     dataloaders._concat_dataloader.ConcatDataLoader
 
-.. autoclass:: spVIPES.dataloaders._concat_dataloader.ConcatDataLoader
+.. autoclass:: spVIPESmulti.dataloaders._concat_dataloader.ConcatDataLoader
     :members:
     :undoc-members:
     :show-inheritance:
@@ -931,7 +933,7 @@ Single-group DataLoader wrapping an `AnnDataManager`.
 
     dataloaders._ann_dataloader.AnnDataLoader
 
-.. autoclass:: spVIPES.dataloaders._ann_dataloader.AnnDataLoader
+.. autoclass:: spVIPESmulti.dataloaders._ann_dataloader.AnnDataLoader
     :members:
     :undoc-members:
     :show-inheritance:

@@ -10,7 +10,7 @@ disentanglement *metric*. What we implement here is a mix of:
   * an optional prototype InfoNCE on the shared latent.
 
 Each preset is a dict of weight overrides. Users select a preset via
-``disentangle_preset=...`` on the :class:`~spVIPES.model.spVIPES` model, and
+``disentangle_preset=...`` on the :class:`~spVIPESmulti.model.spVIPESmulti` model, and
 may further override individual weights by passing them explicitly. ``None``
 on a per-weight kwarg means "use the preset's value"; a numeric value
 (including ``0.0``) overrides the preset for that component.

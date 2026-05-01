@@ -42,7 +42,7 @@ import torch
 from sklearn.metrics import adjusted_rand_score, silhouette_score
 from sklearn.neighbors import NearestNeighbors
 
-import spVIPES
+import spVIPESmulti
 
 SEED = 0
 N_PER_GROUP = 1000
@@ -125,10 +125,10 @@ def split_modalities(adata):
 
 def prepare(adata):
     groups = split_modalities(adata)
-    prepared = spVIPES.data.prepare_multimodal_adatas(
+    prepared = spVIPESmulti.data.prepare_multimodal_adatas(
         groups, modality_likelihoods={"rna": "nb", "protein": "nb"}
     )
-    spVIPES.model.spVIPES.setup_anndata(
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(
         prepared, groups_key="groups", label_key="cell_types",
         modality_likelihoods={"rna": "nb", "protein": "nb"},
     )
@@ -246,7 +246,7 @@ def extract_history_summary(model):
 def train_and_score(adata, *, label, **disentangle_kwargs):
     set_seeds(SEED)
     t0 = perf_counter()
-    model = spVIPES.model.spVIPES(
+    model = spVIPESmulti.model.spVIPESmulti(
         adata,
         n_hidden=N_HIDDEN,
         n_dimensions_shared=N_SHARED,
@@ -378,7 +378,7 @@ def write_report(rows: list[dict]) -> None:
 
 def main():
     print("=" * 70)
-    print(" spVIPES multimodal disentanglement empirical validation (P8)")
+    print(" spVIPESmulti multimodal disentanglement empirical validation (P8)")
     print("=" * 70)
     print("Loading data ...")
     adata = load_data()

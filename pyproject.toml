@@ -3,21 +3,23 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [project]
-name = "spVIPES"
-version = "0.3.0"
+name = "spVIPESmulti"
+version = "1.0.0"
 description = "Shared-private Variational Inference with Product of Experts and Supervision"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
 authors = [
+    {name = "Mikhael Dito Manurung"},
     {name = "Claudio Novella Rausell"},
 ]
 maintainers = [
+    {name = "Mikhael Dito Manurung"},
     {name = "Claudio Novella Rausell", email = "c.novella_rausell@lumc.nl"},
 ]
-urls.Documentation = "https://spVIPES.readthedocs.io/"
-urls.Source = "https://github.com/nrclaudio/spVIPES"
-urls.Home-page = "https://github.com/nrclaudio/spVIPES"
+urls.Documentation = "https://spVIPESmulti.readthedocs.io/"
+urls.Source = "https://github.com/mdmanurung/spVIPESmulti"
+urls.Home-page = "https://github.com/mdmanurung/spVIPESmulti"
 dependencies = [
     "anndata>=0.10",
     # for debug logging (referenced from the issue template)
@@ -54,10 +56,10 @@ test = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ['src/spVIPES']
+packages = ['src/spVIPESmulti']
 
 [tool.coverage.run]
-source = ["spVIPES"]
+source = ["spVIPESmulti"]
 omit = [
     "**/test_*.py",
 ]

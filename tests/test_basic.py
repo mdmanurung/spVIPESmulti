@@ -1,10 +1,10 @@
 import pytest
 
-import spVIPES
+import spVIPESmulti
 
 
 def test_package_has_version():
-    assert spVIPES.__version__ is not None
+    assert spVIPESmulti.__version__ is not None
 
 
 @pytest.mark.skip(reason="This decorator should be removed when test passes.")

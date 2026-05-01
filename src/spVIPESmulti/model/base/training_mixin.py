@@ -63,7 +63,7 @@ class PatchedTrainRunner(OrigTrainRunner):
         self.model.to_device(self.device)
         self.model.trainer = self.trainer
 
-from spVIPES.data._multi_datasplitter import MultiGroupDataSplitter
+from spVIPESmulti.data._multi_datasplitter import MultiGroupDataSplitter
 
 
 class MultiGroupTrainingMixin:
@@ -83,7 +83,7 @@ class MultiGroupTrainingMixin:
         **trainer_kwargs,
     ) -> None:
         """
-        Train a multigroup spVIPES model.
+        Train a multigroup spVIPESmulti model.
 
         This method trains the model using a custom data splitter that handles
         multiple groups of cells separately while maintaining the shared-private
