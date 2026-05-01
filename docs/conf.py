@@ -42,6 +42,8 @@ html_context = {
     "conf_py_path": "/docs/",  # Path in the checkout to the docs root
 }
 
+ogp_site_url = repository_url
+
 # -- General configuration ---------------------------------------------------
 
 # Add any Sphinx extension module names here, as strings.
@@ -107,14 +109,14 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "sphinx_book_theme"
+html_theme = "furo"
 html_static_path = ["_static"]
 html_title = project_name
 
 html_theme_options = {
-    "repository_url": repository_url,
-    "use_repository_button": True,
-    "path_to_docs": "docs/",
+    "source_repository": repository_url,
+    "source_branch": "main",
+    "source_directory": "docs/",
 }
 
 pygments_style = "default"
