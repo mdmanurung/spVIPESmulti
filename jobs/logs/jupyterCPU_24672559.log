@@ -1,0 +1,64 @@
+JupyterLab running on: res-hpc-exe054.researchlumc.nl:8860
+SSH tunnel command:
+ssh -N -L 8860:res-hpc-exe054.researchlumc.nl:8860 mdmanurung@res-hpc-lo02.researchlumc.nl -o ServerAliveInterval=60 -o ServerAliveCountMax=10
+[I 2026-05-04 17:24:27.473 ServerApp] jupyter_copilot | extension was successfully linked.
+[I 2026-05-04 17:24:27.473 ServerApp] jupyter_lsp | extension was successfully linked.
+[I 2026-05-04 17:24:27.478 ServerApp] jupyter_server_terminals | extension was successfully linked.
+[I 2026-05-04 17:24:27.492 ServerApp] jupyterlab | extension was successfully linked.
+[I 2026-05-04 17:24:31.054 ServerApp] notebook_shim | extension was successfully linked.
+[I 2026-05-04 17:24:31.169 ServerApp] notebook_shim | extension was successfully loaded.
+[I 2026-05-04 17:24:31.169 ServerApp] jupyter_copilot | Loading server extension
+[E 2026-05-04 17:24:31.171 ServerApp] Error: Could not find the specified file or directory. Full error: [Errno 2] No such file or directory: 'node'
+[E 2026-05-04 17:24:31.172 ServerApp] Current working directory: /exports/para-lipg-hpc/mdmanurung/spVIPESmulti
+[W 2026-05-04 17:24:31.172 ServerApp] jupyter_copilot | extension failed loading with message: FileNotFoundError(2, 'No such file or directory')
+    Traceback (most recent call last):
+      File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi/lib/python3.13/site-packages/jupyter_server/extension/manager.py", line 402, in load_extension
+        extension.load_all_points(self.serverapp)
+        ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+      File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi/lib/python3.13/site-packages/jupyter_server/extension/manager.py", line 269, in load_all_points
+        return [self.load_point(point_name, serverapp) for point_name in self.extension_points]
+                ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+      File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi/lib/python3.13/site-packages/jupyter_server/extension/manager.py", line 255, in load_point
+        return point.load(serverapp)
+               ~~~~~~~~~~^^^^^^^^^^^
+      File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi/lib/python3.13/site-packages/jupyter_server/extension/manager.py", line 176, in load
+        return loader(serverapp)
+      File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi/lib/python3.13/site-packages/jupyter_copilot/__init__.py", line 35, in _load_jupyter_server_extension
+        setup_handlers(server_app)
+        ~~~~~~~~~~~~~~^^^^^^^^^^^^
+      File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi/lib/python3.13/site-packages/jupyter_copilot/handlers.py", line 334, in setup_handlers
+        lsp_client = LSPWrapper(logging)
+      File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi/lib/python3.13/site-packages/jupyter_copilot/lsp.py", line 25, in __init__
+        self.process = self.__spawn_process()
+                       ~~~~~~~~~~~~~~~~~~~~^^
+      File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi/lib/python3.13/site-packages/jupyter_copilot/lsp.py", line 61, in __spawn_process
+        process = subprocess.Popen(
+            self.spawn_command,
+        ...<4 lines>...
+            bufsize=0
+        )
+      File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi/lib/python3.13/subprocess.py", line 1039, in __init__
+        self._execute_child(args, executable, preexec_fn, close_fds,
+        ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            pass_fds, cwd, env,
+                            ^^^^^^^^^^^^^^^^^^^
+        ...<5 lines>...
+                            gid, gids, uid, umask,
+                            ^^^^^^^^^^^^^^^^^^^^^^
+                            start_new_session, process_group)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi/lib/python3.13/subprocess.py", line 1991, in _execute_child
+        raise child_exception_type(errno_num, err_msg, err_filename)
+    FileNotFoundError: [Errno 2] No such file or directory: 'node'
+[I 2026-05-04 17:24:31.210 ServerApp] jupyter_lsp | extension was successfully loaded.
+[I 2026-05-04 17:24:31.211 ServerApp] jupyter_server_terminals | extension was successfully loaded.
+[I 2026-05-04 17:24:31.230 LabApp] JupyterLab extension loaded from /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi/lib/python3.13/site-packages/jupyterlab
+[I 2026-05-04 17:24:31.230 LabApp] JupyterLab application directory is /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi/share/jupyter/lab
+[I 2026-05-04 17:24:31.246 LabApp] Extension Manager is 'pypi'.
+[I 2026-05-04 17:24:31.794 ServerApp] jupyterlab | extension was successfully loaded.
+[I 2026-05-04 17:24:31.794 ServerApp] Serving notebooks from local directory: /exports/para-lipg-hpc/mdmanurung/spVIPESmulti
+[I 2026-05-04 17:24:31.794 ServerApp] Jupyter Server 2.17.0 is running at:
+[I 2026-05-04 17:24:31.794 ServerApp] http://res-hpc-exe054.researchlumc.nl:8860/lab
+[I 2026-05-04 17:24:31.794 ServerApp]     http://127.0.0.1:8860/lab
+[I 2026-05-04 17:24:31.794 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[I 2026-05-04 17:24:32.174 ServerApp] Skipped non-installed server(s): basedpyright, bash-language-server, dockerfile-language-server-nodejs, javascript-typescript-langserver, jedi-language-server, julia-language-server, pyrefly, pyright, python-language-server, python-lsp-server, r-languageserver, sql-language-server, texlab, typescript-language-server, unified-language-server, vscode-css-languageserver-bin, vscode-html-languageserver-bin, vscode-json-languageserver-bin, yaml-language-server

@@ -282,10 +282,11 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         print("=== spVIPESmulti AnnData Setup ===")
         print(f"Setting up with groups_key: '{groups_key}'")
 
+        anndata_fields.append(CategoricalObsField("indices", "indices"))
+
         if label_key is not None:
             print(f"✓ Labels: Using '{label_key}' from adata.obs")
             anndata_fields.append(CategoricalObsField("labels", label_key))
-            anndata_fields.append(CategoricalObsField("indices", "indices"))
 
         print("\n--- Product of Experts (PoE) Configuration ---")
         if label_key is not None:
@@ -413,7 +414,8 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
                         theta = outputs["private_stats"][g]["theta"]
                     latent_private[g].append(theta.cpu())
 
-                original_indices[g].append(per_group[g]["indices"].cpu())
+                _idx = per_group[g].get("indices")
+                original_indices[g].append(_idx.cpu() if _idx is not None else torch.arange(per_group[g][REGISTRY_KEYS.X_KEY].shape[0]))
 
                 # Multimodal: collect per-modality private latents
                 if is_multimodal and "per_modality_private" in outputs:

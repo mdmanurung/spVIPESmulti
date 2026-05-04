@@ -33,3 +33,6 @@ CLAUDE.md
 data/*
 docs/notebooks/data/*
 *.h5ad
+*.npy
+*.pt
+*.csv
