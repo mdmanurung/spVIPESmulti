@@ -1,6 +1,6 @@
 """Empirical validation of the spVIPESmulti disentanglement objective.
 
-Implements the verification checklist from PLANS.md against a real multi-group
+Implements the verification checklist from PLAN.md against a real multi-group
 single-cell dataset:
 
 | Metric                        | Tool                       | Latent    | Direction |
