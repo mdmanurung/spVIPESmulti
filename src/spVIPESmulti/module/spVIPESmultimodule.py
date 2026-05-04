@@ -438,7 +438,7 @@ class spVIPESmultimodule(BaseModuleClass):
         x = {i: group[REGISTRY_KEYS.X_KEY] for i, group in enumerate(per_group)}
         batch_index = [group[REGISTRY_KEYS.BATCH_KEY] for group in per_group]
         groups = [group["groups"] for group in per_group]
-        global_indices = [group["indices"] for group in per_group]
+        global_indices = [group.get("indices", None) for group in per_group]
 
         input_dict = {
             "x": x,
@@ -632,7 +632,16 @@ class spVIPESmultimodule(BaseModuleClass):
     ):
         if self.use_labels and labels is not None:
             return self._label_based_poe(shared_stats, labels)
-        raise ValueError("label_key must be provided in setup_anndata for supervised PoE.")
+        # Unsupervised fallback: combine all groups via PoE without label alignment
+        poe_result = self._poe_n(shared_stats)
+        for g in sorted(poe_result.keys()):
+            poe_result[g]["logtheta_qz"] = Normal(
+                poe_result[g]["logtheta_loc"],
+                poe_result[g]["logtheta_scale"].clamp(min=1e-6),
+            )
+            poe_result[g]["logtheta_log_z"] = poe_result[g]["logtheta_qz"].rsample()
+            poe_result[g]["logtheta_theta"] = F.softmax(poe_result[g]["logtheta_log_z"], -1)
+        return poe_result
 
     def _paired_poe(self, *args, **kwargs):
         raise NotImplementedError("Paired PoE has been removed. Use label-based PoE (label_key=...) instead.")
