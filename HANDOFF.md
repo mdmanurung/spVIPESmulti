@@ -1,38 +1,15 @@
 # HANDOFF.md
 
-Purpose: short baton pass for the next fresh Copilot session.
+Purpose: next-session bootstrap in under one minute.
 
-Read this first, then read `PLAN.md` and `PROGRESS.md`.
+Read order: HANDOFF.md → PLAN.md → PROGRESS.md → ImplementationPlan.md (relevant section only)
 
 ---
 
-## Current State (2026-05-04)
+## Current State (2026-05-05)
 
-- Documentation roles were intentionally separated to avoid overlap.
-- No model code changes were made yet for MrVI DA.
-- Next implementation target is MrVI-style differential abundance.
+All planned roadmap items complete (R1–R4). Validation baseline: `pytest -v` → `173 passed, 2 skipped`; smoke → `7/7`.
 
-## What To Do Next
+## Immediate Next Action
 
-1. Open `FeaturePlanMrvi.md` and confirm/lock the DA return object.
-2. Implement posterior plumbing and DA APIs in `src/spVIPESmulti/model/spvipesmulti.py`.
-3. Add tests in `tests/test_differential_abundance.py`.
-4. Run validation commands and log outcomes in `PROGRESS.md`.
-5. Update `PLAN.md` statuses.
-
-## Critical Constraints
-
-- Warn users when DA is run without shared-latent alignment settings.
-- Avoid modifying training/loss logic for this feature.
-- Keep backward compatibility for existing setup/inference paths.
-
-## Validation Commands
-
-- `pytest tests/test_differential_abundance.py -v`
-- `pytest -v`
-- `python scripts/smoke_vignettes.py`
-
-## If You Are Out Of Time
-
-- Leave `PLAN.md` and `PROGRESS.md` updated with exact stop point.
-- Record any open questions in `FeaturePlanMrvi.md` under Open Questions.
+No active item. Select from PLAN.md Deferred Backlog or propose a new roadmap candidate, then move it to Current Iteration before coding.

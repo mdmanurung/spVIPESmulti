@@ -12,6 +12,10 @@ spVIPESmulti v1.0.0 — shared-private Variational Inference with Product of Exp
 | `setup_anndata` | Class method | `spVIPESmulti.model.spVIPESmulti.setup_anndata` |
 | `train` | Instance method | `model.train(...)` |
 | `get_latent_representation` | Instance method | `model.get_latent_representation(...)` |
+| `evaluate` | Instance method | `model.evaluate(...)` |
+| `get_enrichment_scores` | Instance method | `model.get_enrichment_scores(...)` |
+| `summarize_enrichment` | Instance method | `model.summarize_enrichment(...)` |
+| `interpretation_report` | Instance method | `model.interpretation_report(...)` |
 | `get_loadings` | Instance method | `model.get_loadings()` |
 | `prepare_adatas` | Function | `spVIPESmulti.data.prepare_adatas` |
 | `prepare_multimodal_adatas` | Function | `spVIPESmulti.data.prepare_multimodal_adatas` |
@@ -27,6 +31,8 @@ spVIPESmulti v1.0.0 — shared-private Variational Inference with Product of Exp
 | `factor_violin` | Function | `spVIPESmulti.pl.factor_violin` |
 | `training_curves` | Function | `spVIPESmulti.pl.training_curves` |
 | `loadings_dotplot` | Function | `spVIPESmulti.pl.loadings_dotplot` |
+| `enrichment_heatmap` | Function | `spVIPESmulti.pl.enrichment_heatmap` |
+| `interpretation_dashboard` | Function | `spVIPESmulti.pl.interpretation_dashboard` |
 | `spVIPESmultimodule` | PyTorch module | `spVIPESmulti.module.spVIPESmultimodule` |
 | `Encoder` | Neural network | `spVIPESmulti.nn.Encoder` |
 | `LinearDecoderSPVIPE` | Neural network | `spVIPESmulti.nn.LinearDecoderSPVIPE` |
@@ -134,6 +140,27 @@ For multimodal data or N > 2 groups, label-based PoE is recommended.
 
 ---
 
+### `evaluate`
+
+```python
+report = model.evaluate(
+    label_key="cell_type",
+    z_shared_key="X_spvm_shared",  # optional; extracts from model if omitted
+    include_private=True,
+)
+```
+
+Returns a dictionary with:
+
+- `report["metrics"]`: integration-quality diagnostics for `z_shared` and, optionally, per-group `z_private`
+- `report["metadata"]`: evaluation configuration (`n_cells`, `n_groups`, `k`, `label_key`, `include_private`, ...)
+- `report["held_out_metrics"]`: latest validation metrics from training history when the model was trained with a validation split
+- `report["warnings"]`: informational fallbacks (for example, missing precomputed embeddings)
+
+When validation metrics are present, `report["held_out_metrics"]["held_out_nll"]` aliases the latest `reconstruction_loss_validation` value.
+
+---
+
 ### `train`
 
 ```python
@@ -220,6 +247,57 @@ batch-normalisation-scaled weights from the linear decoder.
 > decoder weights directly via `model.module.decoders[(group_idx, modality)]`.
 > See the tutorial notebook (§16) for a ready-to-use `multimodal_loadings()`
 > helper function.
+
+---
+
+### `get_enrichment_scores`
+
+```python
+payload = model.get_enrichment_scores(
+    network,
+    methods=["ora", "gsea", "ulm"],
+    obsm_key="X_spvm_enrichment",
+    uns_key="spvm_enrichment",
+)
+```
+
+Runs optional decoupler-backed enrichment methods and returns:
+
+- `payload["scores_df"]`: per-cell enrichment scores (`n_cells x n_programs`)
+- `payload["metadata"]`: method, overlap diagnostics, storage keys, warnings
+
+If `write_to_adata=True` (default), scores are written to `adata.obsm[obsm_key]`
+and provenance to `adata.uns[uns_key]`.
+
+---
+
+### `summarize_enrichment`
+
+```python
+summary = model.summarize_enrichment(payload["scores_df"], groupby="groups")
+```
+
+Aggregates enrichment scores by any `adata.obs` grouping column using a pandas
+aggregation function (`mean` by default).
+
+---
+
+### `interpretation_report`
+
+```python
+report = model.interpretation_report(
+    payload["scores_df"],
+    groupby="groups",
+    label_key="cell_type",
+)
+```
+
+Returns a compact dictionary with:
+
+- `enrichment_summary`: aggregated enrichment matrix
+- `top_programs`: top-N programs by absolute score per group
+- `integration_metrics`: optional integration table (when shared latent and labels are available)
+- `warnings`: informational warnings
 
 ---
 

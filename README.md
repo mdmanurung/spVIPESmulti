@@ -55,6 +55,12 @@ With test/dev extras:
 pip install -e ".[dev,test]"
 ```
 
+With enrichment extras (decoupler integration):
+
+```bash
+pip install -e ".[enrichment]"
+```
+
 ## Quick Start
 
 ### Data Preparation
@@ -81,6 +87,8 @@ combined = spVIPESmulti.data.prepare_multimodal_adatas({
 ### Basic Workflow
 
 ```python
+import pandas as pd
+
 # 1. Register the AnnData
 spVIPESmulti.model.spVIPESmulti.setup_anndata(
     combined,
@@ -90,15 +98,39 @@ spVIPESmulti.model.spVIPESmulti.setup_anndata(
 )
 
 # 2. Build and train
-group_indices_list = [list(map(int, g)) for g in combined.uns["groups_obs_indices"]]
 model = spVIPESmulti.model.spVIPESmulti(combined)
-model.train(group_indices_list, max_epochs=200)
+model.train(max_epochs=200)
 
-# 3. Extract representations
-latents = model.get_latent_representation(group_indices_list, batch_size=512)
-spVIPESmulti.utils.store_latents(combined, latents, group_indices_list)
-# writes: combined.obsm["X_spVIPESmulti_shared"], combined.obsm["X_spVIPESmulti_private_g0"], ...
+# 3. One-call embedding (compute + store)
+payload = model.embed(batch_size=512)
+# writes: combined.obsm["X_spvm_shared"], combined.obsm["X_spvm_private_<group>"], ...
+# payload["keys"] returns the exact keys written
+
+# 4. Interpretation-first enrichment (includes ULM)
+network = pd.DataFrame(
+    {
+        "source": ["TF1", "TF1", "TF1", "TF1", "TF1"],
+        "target": ["Gene1", "Gene2", "Gene3", "Gene4", "Gene5"],
+    }
+)
+res = model.get_enrichment_scores(network, methods=["ora", "gsea", "ulm"])
+report = model.interpretation_report(
+    res["scores_df"],
+    groupby="groups",
+    label_key="cell_type",  # optional
+)
+
+# 5. Public evaluation API (diagnostics-first)
+evaluation = model.evaluate(
+    label_key="cell_type",
+    z_shared_key=payload["keys"]["shared"],
+    include_private=True,
+)
+# evaluation["metrics"] is a DataFrame with shared/private latent diagnostics
+# evaluation["held_out_metrics"] includes validation ELBO / reconstruction NLL when available
 ```
+
+See the dedicated quick tutorial: [`docs/enrichment_quickstart.md`](docs/enrichment_quickstart.md).
 
 ### Integration Strategies
 
@@ -152,7 +184,6 @@ model = spVIPESmulti.model.spVIPESmulti(
 
 ```python
 model.train(
-    group_indices_list,
     max_epochs=300,
     batch_size=512,
     early_stopping=True,
@@ -285,10 +316,19 @@ eliminate the boilerplate repeated in every analysis notebook.
 
 ### Storing latent representations
 
-After calling `model.get_latent_representation(...)`, use `store_latents` to
-stitch per-group arrays back into `adata.obsm` in original cell order:
+Use `model.embed(...)` for the shortest path (auto-infers groups from
+`adata.uns["groups_obs_indices"]`):
 
 ```python
+payload = model.embed(batch_size=512)
+# payload["keys"]["shared"] == "X_spvm_shared"
+```
+
+If you need manual control over array post-processing, you can still call
+`get_latent_representation(...)` + `store_latents(...)`:
+
+```python
+group_indices_list = [list(map(int, g)) for g in adata.uns["groups_obs_indices"]]
 latents = model.get_latent_representation(group_indices_list, batch_size=512)
 spVIPESmulti.utils.store_latents(adata, latents, group_indices_list)
 # writes: adata.obsm["X_spVIPESmulti_shared"], adata.obsm["X_spVIPESmulti_private_g0"], ...
@@ -321,6 +361,33 @@ ax = spVIPESmulti.pl.heatmap_loadings(model=model, n_top=5)
 
 # Scanpy dotplot of selected dimensions:
 spVIPESmulti.pl.loadings_dotplot(adata, dims=[0, 2, 4], groupby="cell_type", model=model)
+```
+
+### Enrichment and interpretation
+
+Run pathway/TF enrichment directly from the model (optional decoupler feature):
+
+```python
+network = pd.DataFrame(
+    {
+        "source": ["TF1", "TF1", "TF1", "TF1", "TF1"],
+        "target": ["Gene1", "Gene2", "Gene3", "Gene4", "Gene5"],
+    }
+)
+
+res = model.get_enrichment_scores(
+    network,
+    methods=["ora", "gsea", "ulm"],
+    obsm_key="X_spvm_enrichment",
+    uns_key="spvm_enrichment",
+)
+
+summary = model.summarize_enrichment(res["scores_df"], groupby="groups")
+report = model.interpretation_report(
+    res["scores_df"],
+    groupby="groups",
+    label_key="cell_type",  # optional, enables integration metrics in report
+)
 ```
 
 ### Per-factor coloring and violin plots
@@ -358,9 +425,15 @@ fig.savefig("training.pdf")
 | `factor_violin` | `spVIPESmulti.pl` | Violin plot of a single latent factor by cell metadata |
 | `training_curves` | `spVIPESmulti.pl` | Multi-panel plot of training history |
 | `loadings_dotplot` | `spVIPESmulti.pl` | Scanpy dotplot of top genes for selected latent dimensions |
+| `get_enrichment_scores` | `spVIPESmulti.model.spVIPESmulti` | Run ORA/GSEA/ULM enrichment with optional decoupler backend |
+| `summarize_enrichment` | `spVIPESmulti.model.spVIPESmulti` | Aggregate enrichment scores by any `adata.obs` grouping |
+| `interpretation_report` | `spVIPESmulti.model.spVIPESmulti` | Build compact enrichment + integration summary tables |
+| `enrichment_heatmap` | `spVIPESmulti.pl` | Plot per-cell or per-group enrichment heatmaps |
+| `interpretation_dashboard` | `spVIPESmulti.pl` | Two-panel shared-embedding + enrichment dashboard |
 
 ## Documentation & Tutorials
 
+-   [Enrichment quickstart (ORA/GSEA/ULM)](docs/enrichment_quickstart.md) — Interpretation-first workflow with reporting + plotting helpers
 -   [Basic Tutorial](docs/notebooks/Tutorial.ipynb) — Complete walkthrough of spVIPESmulti functionality
 -   [Disentanglement ablation](docs/notebooks/disentangle_ablation.ipynb) — Per-component ablation of the disentanglement objective
 -   [PBMC CITE-seq vaccination](docs/notebooks/pbmc_citeseq_tutorial.ipynb) — Three time-point integration + multimodal appendix

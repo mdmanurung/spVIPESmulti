@@ -7,6 +7,7 @@
 :maxdepth: 1
 
 api.md
+enrichment_quickstart.md
 changelog.md
 template_usage.md
 contributing.md

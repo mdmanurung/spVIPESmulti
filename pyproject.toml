@@ -37,6 +37,9 @@ dev = [
     "pre-commit",
     "twine>=4.0.2"
 ]
+enrichment = [
+    "decoupler>=1.9.2",
+]
 doc = [
     "docutils>=0.8,!=0.18.*,!=0.19.*",
     "sphinx>=4",

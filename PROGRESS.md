@@ -3,45 +3,160 @@
 Purpose: dated execution ledger of what has been implemented, validated, and decided.
 
 How to use:
-- Append new entries; do not rewrite history.
-- Include file-level change summary and verification commands.
-- If a task is incomplete, include clear next action.
+- Add concise milestone entries with verification evidence.
+- Keep implementation detail here, not in PLAN.md or HANDOFF.md.
+- Omit "Next action" footers for completed entries; active pointer lives in HANDOFF.md only.
 
 ---
 
+## 2026-05-05
+
+### R4: Public evaluation API second slice (held-out validation metrics)
+Status: completed
+
+What changed:
+- Enabled validation execution by default in `train()` whenever a validation split exists by setting `check_val_every_n_epoch=1` unless the caller already overrides it.
+- Fixed `PatchedTrainRunner` to pass the multi-group splitter as a Lightning datamodule, preserving validation dataloaders.
+- Updated `MultiGroupDataSplitter` to expose aggregate `n_train` / `n_val` counts and to use evaluation-safe validation/test loaders (`shuffle=False`, `drop_last=False`).
+- Updated `get_latent_representation()` to honor the documented default batch size when `batch_size=None`.
+- Extended `model.evaluate(...)` to expose `held_out_metrics` from training history when available, including `held_out_nll` as an alias of `reconstruction_loss_validation`.
+- Added focused tests for held-out metric extraction and for validation history logging during training.
+
+Verification:
+- Discriminating live check: one-epoch CPU training now reports non-empty validation batches and populates validation history keys (`elbo_validation`, `reconstruction_loss_validation`, `validation_loss`, ...).
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest tests/test_evaluate.py tests/test_lightning_trainer_compat.py -q` passed (`23 passed`).
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest -v` passed (`173 passed, 2 skipped`).
+
+Notes:
+- `held_out_metrics` are sourced from training history on the model's registered AnnData, not recomputed for arbitrary external AnnData objects.
+- This keeps the implementation minimal and consistent with the current training/evaluation architecture.
+
+### R4: Public evaluation API (diagnostics-first)
+Status: completed
+
+What changed:
+- Added `model.evaluate(...)` to `src/spVIPESmulti/model/spvipesmulti.py`.
+- The API computes public, script-free diagnostics for the shared latent and optional private latents using the existing `integration_report(...)` metrics stack.
+- `evaluate(...)` accepts either a precomputed shared embedding (`z_shared_key`) or falls back to `get_latent_representation(...)` when no embedding is present.
+- Added clear metadata and informational warnings to make fallback paths explicit.
+- Kept held-out NLL out of scope for this pass because validation-loss plumbing is still absent in the training path.
+- Added focused unit coverage in `tests/test_evaluate.py` for return schema, embedding fallback, label handling, private-latent rows, and finite shared metrics.
+
+Verification:
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest tests/test_evaluate.py -q` passed (`19 passed`, warnings only).
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest tests/test_evaluate.py tests/test_enrichment.py -q` passed (`26 passed, 1 skipped`).
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest -v` passed (`170 passed, 2 skipped`).
+
+Notes:
+- The repeated auto-inference warning seen in unit tests is expected because each dummy-model fixture is fresh and independently exercises the public fallback path.
+- Held-out NLL remains a follow-up item for the R4 second slice, not a regression in this implementation.
+
+### Inference-path speedup: remove duplicate _split_tensors_by_group call
+Status: completed
+
+What changed:
+- In `_process_batches` (model/spvipesmulti.py), removed the redundant `per_group = self.module._split_tensors_by_group(tensors_by_group)` call that preceded `_get_inference_input`.
+- `_get_inference_input` internally calls `_split_tensors_by_group` and already exposes `global_indices` in its return dict. The batch loop now reads `inference_inputs["global_indices"][g]` and `poe_log_z.shape[0]` for the fallback arange.
+- Saves one full tensor split per batch iteration in every `get_latent_representation` / `embed` / `get_shared_posterior` call chain.
+- `_process_all_cells_with_cycling` is confirmed dead code (not called from any path); left as-is.
+
+Verification:
+- `pytest tests/test_api_boilerplate_reduction.py tests/test_regression_fixes.py tests/test_differential_abundance.py tests/test_lightning_trainer_compat.py tests/test_nf_prior.py -v -q` passed (`32 passed`).
+
+### Full regression + smoke validation
+Status: completed
+
+What changed:
+- Executed repository-wide regression suite and smoke scenarios as required by handoff.
+- Confirmed all MrVI DA additions remain stable under full-suite execution.
+
+Verification:
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest -v` passed (`151 passed, 2 skipped, 64 warnings`, `59.38s`).
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python scripts/smoke_vignettes.py` passed (`7/7` cases).
+
+Notes:
+- Smoke script ran on CUDA (`NVIDIA L40S`) and completed all configured cases.
+- Remaining warnings are pre-existing environment/model warnings; no new regression failures observed.
+
 ## 2026-05-04
 
-### Consolidated PLAN.md + PLANS.md into one canonical planning source
+### R3: MrVI-style differential abundance
 Status: completed
 
 What changed:
-- Merged deferred backlog content (P5/P6/P7 + intake/reactivation rules) into `PLAN.md`.
-- Kept `PLANS.md` as a lightweight compatibility redirect to avoid breaking older references.
-- Updated planning references in `CLAUDE.md` and `ImplementationPlan.md` to point to `PLAN.md`.
-- Updated `scripts/validate_disentanglement.py` header text to reference planning checklist in `PLAN.md`.
+- Added optional sample registration in setup path:
+  - `spVIPESmulti.setup_anndata(..., sample_key=...)` now registers categorical obs field `"sample"`.
+- Added shared-posterior plumbing without touching training/loss:
+  - `_process_batches(...)` now collects per-group shared posterior `loc` and `scale` from `poe_stats`.
+  - `_format_results(...)` now returns original + reordered shared posterior arrays.
+- Added public DA APIs on model class:
+  - `get_shared_posterior(...)`
+  - `get_aggregated_posterior(...)`
+  - `differential_abundance(...)`
+- Added sample-aware aggregation and fallback behavior:
+  - If `sample_key` is absent, DA aggregation falls back to one synthetic sample per group and emits an informational warning.
+- Added alignment precondition warning in `differential_abundance(...)` when both:
+  - `disentangle_group_shared_weight == 0`
+  - `use_jeffreys_integ == False`
+- Added focused tests:
+  - New file `tests/test_differential_abundance.py`.
+  - Covers sign behavior under synthetic shift, output size, sample-subset filtering, fallback warning, and alignment warning.
 
 Verification:
-- Checked for `PLANS.md` references and updated active documentation pointers.
-- Verified no code-path behavior changes in `src/`.
+- `python -m pytest tests/test_differential_abundance.py -v` passed (`5 passed`).
+- `python -m pytest tests/test_regression_fixes.py -q` passed (`17 passed`).
+- Confirmed no static errors in modified model file via editor diagnostics.
 
-Next action:
-- Continue feature work from `PLAN.md` Current Iteration and keep deferred items in `PLAN.md` Deferred Backlog.
+Notes:
+- Full `pytest -v` and `scripts/smoke_vignettes.py` were not re-run in this pass to keep turnaround focused on R3 API delivery and targeted regression checks.
 
-### Documentation system refactor for implementation continuity
+### P2: Second-pass doc compression (MrVI spec focus)
 Status: completed
 
 What changed:
-- Re-scoped `ImplementationPlan.md` into roadmap-only candidates.
-- Re-scoped `FeaturePlanMrvi.md` into a feature-specific implementation spec with checklists.
-- Re-scoped `PLANS.md` into a strict deferred-only backlog.
-- Updated `CLAUDE.md` with a documentation map and fresh-session startup order.
-- Added `PLAN.md` as active execution queue.
-- Added `PROGRESS.md` as dated implementation ledger.
-- Added `HANDOFF.md` as next-session baton pass.
+- Condensed the MrVI DA section in ImplementationPlan.md into a tighter execution contract.
+- Removed repeated narrative while preserving all locked decisions and checklist items.
+- Kept PLAN/PROGRESS synchronization and added explicit update stamps.
 
 Verification:
-- Documentation edits reviewed for non-overlapping responsibilities.
-- No code-path changes made in `src/`.
+- Manual consistency check across PLAN.md, PROGRESS.md, and ImplementationPlan.md completed.
+- Confirmed no feature scope or decision changes; only wording/structure compression.
 
-Next action:
-- Start implementation of MrVI DA from `FeaturePlanMrvi.md` and update this log with concrete code/test results.
+### M1: Consolidated implementation milestone
+Status: completed
+
+What changed:
+- R1 and R2 shipped:
+  - Auto-inferred group indices in train and latent extraction paths.
+  - Added one-call embedding API with transactional key writes.
+- Enrichment and interpretation QoL shipped:
+  - Added enrichment scoring and summarization APIs.
+  - Added network validation helper and interpretation report/plots.
+  - Added optional enrichment dependency wiring and dedicated tests.
+  - Added real decoupler-backed integration coverage.
+- Test hardening and docs updates:
+  - Hardened CUDA-sensitive tests for mixed driver environments.
+  - Added enrichment quickstart and updated README/API docs.
+- Planning system consolidation:
+  - Consolidated planning/spec sources into PLAN.md + ImplementationPlan.md.
+  - Removed obsolete/duplicate planning artifacts.
+
+Verification (high signal):
+- `pytest tests/test_utils.py -q` passed.
+- `pytest tests/test_api_boilerplate_reduction.py -q` passed.
+- `pytest tests/test_enrichment.py -q` passed.
+- `pytest -m integration -k enrichment -v` passed.
+- `CUDA_VISIBLE_DEVICES='' python scripts/smoke_vignettes.py --epochs 1 --cells_per_group 50 --n_hvg 200` passed (`7/7`).
+- Full suite status varied by local CUDA driver state; CPU-safe targeted tests are green.
+
+### P3: Third-pass template normalization
+Status: completed
+
+What changed:
+- Applied a strict short-template style across HANDOFF.md, PLAN.md, PROGRESS.md, ImplementationPlan.md, and CLAUDE.md continuity section.
+- Standardized wording for purpose, usage/read-order, active target, and update stamps.
+- Reduced repeated phrasing without changing active scope or decisions.
+
+Verification:
+- Manual cross-file consistency check completed.
+- Confirmed active target remains R3 MrVI DA and deferred backlog semantics are unchanged.
