@@ -53,6 +53,11 @@ Notes: add optional `reference_group`; force shared-only decode for reference gr
 
 ## Last Updated
 
+- 2026-05-05: Added new shared_15 ranked decoupler extension analysis in the malaria B-cell notebook using DoRothEA TF and PROGENy pathway resources with ULM + MLM and consensus scoring; validated compute, focused TF summary, and final consensus barplots.
+- 2026-05-05: Added new shared_15 ranked-program analyses to the malaria B-cell notebook: curated B-cell marker GSEA/ULM, Hallmark GSEA/ULM, and a separate CollecTRI TF-scoring block using ULM on the full shared_15 loading vector; reran stale failed cells so the new outputs are synchronized.
+- 2026-05-05: Refined malaria B-cell shared_15 enrichment notebook cells to strip the `Negative_` prefix from loadings-derived gene names and reran enrichment against ImmuneSigDB only using the top 100 positive genes; results are weaker than the broader MSigDB screen and mostly monocyte/DC/NK reference signatures.
+- 2026-05-05: Added shared-latent celltype-specificity analysis cells to the malaria B-cell notebook, including one-vs-rest per-dimension AUROC/effect-size ranking, per-dimension best-celltype summaries, and Atypical-focused plots; validated Atypical as strongest on `shared_15` (AUC `0.904`).
+- 2026-05-05: Added notebook-friendly model persistence utility `scripts/save_spvipesmulti_model.py` (CLI + importable helper) to save in-memory trained `spVIPESmulti` objects with scvi-version-tolerant save kwargs.
 - 2026-05-05: Unequal-batch loss aggregation fix completed: single-modal and multimodal loss paths now aggregate per-group/per-modality terms as scalars and provide shape-safe `LossOutput` bookkeeping; regression coverage added for unequal group batch lengths (`2 passed`) plus related training/multimodal suites (`23 passed`).
 - 2026-05-05: Documentation synchronization pass completed: updated README and docs/api for current public APIs (`sample_key`, `embed`, posterior/DA helpers, auto-inferred group indices), removed stale notebook links from docs index, and added an Unreleased changelog note.
 - 2026-05-05: Docs hardening pass completed: documented `strict_likelihood_support` in README/API and corrected stale multimodal `get_loadings()` API note.

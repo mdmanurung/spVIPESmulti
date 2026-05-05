@@ -9,6 +9,142 @@ How to use:
 
 ---
 
+## 2026-05-05 (malaria notebook DoRothEA/PROGENy MLM + consensus)
+
+### N4: Add MLM + consensus scoring for shared_15 with DoRothEA and PROGENy
+Status: completed
+
+What changed:
+- Added a new analysis block in `docs/notebooks/malaria_bcells.ipynb` to score the ranked shared_15 loading vector with both `decoupler.mt.ulm` and `decoupler.mt.mlm`, then aggregate method evidence with `decoupler.mt.consensus`.
+- Added reusable helpers for:
+  - target-symbol harmonization and network filtering/deduplication (`prepare_network_for_ranked_input`),
+  - method execution + consensus aggregation (`run_ulm_mlm_consensus`),
+  - consistent summary-table construction (`summarize_method_outputs`).
+- Ran the new method stack on:
+  - DoRothEA TF network (`dc.op.dorothea(organism="human")`, confidence A/B/C),
+  - PROGENy pathway network (`dc.op.progeny(organism="human")`).
+- Added a focused DoRothEA TF readout table for `TBX21`, `BATF`, `IRF4`, `PAX5`, `RFX5`, `PRDM1`, and `BCL6`.
+- Added a final dual-panel barplot cell showing consensus scores for top positive/negative DoRothEA TFs and PROGENy pathways.
+- Removed temporary notebook probe/introspection cells used to debug decoupler `consensus` payload conventions.
+
+Implementation notes:
+- `decoupler.mt.consensus` with dict input expects keys containing `"score_"`; passing `{"score_ulm": ..., "score_mlm": ...}` resolved prior `list index out of range` failure.
+- Network rows are deduplicated on `source,target` before scoring to prevent repeated-edge assertion failures.
+
+Key results:
+- DoRothEA retained `340` TFs (`9267` edges) after overlap filtering.
+- Top positive DoRothEA consensus TFs: `SIX2`, `SOX10`, `TBX21`, `SPI1`, `LEF1`.
+- Top negative DoRothEA consensus TFs (from the consensus plot): `PRDM14`, `ELF1`, `LYL1`, `BACH1`, `NR5A2`.
+- Focus TF table indicates directional signal with `TBX21` positive and `PRDM1`/`RFX5` negative, but consensus-adjusted significance remains weak (high `consensus_padj`).
+- PROGENy retained `14` pathways (`10732` edges).
+- Top positive PROGENy consensus pathways: `Hypoxia`, `p53`; strongest negatives include `MAPK`, `Estrogen`, `PI3K`.
+
+Files:
+- `docs/notebooks/malaria_bcells.ipynb`
+
+Verification:
+- Executed the main DoRothEA/PROGENy ULM+MLM+consensus compute cell successfully in the live kernel.
+- Executed the focused DoRothEA TF summary cell successfully.
+- Executed the final consensus barplot cell successfully.
+
+## 2026-05-05 (malaria notebook ranked programs + TF scoring)
+
+### N3: Ranked shared_15 marker/pathway and CollecTRI TF analysis
+Status: completed
+
+What changed:
+- Added a new ranked-program analysis block in `docs/notebooks/malaria_bcells.ipynb` that treats the full shared_15 loading vector as the input statistic vector.
+- Added curated B-cell state programs (`atypical_b_cell`, `activated_b_cell`, `naive_memory_b_cell`, `plasma_b_cell`) and scored them with both `decoupler.mt.gsea` and `decoupler.mt.ulm`.
+- Added Hallmark scoring with both `gsea` and `ulm` using `dc.op.hallmark(organism="human")`.
+- Added a separate CollecTRI transcription-factor scoring block using `dc.op.collectri(organism="human")` and `decoupler.mt.ulm`, following the decoupler TF-scoring tutorial pattern but applied to the ranked shared_15 loading vector.
+- Fixed the earlier Hallmark duplicate-edge failure by deduplicating `source`/`target` pairs before decoupler scoring and reran the stale failed cell successfully.
+
+Key results:
+- Curated B-cell marker analysis points strongly to the `atypical_b_cell` program for shared_15:
+  - GSEA `2.137239`
+  - ULM `6.809558`
+- Hallmark results are moderate and led by `UV_RESPONSE_DN`, `XENOBIOTIC_METABOLISM`, `ANGIOGENESIS`, `APICAL_JUNCTION`, `IL2_STAT5_SIGNALING`, and `HEDGEHOG_SIGNALING`.
+- CollecTRI TF scoring did not yield significant TFs after multiple-testing correction (`0` TFs at `padj < 0.05`), but the top positive scores include `TBX21`, `STAT3`, `GATA3`, and `MAF`, while selected B-cell TFs such as `PAX5`, `RFX5`, and `PRDM1` score negative.
+
+Files:
+- `docs/notebooks/malaria_bcells.ipynb`
+
+Verification:
+- Executed the new CollecTRI TF-scoring cell successfully in the live `scvi-test` kernel.
+- Executed the focused TF summary cell and TF barplot cell successfully.
+- Re-executed the ranked marker/Hallmark compute cell successfully after deduplicating Hallmark edges.
+- Re-executed the ranked marker/Hallmark summary and plot cells successfully.
+
+## 2026-05-05 (malaria notebook ImmuneSigDB follow-up)
+
+### N2: ImmuneSigDB-only enrichment for shared_15
+Status: completed
+
+What changed:
+- Updated the shared_15 enrichment notebook cell in `docs/notebooks/malaria_bcells.ipynb` to normalize loading-derived genes by explicitly removing the `Negative_` prefix before matching to external gene sets.
+- Narrowed the enrichment resource from the mixed MSigDB subset to `immunesigdb` only, as a more appropriate immune-focused follow-up.
+- Kept the enrichment query at the top 100 positive shared_15 loading genes.
+- Simplified the follow-up bar plot cell to a single-color ImmuneSigDB view.
+
+Key result:
+- The ImmuneSigDB-only run produced weaker corrected signal than the broader MSigDB screen; top terms cluster around monocyte, dendritic-cell, and NK-related reference signatures.
+- Top ranked terms include `GSE29618_MONOCYTE_VS_PDC_UP`, `GSE21774_CD62L_POS_CD56_BRIGHT_VS_CD62L_NEG_CD56_DIM_NK_CELL_UP`, `GSE30083_SP3_VS_SP4_THYMOCYTE_DN`, and `GSE39916_B_CELL_SPLEEN_VS_PLASMA_CELL_BONE_MARROW_DN`.
+- The best hits all remained above `0.2` FDR, so this should be treated as directional annotation rather than strong pathway-level evidence.
+
+Files:
+- `docs/notebooks/malaria_bcells.ipynb`
+
+Verification:
+- Re-executed the shared_15 enrichment cell successfully in the live `scvi-test` kernel after the `Negative_` prefix normalization.
+- Re-executed the ImmuneSigDB bar plot cell successfully in the live `scvi-test` kernel.
+
+## 2026-05-05 (malaria notebook latent specificity)
+
+### N1: Shared-latent celltype-specificity analysis for malaria B cells
+Status: completed
+
+What changed:
+- Added a notebook analysis cell in `docs/notebooks/malaria_bcells.ipynb` that scores each shared latent dimension against each `cluster_label` using one-vs-rest AUROC and Cohen's $d$.
+- Added two complementary summaries:
+  - best shared dimension per cell type,
+  - best-matching cell type for each shared dimension.
+- Added an Atypical-focused ranking table and a follow-up box/strip plot cell for the top four Atypical-associated shared dimensions.
+- Kept the workflow notebook-local and reused the existing stored shared embedding (`X_spVIPESmulti_shared`) without changing library code.
+
+Key result:
+- `Atypical` is most strongly distinguished by `shared_15` with specificity AUC `0.903941` and Cohen's $d = 1.897346`.
+- Secondary Atypical-associated shared dimensions are `shared_10`, `shared_4` (low in Atypical), `shared_0`, and `shared_8`.
+
+Files:
+- `docs/notebooks/malaria_bcells.ipynb`
+
+Verification:
+- Executed the notebook analysis cell successfully in the live `scvi-test` kernel.
+- Executed the Atypical top-dimension plot cell successfully in the live `scvi-test` kernel.
+- Confirmed `cluster_label` contains `Atypical` and that the notebook stores the shared embedding under `X_spVIPESmulti_shared`.
+
+## 2026-05-05 (model persistence utility)
+
+### S1: Add script to save trained spVIPESmulti model
+Status: completed
+
+What changed:
+- Added `scripts/save_spvipesmulti_model.py` as a notebook-friendly persistence helper.
+- Exposed an importable function:
+  - `save_spvipesmulti_model(model, output_dir, overwrite=False, save_anndata=True)`
+- Added CLI mode intended for notebook `%run` usage:
+  - resolves model from IPython namespace via `--model-var` (default `model_spv`),
+  - saves to `--output-dir`,
+  - supports `--overwrite` and `--no-save-anndata`.
+- Implemented scvi-version-tolerant save dispatch by inspecting `model.save` signature and only forwarding supported kwargs (`overwrite`, `save_anndata`).
+
+Files:
+- `scripts/save_spvipesmulti_model.py`
+
+Verification:
+- Script syntax and argument wiring validated by static inspection.
+- Runtime save path is delegated to `model.save(...)` from the active trained model object, matching scvi BaseModel save behavior.
+
 ## 2026-05-05 (unequal batch-size loss fix)
 
 ### U1: Robust loss aggregation for unequal per-group minibatch sizes
