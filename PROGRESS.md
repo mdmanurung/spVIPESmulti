@@ -9,6 +9,135 @@ How to use:
 
 ---
 
+## 2026-05-05 (documentation synchronization)
+
+### D1: README/API/docs alignment with repository state
+Status: completed
+
+What changed:
+- Updated README quick-start workflow to reflect current setup and APIs:
+  - added `sample_key` in `setup_anndata(...)` usage.
+  - added optional sample-aware posterior aggregation and `differential_abundance(...)` usage in the basic workflow.
+- Updated API reference (`docs/api.md`) to match current signatures and exposed methods:
+  - quick-reference table now includes `embed`, `get_shared_posterior`, `get_aggregated_posterior`, and `differential_abundance`.
+  - `setup_anndata(...)` signature/table now documents `sample_key`.
+  - `train(...)` docs now correctly show `group_indices_list` as optional (auto-inferred fallback).
+  - `get_latent_representation(...)` docs now state `batch_size=None` defaults to `scvi.settings.batch_size`.
+  - added dedicated sections for `embed`, `get_shared_posterior`, `get_aggregated_posterior`, and `differential_abundance`.
+- Updated docs toctree to remove stale notebook entries not present in tree:
+  - removed `notebooks/dialogue_multigroup_vignette` and `notebooks/iri_days_vignette` from `docs/index.md`.
+- Added `CHANGELOG.md` `Unreleased` note documenting the docs sync pass.
+
+Files:
+- `README.md`
+- `docs/api.md`
+- `docs/index.md`
+- `CHANGELOG.md`
+- `PLAN.md`
+- `PROGRESS.md`
+
+Verification:
+- Editor diagnostics check passed for all modified docs files (`No errors found`).
+- Manual consistency sweep completed for notebook references and API signatures/defaults.
+
+## 2026-05-05 (audit session)
+
+### Audit-driven bug fixes (8 issues)
+Status: completed
+
+Triggered by independent deep-code audit of the full codebase. All items verified with `pytest -q` → `174 passed, 1 skipped`.
+
+#### B1 — `normalized=True` crash in `get_latent_representation`
+- `_process_batches` only populated `latent_shared[g]` in the `if not normalized` branch; when `normalized=True` the list stayed empty, causing `torch.cat([])` in `_format_results`.
+- Added the symmetric `else` branch for shared PoE latent (mirrors existing private latent handling).
+- File: `src/spVIPESmulti/model/spvipesmulti.py`
+
+#### Q1 — Gaussian likelihood correctness (Option B: per-feature heteroscedastic scale)
+- `build_likelihood` was using `px_rate_shared` as the mean (ignoring the private/shared mixture) and a hardcoded `scale=0.1`.
+- Added `self.log_scale_gaussian: nn.ParameterDict` in `spVIPESmultimodule.__init__`, one `Parameter(zeros(n_features))` per `(group, modality)` with likelihood `"gaussian"`.
+- `_generative_multimodal` looks up the parameter and passes it as `log_scale` to `build_likelihood`.
+- `build_likelihood` signature updated: `px_scale` (required for Gaussian — the mixed mean) and `log_scale` (required for Gaussian — per-feature log std). Scale is `exp(log_scale).clamp(min=1e-4).expand_as(mean)`.
+- Updated `test_gaussian_likelihood` in `tests/test_multigroup_multimodal.py` to pass the new required args.
+- Files: `src/spVIPESmulti/module/utils.py`, `src/spVIPESmulti/module/spVIPESmultimodule.py`, `tests/test_multigroup_multimodal.py`
+
+#### Q2 — `get_loadings` multimodal support (Option B: full implementation)
+- `module.get_loadings(dataset, type_latent)` now accepts `dataset` as `int` (single-modal) or `(group, modality)` tuple (multimodal) — decoder lookup works for both key shapes.
+- `model.get_loadings()` detects `is_multimodal`; for multimodal it iterates `self.module.decoders` keys and returns dict keyed by `((group, modality), latent_type)` with `var_names` from `groups_modality_var_indices`; for single-modal keeps the existing `(i, latent_type)` key scheme.
+- Files: `src/spVIPESmulti/module/spVIPESmultimodule.py`, `src/spVIPESmulti/model/spvipesmulti.py`
+
+#### Q3 — Remove `cudnn.benchmark = True` global side effect (Option A)
+- Deleted the module-level `torch.backends.cudnn.benchmark = True` line (line 18 of spVIPESmultimodule.py). It mutated global PyTorch state at import time, invisible to users.
+- File: `src/spVIPESmulti/module/spVIPESmultimodule.py`
+
+#### B4 — NF prior silently ignored for multimodal private KL
+- `_loss_multimodal` always used standard Normal KL for per-modality private latents regardless of `use_nf_prior` / `nf_target`.
+- Added `_nf_kl(qz_mod_private, z_mod_private, "private")` branch, mirroring single-modal `loss()` logic.
+- File: `src/spVIPESmulti/module/spVIPESmultimodule.py`
+
+#### B5 — Jeffreys integration loss silently ignored in single-modal
+- `loss()` never called `_compute_jeffreys_integ_loss`; `use_jeffreys_integ=True` on a single-modal model had no effect.
+- Added the `if self.use_jeffreys_integ:` block at the end of `loss()`, matching `_loss_multimodal`.
+- File: `src/spVIPESmulti/module/spVIPESmultimodule.py`
+
+#### B8 — `setup_anndata` used `print()` instead of `logger.info()`
+- Replaced all 7 `print()` calls (including emoji) with `logger.info()` using `%s` formatting.
+- File: `src/spVIPESmulti/model/spvipesmulti.py`
+
+Verification:
+- `pytest -q` → `174 passed, 1 skipped, 109 warnings` (57s)
+- No new test failures introduced.
+
+Known coverage gaps not yet addressed (test-only work, no bug):
+- No test for `normalized=True` path in `get_latent_representation`.
+- No test for `get_loadings` on a multimodal model.
+- No test for `use_jeffreys_integ=True` on single-modal model.
+
+## 2026-05-05 (hardening follow-up)
+
+### H1: Regression coverage + likelihood support hardening
+Status: completed
+
+What changed:
+- Added integration regression coverage for:
+  - `get_latent_representation(normalized=True)` shape/completeness path.
+  - `get_loadings()` on multimodal models with tuple-keyed `(group, modality)` decoders.
+  - Single-modal `use_jeffreys_integ=True` path to verify Jeffreys contribution affects loss.
+- Added optional strict likelihood support validation in module loss paths:
+  - New module flag `strict_likelihood_support` (default `False` for backward compatibility).
+  - Added `_validate_likelihood_observations(...)` checks before `log_prob` evaluation.
+  - Baseline validation enforces finite values and non-negative observations for NB.
+  - Strict mode additionally enforces integer-like NB counts when targets are not log-transformed.
+- Added targeted regression test to ensure strict mode rejects fractional NB counts.
+
+Files:
+- `src/spVIPESmulti/module/spVIPESmultimodule.py`
+- `tests/test_api_boilerplate_reduction.py`
+- `tests/test_regression_fixes.py`
+
+Verification:
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest tests/test_api_boilerplate_reduction.py tests/test_regression_fixes.py -q` passed (`25 passed`).
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest -q` passed (`177 passed, 2 skipped`).
+
+Notes:
+- Existing warning-only support mismatches in synthetic/integration tests remain warning-level by default; strict enforcement is opt-in via `strict_likelihood_support=True`.
+
+### H2: Public docs pass for strict likelihood validation + multimodal loadings
+Status: completed
+
+What changed:
+- Documented `strict_likelihood_support` in README model-constructor examples and behavior notes.
+- Added `strict_likelihood_support` to API constructor parameter table.
+- Corrected outdated API note that claimed `get_loadings()` was single-modal only; docs now describe multimodal tuple-key output shape.
+
+Files:
+- `README.md`
+- `docs/api.md`
+
+Verification:
+- Manual docs consistency check against current implementation in `spVIPESmulti.model.spvipesmulti.spVIPESmulti.__init__` and `spVIPESmulti.model.spvipesmulti.spVIPESmulti.get_loadings` completed.
+
+---
+
 ## 2026-05-05
 
 ### R4: Public evaluation API second slice (held-out validation metrics)

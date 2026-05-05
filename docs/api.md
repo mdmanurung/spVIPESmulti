@@ -11,7 +11,11 @@ spVIPESmulti v1.0.0 — shared-private Variational Inference with Product of Exp
 | `spVIPESmulti` | Model class | `spVIPESmulti.model.spVIPESmulti` |
 | `setup_anndata` | Class method | `spVIPESmulti.model.spVIPESmulti.setup_anndata` |
 | `train` | Instance method | `model.train(...)` |
+| `embed` | Instance method | `model.embed(...)` |
 | `get_latent_representation` | Instance method | `model.get_latent_representation(...)` |
+| `get_shared_posterior` | Instance method | `model.get_shared_posterior(...)` |
+| `get_aggregated_posterior` | Instance method | `model.get_aggregated_posterior(...)` |
+| `differential_abundance` | Instance method | `model.differential_abundance(...)` |
 | `evaluate` | Instance method | `model.evaluate(...)` |
 | `get_enrichment_scores` | Instance method | `model.get_enrichment_scores(...)` |
 | `summarize_enrichment` | Instance method | `model.summarize_enrichment(...)` |
@@ -54,8 +58,8 @@ import spVIPESmulti
 adata = spVIPESmulti.data.prepare_adatas({"ctrl": adata_ctrl, "treat": adata_treat})
 spVIPESmulti.model.spVIPESmulti.setup_anndata(adata, groups_key="groups", label_key="cell_type")
 model = spVIPESmulti.model.spVIPESmulti(adata)
-model.train(group_indices_list=group_indices_list, max_epochs=100)
-latents = model.get_latent_representation(group_indices_list=group_indices_list, batch_size=512)
+model.train(max_epochs=100)
+latents = model.get_latent_representation(batch_size=512)
 ```
 
 ```{eval-rst}
@@ -97,6 +101,7 @@ latents = model.get_latent_representation(group_indices_list=group_indices_list,
 | `modality_loss_weights` | `dict[str, float] or None` | `None` | Per-modality scalar multipliers on the reconstruction loss. E.g. `{"rna": 1.0, "protein": 5.0}` to up-weight the protein term. Multimodal mode only. |
 | `use_jeffreys_integ` | `bool` | `False` | Add a Jeffreys (symmetric KL) integration loss between every pair of group PoE posteriors on z_shared. |
 | `jeffreys_integ_weight` | `float` | `1.0` | Scalar multiplier on the Jeffreys integration loss. |
+| `strict_likelihood_support` | `bool` | `False` | Enable stricter likelihood-target validation before reconstruction `log_prob` calls. Always checks finite values (and NB non-negative). In strict mode, also requires integer-like NB counts when `log_variational_generative=False`. |
 | `**model_kwargs` | | | Forwarded to `spVIPESmultimodule`. |
 
 > **Tip:** Individual weight overrides stack on top of a preset.
@@ -112,6 +117,7 @@ spVIPESmulti.model.spVIPESmulti.setup_anndata(
     adata,
     groups_key,
     label_key=None,
+    sample_key=None,
     batch_key=None,
     layer=None,
     modality_likelihoods=None,
@@ -125,6 +131,7 @@ Registers fields on `adata` via `AnnDataManager` and selects the PoE strategy.
 | `adata` | `AnnData` | — | The concatenated AnnData produced by `prepare_adatas` or `prepare_multimodal_adatas`. |
 | `groups_key` | `str` | — | Column in `adata.obs` identifying which group each cell belongs to. |
 | `label_key` | `str or None` | `None` | Column in `adata.obs` with cell-type labels. Required for label-based PoE and for label-dependent disentanglement components. |
+| `sample_key` | `str or None` | `None` | Optional sample identifier column used by sample-aware posterior aggregation and differential abundance helpers. |
 | `batch_key` | `str or None` | `None` | Column in `adata.obs` for technical batch. Adds a one-hot batch covariate to each encoder / decoder. |
 | `layer` | `str or None` | `None` | Key in `adata.layers` to use as the count matrix. Defaults to `adata.X`. |
 | `modality_likelihoods` | `dict[str, str] or None` | `None` | Overrides / sets the per-modality likelihood. Written into `adata.uns["modality_likelihoods"]`. Supported values: `"nb"`, `"gaussian"`. |
@@ -165,7 +172,6 @@ When validation metrics are present, `report["held_out_metrics"]["held_out_nll"]
 
 ```python
 model.train(
-    group_indices_list,
     max_epochs=None,
     batch_size=128,
     train_size=0.9,
@@ -180,7 +186,7 @@ model.train(
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `group_indices_list` | `list[list[int]]` | — | One inner list per group containing integer indices into the registered AnnData. Typically: `[list(map(int, g)) for g in adata.uns["groups_obs_indices"]]`. |
+| `group_indices_list` | `list[list[int]] or None` | `None` | One inner list per group containing integer indices into the registered AnnData. If omitted, inferred from `adata.uns["groups_obs_indices"]`. |
 | `max_epochs` | `int or None` | auto | Training epochs. Auto-computed as `min(round(20000/n_cells * 400), 400)` if `None`. |
 | `batch_size` | `int` | `128` | Mini-batch size per group. |
 | `train_size` | `float` | `0.9` | Fraction of cells used for training. |
@@ -190,6 +196,37 @@ model.train(
 | `n_steps_kl_warmup` | `int or None` | `None` | Step-based KL warmup. Takes precedence over `n_epochs_kl_warmup` if set. |
 | `plan_kwargs` | `dict or None` | `None` | Extra keyword arguments forwarded to `scvi.train.TrainingPlan`. |
 | `**trainer_kwargs` | | | Forwarded to `pl.Trainer`. Use `accelerator="gpu", devices=1` to select a GPU (replaces the removed `use_gpu=True`). |
+
+---
+
+### `embed`
+
+```python
+payload = model.embed(
+    group_indices_list=None,
+    batch_size=512,
+    prefix="spvm",
+    overwrite=False,
+)
+```
+
+Computes shared and private latents and writes them directly into `adata.obsm`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `group_indices_list` | `list[list[int]] or None` | `None` | Per-group cell indices. If omitted, inferred from `adata.uns["groups_obs_indices"]`. |
+| `batch_size` | `int or None` | `None` | Inference mini-batch size passed to `get_latent_representation`. |
+| `prefix` | `str` | `"spvm"` | Output key prefix, producing `X_{prefix}_shared` and `X_{prefix}_private_<group>`. |
+| `overwrite` | `bool` | `False` | If `False`, raises when any target key already exists. |
+| `normalized` | `bool` | `False` | Whether to return normalized embeddings. |
+| `give_mean` | `bool` | `True` | Whether to return posterior means when normalized mode is used. |
+| `mc_samples` | `int` | `5000` | Monte Carlo samples for normalized posterior means. |
+
+Return value keys:
+
+- `payload["keys"]`: exact `adata.obsm` keys written
+- `payload["shared"]`: full shared matrix
+- `payload["private"]`: per-group private matrices
 
 ---
 
@@ -216,7 +253,7 @@ latents = model.get_latent_representation(
 | `normalized` | `bool` | `False` | Return softmax-normalized embeddings instead of the raw log-space latent. |
 | `give_mean` | `bool` | `True` | Return the posterior mean; if `False`, returns a single sample. |
 | `mc_samples` | `int` | `5000` | Monte Carlo samples used to approximate the mean for non-closed-form distributions. |
-| `batch_size` | `int or None` | `None` | Inference mini-batch size. Must be provided explicitly (no global default). |
+| `batch_size` | `int or None` | `None` | Inference mini-batch size. If `None`, defaults to `scvi.settings.batch_size`. |
 | `drop_last` | `bool or None` | `None` | Drop the last incomplete batch. Defaults to `False`. |
 
 **Return value** — `dict` with the following keys:
@@ -232,6 +269,54 @@ latents = model.get_latent_representation(
 
 ---
 
+### `get_shared_posterior`
+
+```python
+posterior = model.get_shared_posterior(batch_size=512)
+```
+
+Returns per-group posterior parameters for the shared latent:
+
+- `posterior["loc"]`, `posterior["scale"]` in dataloader order
+- `posterior["loc_reordered"]`, `posterior["scale_reordered"]` in original cell order
+- `posterior["group_indices_list"]`
+
+---
+
+### `get_aggregated_posterior`
+
+```python
+agg = model.get_aggregated_posterior(sample_subset=["sample_a", "sample_b"])
+```
+
+Aggregates shared posterior statistics by `(group, sample)` and returns:
+
+- `agg["posterior"]`: DataFrame with one row per `(group, sample)` and columns `loc`, `scale`, `n_cells`
+- `agg["metadata"]`: fallback/sample-subset metadata
+
+Requires `sample_key` in `setup_anndata(...)` for sample-aware aggregation.
+
+---
+
+### `differential_abundance`
+
+```python
+da = model.differential_abundance(group_a=0, group_b=1)
+```
+
+Computes per-cell DA scores in shared latent space using distance to aggregated
+group posteriors.
+
+Returns:
+
+- `da["scores"]`: per-cell DataFrame with `da_score` and `group`
+- `da["metadata"]`: comparison and aggregation metadata
+
+When only two groups exist, `group_a`/`group_b` can be omitted and default to
+`0` and `1`.
+
+---
+
 ### `get_loadings`
 
 ```python
@@ -242,11 +327,8 @@ Returns a `dict` keyed by `(group_idx, "shared")` and `(group_idx, "private")`,
 each a `pd.DataFrame` of shape `(n_features, n_latent)` with
 batch-normalisation-scaled weights from the linear decoder.
 
-> **Multimodal note:** `get_loadings()` uses integer group-index keys and only
-> works for the single-modality decoder code path. In multimodal mode, access
-> decoder weights directly via `model.module.decoders[(group_idx, modality)]`.
-> See the tutorial notebook (§16) for a ready-to-use `multimodal_loadings()`
-> helper function.
+In multimodal mode, keys are `((group_idx, modality), "shared")` and
+`((group_idx, modality), "private")`.
 
 ---
 

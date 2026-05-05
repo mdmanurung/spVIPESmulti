@@ -94,6 +94,7 @@ spVIPESmulti.model.spVIPESmulti.setup_anndata(
     combined,
     groups_key="groups",
     label_key="cell_type",   # optional; enables label-supervised PoE
+    sample_key="sample_id",  # optional; enables sample-aware posterior/DA helpers
     batch_key="batch",       # optional; enables batch correction
 )
 
@@ -128,6 +129,11 @@ evaluation = model.evaluate(
 )
 # evaluation["metrics"] is a DataFrame with shared/private latent diagnostics
 # evaluation["held_out_metrics"] includes validation ELBO / reconstruction NLL when available
+
+# 6. Sample-aware posterior aggregation and differential abundance (optional)
+posterior = model.get_aggregated_posterior(sample_subset=["S1", "S2"])  # requires sample_key in setup_anndata
+da = model.differential_abundance(group_a=0, group_b=1)
+# da["scores"] is a per-cell DataFrame with da_score and group labels
 ```
 
 See the dedicated quick tutorial: [`docs/enrichment_quickstart.md`](docs/enrichment_quickstart.md).
@@ -177,8 +183,19 @@ model = spVIPESmulti.model.spVIPESmulti(
     nf_target="shared",          # "shared", "private", or "both"
     # Disentanglement (optional):
     disentangle_preset="full",   # see Disentanglement section below
+        # Optional strict likelihood checks (default False):
+        strict_likelihood_support=False,
 )
 ```
+
+`strict_likelihood_support` enables additional input validation before
+likelihood `log_prob` evaluation:
+- always validates finite inputs and non-negative targets for NB likelihood;
+- in strict mode, also enforces integer-like counts for NB when
+    `log_variational_generative=False`.
+
+This is useful when you want early, explicit failures on mismatched training
+targets instead of downstream warning-only behavior.
 
 ### Training
 

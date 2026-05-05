@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+### Changed
+
+-   Documentation sync pass:
+    -   removed stale notebook links from `docs/index.md` to match files present in `docs/notebooks/`.
+    -   refreshed `README.md` and `docs/api.md` examples/signatures for current public APIs (`sample_key`, auto-inferred group indices, `embed`, and DA helpers).
+
 ## [1.0.0] — 2026-05-01
 
 ### Changed (breaking)

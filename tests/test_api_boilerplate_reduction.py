@@ -111,3 +111,69 @@ def test_train_auto_infers_group_indices(monkeypatch):
 
     monkeypatch.setattr(training_mixin.PatchedTrainRunner, "__call__", lambda self: None)
     model.train(max_epochs=1, batch_size=4, accelerator="cpu", devices=1)
+
+
+@pytest.mark.integration
+def test_get_latent_representation_normalized_path_returns_expected_shapes():
+    rng = np.random.default_rng(4)
+    a1 = ad.AnnData(X=rng.poisson(5, size=(15, 9)).astype(np.float32))
+    a2 = ad.AnnData(X=rng.poisson(5, size=(11, 9)).astype(np.float32))
+    a1.var_names = [f"g{i}" for i in range(9)]
+    a2.var_names = [f"g{i}" for i in range(9)]
+
+    combined = spVIPESmulti.data.prepare_adatas({"g1": a1, "g2": a2})
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups")
+    model = spVIPESmulti.model.spVIPESmulti(
+        combined,
+        n_hidden=16,
+        n_dimensions_shared=4,
+        n_dimensions_private=3,
+    )
+
+    result = model.get_latent_representation(normalized=True, batch_size=8)
+
+    assert result["shared"][0].shape == (15, 4)
+    assert result["shared"][1].shape == (11, 4)
+    assert result["private"][0].shape == (15, 3)
+    assert result["private"][1].shape == (11, 3)
+
+
+@pytest.mark.integration
+def test_get_loadings_multimodal_returns_group_modality_keys():
+    rng = np.random.default_rng(5)
+
+    g1_rna = ad.AnnData(X=rng.poisson(5, size=(10, 6)).astype(np.float32))
+    g1_protein = ad.AnnData(X=rng.normal(0, 1, size=(10, 4)).astype(np.float32))
+    g2_rna = ad.AnnData(X=rng.poisson(5, size=(8, 6)).astype(np.float32))
+    g2_protein = ad.AnnData(X=rng.normal(0, 1, size=(8, 4)).astype(np.float32))
+
+    g1_rna.var_names = [f"rna_{i}" for i in range(6)]
+    g1_protein.var_names = [f"protein_{i}" for i in range(4)]
+    g2_rna.var_names = [f"rna_{i}" for i in range(6)]
+    g2_protein.var_names = [f"protein_{i}" for i in range(4)]
+
+    combined = spVIPESmulti.data.prepare_multimodal_adatas(
+        {
+            "g1": {"rna": g1_rna, "protein": g1_protein},
+            "g2": {"rna": g2_rna, "protein": g2_protein},
+        },
+        modality_likelihoods={"rna": "nb", "protein": "gaussian"},
+    )
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups")
+    model = spVIPESmulti.model.spVIPESmulti(
+        combined,
+        n_hidden=16,
+        n_dimensions_shared=3,
+        n_dimensions_private=2,
+    )
+
+    loadings = model.get_loadings()
+
+    assert ((0, "rna"), "shared") in loadings
+    assert ((0, "rna"), "private") in loadings
+    assert ((0, "protein"), "shared") in loadings
+    assert ((1, "protein"), "private") in loadings
+
+    assert loadings[((0, "rna"), "shared")].shape[1] == 3
+    assert loadings[((0, "rna"), "private")].shape[1] == 2
+    assert loadings[((0, "protein"), "shared")].shape[0] == 4

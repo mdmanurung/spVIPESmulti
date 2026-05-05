@@ -53,4 +53,8 @@ Notes: add optional `reference_group`; force shared-only decode for reference gr
 
 ## Last Updated
 
+- 2026-05-05: Documentation synchronization pass completed: updated README and docs/api for current public APIs (`sample_key`, `embed`, posterior/DA helpers, auto-inferred group indices), removed stale notebook links from docs index, and added an Unreleased changelog note.
+- 2026-05-05: Docs hardening pass completed: documented `strict_likelihood_support` in README/API and corrected stale multimodal `get_loadings()` API note.
+- 2026-05-05: Hardening follow-up completed: added regression tests for normalized latent path, multimodal get_loadings, and single-modal Jeffreys integration; added optional strict likelihood support validation; full suite green (`177 passed, 2 skipped`).
 - 2026-05-05: All roadmap items R1–R4 complete. No active item; Current Iteration cleared.
+- 2026-05-05: Audit-driven bug-fix session complete (8 bugs fixed, 174/174 tests pass). See PROGRESS.md for detail.

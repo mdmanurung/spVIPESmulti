@@ -3,7 +3,7 @@ from scvi.distributions import NegativeBinomialMixture
 from torch.distributions import Normal
 
 
-def build_likelihood(likelihood_type, px_rate_private, px_rate_shared, px_r, px_mixing, px_scale=None):
+def build_likelihood(likelihood_type, px_rate_private, px_rate_shared, px_r, px_mixing, px_scale=None, log_scale=None):
     """Build a likelihood distribution for a given modality.
 
     Parameters
@@ -21,6 +21,9 @@ def build_likelihood(likelihood_type, px_rate_private, px_rate_shared, px_r, px_
         Mixing logits for private/shared contribution.
     px_scale : torch.Tensor, optional
         Final mixed expression rates (used for Gaussian as mean).
+    log_scale : torch.nn.Parameter, optional
+        Per-feature log standard deviation for Gaussian likelihood.
+        Shape ``(n_features,)``. Required when ``likelihood_type="gaussian"``.
 
     Returns
     -------
@@ -32,10 +35,13 @@ def build_likelihood(likelihood_type, px_rate_private, px_rate_shared, px_r, px_
             mu1=px_rate_private, mu2=px_rate_shared, theta1=px_r, mixture_logits=px_mixing
         )
     elif likelihood_type == "gaussian":
-        # Use the mixed rate as mean, learn a fixed scale
-        mean = px_rate_shared
-        # Use a learned or fixed scale; here we use a fixed small scale
-        scale = torch.ones_like(mean) * 0.1
+        if px_scale is None:
+            raise ValueError("px_scale must be provided for Gaussian likelihood")
+        if log_scale is None:
+            raise ValueError("log_scale must be provided for Gaussian likelihood; "
+                             "ensure log_scale_gaussian is initialised in the module")
+        mean = px_scale
+        scale = torch.exp(log_scale).clamp(min=1e-4).expand_as(mean)
         return Normal(loc=mean, scale=scale)
     else:
         raise ValueError(f"Unsupported likelihood type: {likelihood_type}. Must be 'nb' or 'gaussian'.")

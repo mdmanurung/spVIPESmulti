@@ -14,8 +14,6 @@ contributing.md
 references.md
 
 notebooks/Tutorial
-notebooks/dialogue_multigroup_vignette
-notebooks/iri_days_vignette
 notebooks/cinemaot_nf_vignette
 notebooks/pbmc_citeseq_tutorial
 notebooks/biolord_comparison_plasmodium_tutorial

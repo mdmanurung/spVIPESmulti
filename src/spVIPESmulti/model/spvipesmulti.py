@@ -287,30 +287,28 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             CategoricalObsField("groups", groups_key),
         ]
 
-        print("=== spVIPESmulti AnnData Setup ===")
-        print(f"Setting up with groups_key: '{groups_key}'")
+        logger.info("=== spVIPESmulti AnnData Setup ===")
+        logger.info("Setting up with groups_key: '%s'", groups_key)
 
         anndata_fields.append(CategoricalObsField("indices", "indices"))
 
         if label_key is not None:
-            print(f"✓ Labels: Using '{label_key}' from adata.obs")
+            logger.info("Labels: Using '%s' from adata.obs", label_key)
             anndata_fields.append(CategoricalObsField("labels", label_key))
 
         if sample_key is not None:
-            print(f"✓ Samples: Using '{sample_key}' from adata.obs")
+            logger.info("Samples: Using '%s' from adata.obs", sample_key)
             anndata_fields.append(CategoricalObsField("sample", sample_key))
 
-        print("\n--- Product of Experts (PoE) Configuration ---")
+        logger.info("--- Product of Experts (PoE) Configuration ---")
         if label_key is not None:
-            print("🎯 Will use: Label-based PoE")
+            logger.info("Will use: Label-based PoE")
         else:
-            print("⚠️  No labels configured — provide label_key for PoE-based integration")
+            logger.info("No labels configured — provide label_key for PoE-based integration")
 
         if modality_likelihoods is not None:
             adata.uns["modality_likelihoods"] = modality_likelihoods
-            print(f"✓ Multimodal: Configured with likelihoods {modality_likelihoods}")
-
-        print("=" * 45)
+            logger.info("Multimodal: Configured with likelihoods %s", modality_likelihoods)
 
         adata_manager = AnnDataManager(fields=anndata_fields, setup_method_args=setup_method_args)
         adata_manager.register_fields(adata, **kwargs)
@@ -1358,6 +1356,14 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
                 shared_posterior_scale[g].append(outputs["poe_stats"][g]["logtheta_scale"].cpu())
                 if not normalized:
                     latent_shared[g].append(poe_log_z.cpu())
+                else:
+                    qz_poe = outputs["poe_stats"][g]["logtheta_qz"]
+                    if give_mean:
+                        samples = qz_poe.sample([mc_samples])
+                        theta = torch.nn.functional.softmax(samples, dim=-1).mean(dim=0)
+                    else:
+                        theta = outputs["poe_stats"][g]["logtheta_theta"]
+                    latent_shared[g].append(theta.cpu())
 
                 # Private latent (group-level)
                 private_log_z = outputs["private_stats"][g]["log_z"]
@@ -1506,26 +1512,48 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
     def get_loadings(self) -> dict:
         """Extract per-gene weights in the linear decoder.
 
-        Shape is genes by `n_latent`.
+        For single-modal models the returned dict is keyed by ``(group_index, latent_type)``
+        where ``latent_type`` is ``"private"`` or ``"shared"``.
 
+        For multimodal models the returned dict is keyed by
+        ``((group_index, modality), latent_type)``.
+
+        Shape of each array is ``(n_features, n_latent_dims)``.
         """
-        num_datasets = len(self.module.input_dims)
-        datasets_obs_indices = self.module.groups_obs_indices
-        datasets_var_indices = self.module.groups_var_indices
         adata = self.adata
         loadings_dict = {}
-        for i in range(num_datasets):
-            dataset_obs_indices = datasets_obs_indices[i]
-            s_adata = adata[dataset_obs_indices, :].copy()
-            cols_private = [f"Z_private_{n}" for n in range(self.module.n_dimensions_private)]
-            cols_shared = [f"Z_shared_{n}" for n in range(self.module.n_dimensions_shared)]
-            var_names = s_adata[:, datasets_var_indices[i]].var_names
-            loadings_private = pd.DataFrame(
-                self.module.get_loadings(i, "private"), index=var_names, columns=cols_private
-            )
-            loadings_shared = pd.DataFrame(self.module.get_loadings(i, "shared"), index=var_names, columns=cols_shared)
 
-            loadings_dict[(i, "private")] = loadings_private
-            loadings_dict[(i, "shared")] = loadings_shared
+        if self.module.is_multimodal:
+            for (group, modality) in self.module.decoders:
+                mod_var_indices = self.module.groups_modality_var_indices[group][modality]
+                var_names = adata[:, mod_var_indices].var_names
+                cols_private = [f"Z_private_{n}" for n in range(self.module.n_dimensions_private)]
+                cols_shared = [f"Z_shared_{n}" for n in range(self.module.n_dimensions_shared)]
+                loadings_dict[((group, modality), "private")] = pd.DataFrame(
+                    self.module.get_loadings((group, modality), "private"),
+                    index=var_names,
+                    columns=cols_private,
+                )
+                loadings_dict[((group, modality), "shared")] = pd.DataFrame(
+                    self.module.get_loadings((group, modality), "shared"),
+                    index=var_names,
+                    columns=cols_shared,
+                )
+        else:
+            num_datasets = len(self.module.input_dims)
+            datasets_obs_indices = self.module.groups_obs_indices
+            datasets_var_indices = self.module.groups_var_indices
+            for i in range(num_datasets):
+                dataset_obs_indices = datasets_obs_indices[i]
+                s_adata = adata[dataset_obs_indices, :].copy()
+                cols_private = [f"Z_private_{n}" for n in range(self.module.n_dimensions_private)]
+                cols_shared = [f"Z_shared_{n}" for n in range(self.module.n_dimensions_shared)]
+                var_names = s_adata[:, datasets_var_indices[i]].var_names
+                loadings_dict[(i, "private")] = pd.DataFrame(
+                    self.module.get_loadings(i, "private"), index=var_names, columns=cols_private
+                )
+                loadings_dict[(i, "shared")] = pd.DataFrame(
+                    self.module.get_loadings(i, "shared"), index=var_names, columns=cols_shared
+                )
 
         return loadings_dict
