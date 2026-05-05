@@ -221,6 +221,91 @@ class TestGenerativeSlicing:
 
 
 # ============================================================
+# Audit follow-up — prepare_adatas prefix-overlap regression
+# ============================================================
+
+
+class TestPrepareAdatasPrefixOverlap:
+    """`prepare_adatas` must not cross-match groups whose names share a prefix.
+
+    Example regression: groups "cat" and "category" both matched
+    ``str.startswith("cat")`` on var_names and obs["groups"], so
+    ``groups_var_indices[0]`` ended up containing every var (cat + category)
+    and ``groups_obs_indices[0]`` contained every cell.
+    """
+
+    def _load_prepare(self):
+        return _load_module(
+            "prepare_adatas",
+            os.path.join(_SRC, "spVIPESmulti", "data", "prepare_adatas.py"),
+        ).prepare_adatas
+
+    def _load_prepare_multimodal(self):
+        return _load_module(
+            "prepare_adatas_mm",
+            os.path.join(_SRC, "spVIPESmulti", "data", "prepare_adatas.py"),
+        ).prepare_multimodal_adatas
+
+    def _make_adata(self, n_obs, n_vars, seed):
+        import anndata as ad
+        from scipy.sparse import csr_matrix
+
+        rng = np.random.default_rng(seed)
+        X = rng.poisson(5, size=(n_obs, n_vars)).astype(np.float32)
+        a = ad.AnnData(X=csr_matrix(X))
+        a.obs_names = [f"c{seed}_{i}" for i in range(n_obs)]
+        a.var_names = [f"g{i}" for i in range(n_vars)]
+        return a
+
+    def test_single_modal_overlapping_prefixes(self):
+        prepare_adatas = self._load_prepare()
+        a1 = self._make_adata(20, 10, seed=0)
+        a2 = self._make_adata(20, 10, seed=1)
+
+        result = prepare_adatas({"cat": a1, "category": a2})
+
+        # Each group should own exactly its own vars and cells.
+        assert len(result.uns["groups_var_indices"][0]) == 10, "cat should not absorb category vars"
+        assert len(result.uns["groups_var_indices"][1]) == 10
+        assert len(result.uns["groups_obs_indices"][0]) == 20, "cat should not absorb category cells"
+        assert len(result.uns["groups_obs_indices"][1]) == 20
+
+        # Indices must be disjoint.
+        assert set(result.uns["groups_var_indices"][0]).isdisjoint(
+            set(result.uns["groups_var_indices"][1])
+        )
+        assert set(result.uns["groups_obs_indices"][0]).isdisjoint(
+            set(result.uns["groups_obs_indices"][1])
+        )
+
+    def test_multimodal_overlapping_prefixes(self):
+        prepare_multimodal_adatas = self._load_prepare_multimodal()
+        a_rna = self._make_adata(20, 10, seed=0)
+        a_prot = self._make_adata(20, 5, seed=1)
+        b_rna = self._make_adata(20, 10, seed=2)
+        b_prot = self._make_adata(20, 5, seed=3)
+
+        result = prepare_multimodal_adatas(
+            {
+                "cat": {"rna": a_rna, "protein": a_prot},
+                "category": {"rna": b_rna, "protein": b_prot},
+            }
+        )
+
+        assert len(result.uns["groups_obs_indices"][0]) == 20, "cat must not absorb category cells"
+        assert len(result.uns["groups_obs_indices"][1]) == 20
+        # Var indices for each (group, modality) live under the
+        # `{group}_{modality}_` prefix; no group should leak into the other's
+        # var indices.
+        assert (
+            len(result.uns["groups_modality_var_indices"][0]["rna"]) == 10
+        )
+        assert (
+            len(result.uns["groups_modality_var_indices"][1]["rna"]) == 10
+        )
+
+
+# ============================================================
 # Phase 1.2 — PoE double-prior
 # ============================================================
 

@@ -119,11 +119,15 @@ def prepare_adatas(
             groups_mapping[i] = groups
 
     multigroups_adata = ad.concat(adatas_local, join="outer", label="groups", index_unique="-")
+    # Var names were prefixed with "{group}_"; match the full prefix so groups
+    # whose names share a leading substring (e.g. "cat" vs "category") don't
+    # cross-contaminate each other's var indices. Group labels in obs are exact,
+    # so use equality there.
     multigroups_adata.uns["groups_var_indices"] = [
-        np.where(multigroups_adata.var_names.str.startswith(k))[0] for k in adatas.keys()
+        np.where(multigroups_adata.var_names.str.startswith(f"{k}_"))[0] for k in adatas.keys()
     ]
     multigroups_adata.uns["groups_obs_indices"] = [
-        np.where(multigroups_adata.obs["groups"].str.startswith(k))[0] for k in adatas.keys()
+        np.where(multigroups_adata.obs["groups"].values == k)[0] for k in adatas.keys()
     ]
     multigroups_adata.uns["groups_obs_names"] = groups_obs_names
     multigroups_adata.uns["groups_obs"] = groups_obs
@@ -274,13 +278,15 @@ def prepare_multimodal_adatas(
     # Concatenate all groups (along obs axis, outer join on vars)
     multigroups_adata = ad.concat(combined_adatas, join="outer", label="groups", index_unique="-")
 
-    # Compute group-level var and obs indices
+    # Compute group-level var and obs indices. Group labels in obs are exact;
+    # using `==` avoids the prefix-overlap trap that bit prepare_adatas
+    # (group names like "cat" and "category" must not cross-match).
     multigroups_adata.uns["groups_var_indices"] = [
         np.where(multigroups_adata.var_names.str.startswith(f"{group_names[i]}_"))[0]
         for i in range(len(group_names))
     ]
     multigroups_adata.uns["groups_obs_indices"] = [
-        np.where(multigroups_adata.obs["groups"].str.startswith(group_names[i]))[0]
+        np.where(multigroups_adata.obs["groups"].values == group_names[i])[0]
         for i in range(len(group_names))
     ]
 
