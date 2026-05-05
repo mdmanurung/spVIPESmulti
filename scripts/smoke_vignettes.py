@@ -3,16 +3,16 @@
 Each vignette in `docs/notebooks/` exercises a particular combination of:
 
   - groups (2 vs N>=2)
-  - PoE strategy (label / OT-cluster / OT-paired)
+    - setup mode (label configured vs label omitted)
   - prior (Gaussian / NSF on shared / NSF on private)
   - disentanglement preset (off / full)
   - modality (single / multimodal)
 
 Re-running every notebook here is impractical because:
-  - 3 vignettes (cinemaot_nf, dialogue_multigroup, disentangle_ablation) require
-    pertpy 1.x, which pulls in jax >= 0.6.1 and conflicts with spVIPESmulti' jax==0.4.27 pin.
-  - 3 vignettes need local h5ad files not bundled in the repo (Tutorial splatter
-    simulation, IRI time-course, Plasmodium liver-stage).
+    - 2 vignettes (cinemaot_nf, disentangle_ablation) require pertpy 1.x, which
+        pulls in jax >= 0.6.1 and conflicts with spVIPESmulti's jax==0.4.27 pin.
+    - 2 vignettes need local h5ad files not bundled in the repo (Tutorial splatter
+        simulation, Plasmodium liver-stage).
 
 Instead we run each *distinct combination* on a tiny SLN CITE-seq subsample and
 report PASS/FAIL. Vignettes mapped to each combination are listed in `MAPPING`.
@@ -42,9 +42,6 @@ import spVIPESmulti
 # Vignette --> combination mapping for the report.
 MAPPING = {
     "single-modality / 2-group / label PoE / off": [
-        "Tutorial.ipynb (without OT plan)",
-    ],
-    "single-modality / 2-group / OT cluster-based PoE / off": [
         "Tutorial.ipynb",
     ],
     "single-modality / 2-group / NSF prior on shared / off": [
@@ -55,14 +52,10 @@ MAPPING = {
         "biolord_comparison_plasmodium_tutorial.ipynb (with disentangle)",
     ],
     "single-modality / 3-group / label PoE / off": [
-        "dialogue_multigroup_vignette.ipynb",
-        "iri_days_vignette.ipynb",
         "pbmc_citeseq_tutorial.ipynb",
     ],
     "single-modality / 3-group / label PoE / full": [
-        "dialogue_multigroup_vignette.ipynb (disentangle)",
         "disentangle_ablation.ipynb",
-        "iri_days_vignette.ipynb (disentangle)",
         "pbmc_citeseq_tutorial.ipynb (disentangle)",
     ],
     "multimodal / 3-group / NSF prior on shared / off": [

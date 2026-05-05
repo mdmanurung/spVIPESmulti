@@ -51,6 +51,20 @@ Goal:
 Exit criteria:
 - A documented `embed(...)` flow writes standard `obsm` keys.
 
+### 4) Documentation/vignette consistency second pass
+Status: `done`
+Goal:
+- Ensure `README.md`, docs toctree, and vignette smoke mapping point to notebooks that are actually present in the repository.
+
+Completed work:
+- Removed stale toctree entries for notebooks not present in `docs/notebooks`.
+- Aligned vignette smoke-test mapping text with currently tracked notebooks.
+- Removed stale OT-strategy claims from smoke-test narrative/mapping so reported combinations match actual executed cases.
+- Re-enabled Sphinx toctree visibility for missing/not-included pages by removing suppression entries.
+
+Exit criteria:
+- No stale references to missing `dialogue_multigroup_vignette` / `iri_days_vignette` in the updated docs/smoke mapping paths.
+
 ---
 
 ## Blockers / Decisions Needed
@@ -125,3 +139,4 @@ Implementation notes:
 
 - 2026-05-04: Merged deferred backlog from `PLANS.md` into this canonical plan doc.
 - 2026-05-04: Initialized active plan tracker and aligned with roadmap/feature docs.
+- 2026-05-05: Completed documentation/vignette consistency second pass for docs index + smoke mapping.

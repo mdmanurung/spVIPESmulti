@@ -11,6 +11,8 @@ from importlib.metadata import metadata
 from pathlib import Path
 
 HERE = Path(__file__).parent
+ROOT = HERE.parent
+sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(HERE / "extensions"))
 
 
@@ -188,8 +190,6 @@ suppress_warnings = [
     "ref.class",  # Missing external class references (torch, scvi, etc.)
     "ref.func",  # Missing external function references
     "ref.meth",  # Missing external method references
-    "toc.not_readable",  # Non-existent notebook references
-    "toc.not_included",  # Tutorial notebook not in toctree
     "myst.xref_missing",  # Missing cross-references in markdown
     "myst.header",  # Document heading level warnings
     "misc.highlighting_failure",  # Code highlighting issues in docs

@@ -59,9 +59,9 @@ latents = model.get_latent_representation(group_indices_list=group_indices_list,
     :toctree: generated
     :template: class.rst
 
-    model.spvipesmulti.spVIPESmulti
+    model.spVIPESmulti
 
-.. autoclass:: spVIPESmulti.model.spvipesmulti.spVIPESmulti
+.. autoclass:: spVIPESmulti.model.spVIPESmulti
     :members:
     :undoc-members:
     :show-inheritance:
