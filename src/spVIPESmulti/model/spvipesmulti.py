@@ -144,6 +144,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         disentangle_label_private_weight: Optional[float] = None,
         contrastive_weight: Optional[float] = None,
         contrastive_temperature: float = 0.1,
+        disentangle_warmup: bool = True,
         modality_loss_weights: Optional[dict] = None,
         use_jeffreys_integ: bool = False,
         jeffreys_integ_weight: float = 1.0,
@@ -223,6 +224,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             nf_target=nf_target,
             **_disentangle_weights,
             contrastive_temperature=contrastive_temperature,
+            disentangle_warmup=disentangle_warmup,
             **model_kwargs,
         )
 

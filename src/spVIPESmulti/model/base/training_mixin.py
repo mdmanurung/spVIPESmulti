@@ -165,6 +165,10 @@ class MultiGroupTrainingMixin:
         trainer_kwargs[es] = early_stopping if es not in trainer_kwargs.keys() else trainer_kwargs[es]
         if data_splitter.n_val > 0 and "check_val_every_n_epoch" not in trainer_kwargs:
             trainer_kwargs["check_val_every_n_epoch"] = 1
+        # Default to clipping by global L2 norm to bound early-epoch gradient
+        # spikes (e.g. KL blowup); user can override via trainer_kwargs.
+        trainer_kwargs.setdefault("gradient_clip_val", 1.0)
+        trainer_kwargs.setdefault("gradient_clip_algorithm", "norm")
         runner = PatchedTrainRunner(
             self,
             training_plan=training_plan,

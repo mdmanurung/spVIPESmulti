@@ -109,6 +109,7 @@ class spVIPESmultimodule(BaseModuleClass):
         disentangle_label_private_weight: float = 0.0,
         contrastive_weight: float = 0.0,
         contrastive_temperature: float = 0.1,
+        disentangle_warmup: bool = True,
         strict_likelihood_support: bool = False,
     ):
         """
@@ -297,6 +298,7 @@ class spVIPESmultimodule(BaseModuleClass):
         self.disentangle_label_private_weight = disentangle_label_private_weight
         self.contrastive_weight = contrastive_weight
         self.contrastive_temperature = contrastive_temperature
+        self.disentangle_warmup = disentangle_warmup
 
         _clf_kwargs = dict(n_layers=2, n_hidden=64, dropout_rate=0.1, use_batch_norm=True)
 
@@ -1253,7 +1255,15 @@ class spVIPESmultimodule(BaseModuleClass):
             group_loss = group_loss.mean()
             total_loss = group_loss if total_loss is None else total_loss + group_loss
 
-        total_loss = total_loss + self._compute_disentangle_losses(
+        # Average over groups so the gradient scale is invariant to the
+        # number of groups and unbalanced group sizes don't dominate.
+        # Disentangle helper sums across groups internally, so divide it by
+        # n_groups too — that keeps disentangle_*_weight in per-group units
+        # (i.e. the same relative scale they had before the sum→mean change).
+        total_loss = total_loss / n_groups
+
+        disentangle_scale = kl_weight if self.disentangle_warmup else 1.0
+        total_loss = total_loss + (disentangle_scale / n_groups) * self._compute_disentangle_losses(
             inference_outputs, per_group, n_groups, extra_metrics
         )
 
@@ -1360,10 +1370,17 @@ class spVIPESmultimodule(BaseModuleClass):
             kl_local[f"kl_divergence_group_{g}_poe"] = kl_poe.mean()
             total_loss = total_loss + kl_weight * kl_poe.mean()
 
+        # Average over groups so the gradient scale is invariant to the
+        # number of groups and unbalanced group sizes don't dominate.
+        total_loss = total_loss / n_groups
+
         # P8: disentanglement objective on multimodal mode. The helper early-
         # exits when no component is enabled, so the cost is one tuple
-        # comparison when disentangle_preset='off'.
-        total_loss = total_loss + self._compute_disentangle_losses(
+        # comparison when disentangle_preset='off'. Helper sums across groups
+        # internally, so divide by n_groups to keep disentangle_*_weight in
+        # per-group units (same relative scale as before the sum→mean change).
+        disentangle_scale = kl_weight if self.disentangle_warmup else 1.0
+        total_loss = total_loss + (disentangle_scale / n_groups) * self._compute_disentangle_losses(
             inference_outputs, per_group, n_groups, extra_metrics
         )
 
