@@ -65,7 +65,7 @@ class Encoder(nn.Module):
 
         cat_dim = sum(self.n_cat_list)
         # input -> hidden 128
-        self.fc1 = nn.Linear(n_input + cat_dim * True, hidden)
+        self.fc1 = nn.Linear(n_input + cat_dim, hidden)
         self.fc2 = nn.Linear(hidden, hidden)
         self.relu = nn.ReLU()
         self.drop = nn.Dropout(dropout)
@@ -328,7 +328,7 @@ class LinearDecoderSPVIPE(nn.Module):
         p_mixing_cat_z = torch.cat([p_mixing, z_private_shared], dim=-1)
         px_mixing = self.mixture(p_mixing_cat_z, *cat_list)
 
-        mixing = 1 / (1 + torch.exp(-px_mixing))
+        mixing = torch.sigmoid(px_mixing)
         px_scale = torch.nn.functional.normalize(
             mixing * px_rate_private + (1 - mixing) * px_rate_shared, p=1, dim=-1
         )

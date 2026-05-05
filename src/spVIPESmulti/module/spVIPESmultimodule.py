@@ -1034,10 +1034,12 @@ class spVIPESmultimodule(BaseModuleClass):
         )
         labels_by_group = None
         if needs_labels:
+            # Key by the loop index (position in `tensors_by_group`), not by
+            # the categorical code, so this stays correct even if group codes
+            # are not contiguous starting at 0 (e.g. after subsetting an adata).
             labels_by_group = {
-                int(k): grp["labels"].flatten()
-                for grp in tensors_by_group
-                for k in np.unique(grp["groups"].cpu())
+                gi: grp["labels"].flatten()
+                for gi, grp in enumerate(tensors_by_group)
             }
 
         disentangle_total = 0.0
@@ -1085,31 +1087,45 @@ class spVIPESmultimodule(BaseModuleClass):
                 ]
             return [inference_outputs["private_stats"][g]["log_z"]]
 
+        # Components 3/4 sum over (group, modality) in multimodal mode. The
+        # call-site divides the disentangle aggregate by n_groups, so we
+        # rescale the multimodal sum back to the per-group scale (multiply by
+        # n_groups / n_pairs) — this keeps disentangle_*_weight in per-pair
+        # units regardless of n_modalities. In single-modality mode n_pairs
+        # equals n_groups and the rescale is a no-op.
         # Component 3 (q_group_private): supervised group preservation on z_private
         if self.q_group_private is not None:
-            loss_val = sum(
+            pair_losses = [
                 F.cross_entropy(
                     self.q_group_private(z),
                     torch.full((z.size(0),), g, dtype=torch.long, device=z.device),
                 )
                 for g in range(n_groups)
                 for z in _private_zs(g)
-            )
+            ]
+            n_pairs = len(pair_losses)
+            loss_val = sum(pair_losses) * (n_groups / n_pairs) if n_pairs else 0.0
             disentangle_total = disentangle_total + self.disentangle_group_private_weight * loss_val
-            extra_metrics["disentangle_group_private_loss"] = loss_val / n_groups
+            extra_metrics["disentangle_group_private_loss"] = (
+                loss_val / n_groups if n_pairs else loss_val
+            )
 
         # Component 4 (q_label_private): adversarial label erasure on z_private
         if self.q_label_private is not None:
-            loss_val = sum(
+            pair_losses = [
                 F.cross_entropy(
                     self.q_label_private(gradient_reversal(z)),
                     labels_by_group[g].long(),
                 )
                 for g in range(n_groups)
                 for z in _private_zs(g)
-            )
+            ]
+            n_pairs = len(pair_losses)
+            loss_val = sum(pair_losses) * (n_groups / n_pairs) if n_pairs else 0.0
             disentangle_total = disentangle_total + self.disentangle_label_private_weight * loss_val
-            extra_metrics["disentangle_label_private_loss"] = loss_val / n_groups
+            extra_metrics["disentangle_label_private_loss"] = (
+                loss_val / n_groups if n_pairs else loss_val
+            )
 
         # Component 5 (contrastive): InfoNCE on z_shared via EMA prototypes
         if self.prototypes is not None:

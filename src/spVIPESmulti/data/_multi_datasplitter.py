@@ -21,12 +21,22 @@ def _validate_data_split(n_samples: int, train_size: float, validation_size: Opt
         n_val = n_samples - n_train
     elif validation_size >= 1.0:
         raise ValueError("Invalid validation_size. Must be: 0 <= validation_size < 1")
+    elif validation_size < 0.0:
+        raise ValueError("Invalid validation_size. Must be: 0 <= validation_size < 1")
     elif (train_size + validation_size) > 1.0:
         raise ValueError("train_size + validation_size must be between 0 and 1")
     else:
         n_val = floor(n_samples * validation_size)
     if n_train == 0:
         raise ValueError(f"With n_samples={n_samples}, train_size={train_size}, the resulting train set is empty.")
+    # `ceil(train) + floor(val)` rounding can drop a positive validation_size to 0
+    # for tiny groups (e.g. n_samples=5, train=0.9, val=0.08). Surface that early
+    # rather than letting val_dataloader silently return None downstream.
+    if validation_size is not None and validation_size > 0.0 and n_val == 0:
+        raise ValueError(
+            f"With n_samples={n_samples}, train_size={train_size}, validation_size={validation_size} "
+            f"the resulting validation set is empty (rounding). Increase validation_size or supply more cells."
+        )
     return n_train, n_val
 
 
@@ -119,22 +129,25 @@ class MultiGroupDataSplitter(pl.LightningDataModule):
             drop_last=True,
         )
 
-    def val_dataloader(self) -> ConcatDataLoader:
+    def val_dataloader(self) -> Optional[ConcatDataLoader]:
+        # Lightning treats None as "no validation". We return None explicitly
+        # when any group ended up with zero validation cells, so the user gets
+        # a quiet "no validation this run" rather than a cryptic crash inside
+        # the dataloader (and so early stopping silently fails in a way that
+        # at least matches Lightning's documented contract).
         if np.all([len(val_idx) > 0 for val_idx in self.val_idx_per_group]):
             return self._get_multigroup_dataloader(
                 self.val_idx_per_group,
                 shuffle=False,
                 drop_last=False,
             )
-        else:
-            pass
+        return None
 
-    def test_dataloader(self) -> ConcatDataLoader:
+    def test_dataloader(self) -> Optional[ConcatDataLoader]:
         if np.all([len(test_idx) > 0 for test_idx in self.test_idx_per_group]):
             return self._get_multigroup_dataloader(
                 self.test_idx_per_group,
                 shuffle=False,
                 drop_last=False,
             )
-        else:
-            pass
+        return None

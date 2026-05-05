@@ -1318,6 +1318,21 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
 
     def _process_batches(self, dataloader, normalized, give_mean, mc_samples, n_groups=None):
         """Process batches and return intermediate results for N groups."""
+        # `@torch.no_grad()` only disables autograd; it does NOT flip
+        # `nn.Module.training` to False. Without `eval()`, BatchNorm running
+        # stats keep updating and Dropout keeps dropping during inference,
+        # silently mutating the model and adding noise to embeddings.
+        was_training = self.module.training
+        self.module.eval()
+        try:
+            return self._process_batches_impl(
+                dataloader, normalized, give_mean, mc_samples, n_groups
+            )
+        finally:
+            self.module.train(was_training)
+
+    def _process_batches_impl(self, dataloader, normalized, give_mean, mc_samples, n_groups=None):
+        """Implementation of batch processing; assumes module is in eval mode."""
         if n_groups is None:
             # Infer from first batch
             for tensors_by_group in dataloader:
