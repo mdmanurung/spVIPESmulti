@@ -81,6 +81,10 @@ class Encoder(nn.Module):
             nn.Linear(hidden, n_topics, bias=True),
             nn.BatchNorm1d(n_topics),
         )
+        # Bias the post-BN logvar to start tight (logvar ≈ -1, σ ≈ 0.6).
+        # BatchNorm zero-centers the pre-affine output, so only the BN affine
+        # bias survives at init — set it directly.
+        nn.init.constant_(self.lvar_encoder[1].bias, -1.0)
 
     def forward(self, data: torch.Tensor, specie: int, *cat_list: int):
         """
