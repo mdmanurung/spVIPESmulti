@@ -110,6 +110,7 @@ class spVIPESmultimodule(BaseModuleClass):
         contrastive_weight: float = 0.0,
         contrastive_temperature: float = 0.1,
         disentangle_warmup: bool = True,
+        group_loss_weights: Optional[list[float]] = None,
         strict_likelihood_support: bool = False,
     ):
         """
@@ -299,6 +300,11 @@ class spVIPESmultimodule(BaseModuleClass):
         self.contrastive_weight = contrastive_weight
         self.contrastive_temperature = contrastive_temperature
         self.disentangle_warmup = disentangle_warmup
+        if group_loss_weights is not None:
+            s = sum(group_loss_weights)
+            self.group_loss_weights: Optional[list[float]] = [w / s for w in group_loss_weights]
+        else:
+            self.group_loss_weights = None
 
         _clf_kwargs = dict(n_layers=2, n_hidden=64, dropout_rate=0.1, use_batch_norm=True)
 
@@ -1269,14 +1275,8 @@ class spVIPESmultimodule(BaseModuleClass):
             # Aggregate each group to a scalar so groups with unequal batch
             # lengths can be combined safely.
             group_loss = group_loss.mean()
-            total_loss = group_loss if total_loss is None else total_loss + group_loss
-
-        # Average over groups so the gradient scale is invariant to the
-        # number of groups and unbalanced group sizes don't dominate.
-        # Disentangle helper sums across groups internally, so divide it by
-        # n_groups too — that keeps disentangle_*_weight in per-group units
-        # (i.e. the same relative scale they had before the sum→mean change).
-        total_loss = total_loss / n_groups
+            w = self.group_loss_weights[g] if self.group_loss_weights is not None else 1.0 / n_groups
+            total_loss = group_loss * w if total_loss is None else total_loss + group_loss * w
 
         disentangle_scale = kl_weight if self.disentangle_warmup else 1.0
         total_loss = total_loss + (disentangle_scale / n_groups) * self._compute_disentangle_losses(
@@ -1314,6 +1314,7 @@ class spVIPESmultimodule(BaseModuleClass):
 
         for g in range(n_groups):
             x_group = x[g]
+            group_loss = None
 
             # Per-modality reconstruction losses
             for modality in self.group_modalities[g]:
@@ -1366,7 +1367,7 @@ class spVIPESmultimodule(BaseModuleClass):
                 n_modalities = len(self.group_modalities[g])
                 mod_loss = mod_weight * recon_loss + kl_weight * (kl_mod_private / n_modalities)
                 mod_loss = mod_loss.mean()
-                total_loss = mod_loss if total_loss is None else total_loss + mod_loss
+                group_loss = mod_loss if group_loss is None else group_loss + mod_loss
 
             # Per-group PoE KL (shared across modalities)
             qz_poe = inference_outputs["poe_stats"][g]["logtheta_qz"]
@@ -1384,11 +1385,10 @@ class spVIPESmultimodule(BaseModuleClass):
 
             extra_metrics[f"kl_divergence_poe_group_{g}"] = kl_poe.mean()
             kl_local[f"kl_divergence_group_{g}_poe"] = kl_poe.mean()
-            total_loss = total_loss + kl_weight * kl_poe.mean()
+            group_loss = group_loss + kl_weight * kl_poe.mean()
 
-        # Average over groups so the gradient scale is invariant to the
-        # number of groups and unbalanced group sizes don't dominate.
-        total_loss = total_loss / n_groups
+            w = self.group_loss_weights[g] if self.group_loss_weights is not None else 1.0 / n_groups
+            total_loss = group_loss * w if total_loss is None else total_loss + group_loss * w
 
         # P8: disentanglement objective on multimodal mode. The helper early-
         # exits when no component is enabled, so the cost is one tuple

@@ -93,6 +93,28 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         group PoE posteriors on ``z_shared``.
     jeffreys_integ_weight : float, default=1.0
         Scalar multiplier on the Jeffreys integration loss.
+    group_loss_weights : list of float, optional
+        Per-group weights applied to each group's ELBO term before summing.
+        Automatically normalized to sum to 1.
+
+        Two common choices:
+
+        * **Inverse group sizes** ``[1/n_g0, 1/n_g1, ...]`` (recommended starting
+          point): gives larger weight to smaller groups so they contribute
+          proportionally to the shared latent space even when they have fewer cells.
+          Because :class:`ConcatDataLoader` already cycles smaller groups to
+          produce equal numbers of batches per epoch, inverse weights further
+          emphasize rare groups — useful when you care about quality of
+          representation for minority populations::
+
+              sizes = [n_g0, n_g1, n_g2]
+              group_loss_weights = [1 / n for n in sizes]  # normalized internally
+
+        * **Proportional to group size** ``[n_g0, n_g1, ...]``: down-weights
+          smaller (cycled) groups, which moves the effective ELBO closer to the
+          true dataset-level ELBO where each observation contributes equally.
+
+        Default ``None`` gives equal weights (1 / n_groups per group).
     **model_kwargs
         Additional keyword arguments forwarded to :class:`~spVIPESmulti.module.spVIPESmultimodule`.
 
@@ -148,6 +170,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         modality_loss_weights: Optional[dict] = None,
         use_jeffreys_integ: bool = False,
         jeffreys_integ_weight: float = 1.0,
+        group_loss_weights: Optional[list] = None,
         **model_kwargs,
     ):
         super().__init__(adata)
@@ -225,6 +248,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             **_disentangle_weights,
             contrastive_temperature=contrastive_temperature,
             disentangle_warmup=disentangle_warmup,
+            group_loss_weights=group_loss_weights,
             **model_kwargs,
         )
 
