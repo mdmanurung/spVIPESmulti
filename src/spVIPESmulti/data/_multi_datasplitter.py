@@ -72,6 +72,8 @@ class MultiGroupDataSplitter(pl.LightningDataModule):
 
         self.n_val_per_group = n_val_per_group
         self.n_train_per_group = n_train_per_group
+        self.n_train = int(sum(n_train_per_group))
+        self.n_val = int(sum(n_val_per_group))
 
     def setup(self, stage: Optional[str] = None):
         random_state = np.random.RandomState(seed=settings.seed)
@@ -97,27 +99,42 @@ class MultiGroupDataSplitter(pl.LightningDataModule):
     def _get_multigroup_dataloader(
         self,
         group_indices_list,
+        *,
+        shuffle: bool,
+        drop_last: bool,
     ) -> ConcatDataLoader:
         return ConcatDataLoader(
             self.adata_manager,
             indices_list=group_indices_list,
-            shuffle=True,
-            drop_last=True,
+            shuffle=shuffle,
+            drop_last=drop_last,
             pin_memory=self.pin_memory,
             **self.data_loader_kwargs,
         )
 
     def train_dataloader(self) -> ConcatDataLoader:
-        return self._get_multigroup_dataloader(self.train_idx_per_group)
+        return self._get_multigroup_dataloader(
+            self.train_idx_per_group,
+            shuffle=True,
+            drop_last=True,
+        )
 
     def val_dataloader(self) -> ConcatDataLoader:
         if np.all([len(val_idx) > 0 for val_idx in self.val_idx_per_group]):
-            return self._get_multigroup_dataloader(self.val_idx_per_group)
+            return self._get_multigroup_dataloader(
+                self.val_idx_per_group,
+                shuffle=False,
+                drop_last=False,
+            )
         else:
             pass
 
     def test_dataloader(self) -> ConcatDataLoader:
         if np.all([len(test_idx) > 0 for test_idx in self.test_idx_per_group]):
-            return self._get_multigroup_dataloader(self.test_idx_per_group)
+            return self._get_multigroup_dataloader(
+                self.test_idx_per_group,
+                shuffle=False,
+                drop_last=False,
+            )
         else:
             pass

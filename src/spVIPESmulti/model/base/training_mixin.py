@@ -6,6 +6,7 @@ https://docs.scvi-tools.org/en/0.9.0/user_guide/notebooks/model_user_guide.html#
 
 
 from typing import Optional
+import warnings
 
 import numpy as np
 from scvi.train import TrainingPlan, TrainRunner
@@ -36,7 +37,7 @@ class PatchedTrainRunner(OrigTrainRunner):
             try:
                 self.trainer.fit(
                     self.training_plan,
-                    train_dataloaders=self.data_splitter,
+                    datamodule=self.data_splitter,
                     ckpt_path=getattr(self, "ckpt_path", None),
                 )
             except TypeError as e:
@@ -64,6 +65,7 @@ class PatchedTrainRunner(OrigTrainRunner):
         self.model.trainer = self.trainer
 
 from spVIPESmulti.data._multi_datasplitter import MultiGroupDataSplitter
+from spVIPESmulti.utils import resolve_group_indices_list
 
 
 class MultiGroupTrainingMixin:
@@ -71,7 +73,7 @@ class MultiGroupTrainingMixin:
 
     def train(
         self,
-        group_indices_list: list[list[int]],
+        group_indices_list: Optional[list[list[int]]] = None,
         batch_size: Optional[int] = 128,
         max_epochs: Optional[int] = None,
         train_size: float = 0.9,
@@ -91,9 +93,10 @@ class MultiGroupTrainingMixin:
 
         Parameters
         ----------
-        group_indices_list : list[list[int]]
+        group_indices_list : list[list[int]], optional
             List of indices corresponding to each group of samples. Each inner list
-            contains the indices for cells belonging to that specific group.
+            contains the indices for cells belonging to that specific group. If
+            ``None``, values are inferred from ``adata.uns['groups_obs_indices']``.
         max_epochs : int, optional
             Number of passes through the dataset. If None, defaults to
             ``np.min([round((20000 / n_cells) * 400), 400])``.
@@ -131,6 +134,10 @@ class MultiGroupTrainingMixin:
         handling of multiple cell groups during training, maintaining the integrity
         of the shared-private latent space learning.
         """
+        group_indices_list, inferred = resolve_group_indices_list(self.adata, group_indices_list)
+        if inferred:
+            self._warn_group_indices_auto_inferred("train")
+
         if max_epochs is None:
             n_cells = self.adata.n_obs
             max_epochs = np.min([round((20000 / n_cells) * 400), 400]).item()
@@ -156,6 +163,8 @@ class MultiGroupTrainingMixin:
 
         es = "early_stopping"
         trainer_kwargs[es] = early_stopping if es not in trainer_kwargs.keys() else trainer_kwargs[es]
+        if data_splitter.n_val > 0 and "check_val_every_n_epoch" not in trainer_kwargs:
+            trainer_kwargs["check_val_every_n_epoch"] = 1
         runner = PatchedTrainRunner(
             self,
             training_plan=training_plan,
@@ -164,3 +173,15 @@ class MultiGroupTrainingMixin:
             **trainer_kwargs,
         )
         return runner()
+
+    def _warn_group_indices_auto_inferred(self, caller: str) -> None:
+        """Emit a one-time informational warning when group indices are inferred."""
+        if getattr(self, "_group_indices_auto_infer_warned", False):
+            return
+        warnings.warn(
+            "group_indices_list was not provided to "
+            f"{caller}(); inferred from adata.uns['groups_obs_indices'].",
+            UserWarning,
+            stacklevel=2,
+        )
+        self._group_indices_auto_infer_warned = True

@@ -15,8 +15,6 @@ from scvi.nn import FCLayers
 from spVIPESmulti.nn.networks import Encoder, LinearDecoderSPVIPE
 from spVIPESmulti.module.utils import gradient_reversal
 
-torch.backends.cudnn.benchmark = True
-
 
 class spVIPESmultimodule(BaseModuleClass):
     """
@@ -111,6 +109,7 @@ class spVIPESmultimodule(BaseModuleClass):
         disentangle_label_private_weight: float = 0.0,
         contrastive_weight: float = 0.0,
         contrastive_temperature: float = 0.1,
+        strict_likelihood_support: bool = False,
     ):
         """
         Initialize the spVIPESmulti variational autoencoder module.
@@ -147,6 +146,7 @@ class spVIPESmultimodule(BaseModuleClass):
         self.dispersion = dispersion
         self.log_variational_inference = log_variational_inference
         self.log_variational_generative = log_variational_generative
+        self.strict_likelihood_support = strict_likelihood_support
 
         # Multimodal configuration
         self.is_multimodal = groups_modality_lengths is not None
@@ -169,6 +169,7 @@ class spVIPESmultimodule(BaseModuleClass):
         if self.is_multimodal:
             # Multimodal mode: per-(group, modality) encoders and decoders
             self.px_r = torch.nn.ParameterDict()
+            self.log_scale_gaussian = torch.nn.ParameterDict()
             self.encoders = {}
             self.decoders = {}
 
@@ -176,6 +177,8 @@ class spVIPESmultimodule(BaseModuleClass):
                 for modality, n_features in mod_dict.items():
                     key = f"{group}_{modality}"
                     self.px_r[key] = torch.nn.Parameter(torch.randn(n_features))
+                    if (modality_likelihoods or {}).get(modality, "nb") == "gaussian":
+                        self.log_scale_gaussian[key] = torch.nn.Parameter(torch.zeros(n_features))
 
                     self.encoders[(group, modality)] = {
                         "shared": Encoder(
@@ -936,7 +939,8 @@ class spVIPESmultimodule(BaseModuleClass):
                 px_r_key = f"{group}_{modality}"
                 px_r = torch.exp(self.px_r[px_r_key])
                 likelihood_type = self.modality_likelihoods.get(modality, "nb")
-                px = build_likelihood(likelihood_type, px_rate_private, px_rate_shared, px_r, px_mixing, px_scale)
+                log_scale = self.log_scale_gaussian.get(px_r_key) if likelihood_type == "gaussian" else None
+                px = build_likelihood(likelihood_type, px_rate_private, px_rate_shared, px_r, px_mixing, px_scale, log_scale=log_scale)
                 pz = Normal(torch.zeros_like(combined_log_z), torch.ones_like(combined_log_z))
 
                 key = f"{group}_{modality}"
@@ -953,8 +957,17 @@ class spVIPESmultimodule(BaseModuleClass):
         return outputs
 
     @torch.inference_mode()
-    def get_loadings(self, dataset: int, type_latent: str) -> np.ndarray:
-        """Extract per-gene weights (for each Z, shape is genes by dim(Z)) in the linear decoder."""
+    def get_loadings(self, dataset, type_latent: str) -> np.ndarray:
+        """Extract per-gene weights (for each Z, shape is genes by dim(Z)) in the linear decoder.
+
+        Parameters
+        ----------
+        dataset : int or tuple
+            For single-modal models, an integer group index. For multimodal models,
+            a ``(group, modality)`` tuple matching a key in ``self.decoders``.
+        type_latent : str
+            ``"shared"`` or ``"private"``.
+        """
         # This is BW, where B is diag(b) batch norm, W is weight matrix
         if type_latent not in ["shared", "private"]:
             raise ValueError(f"Invalid value for type_latent: {type_latent}. It can only be 'shared' or 'private'")
@@ -1127,6 +1140,42 @@ class spVIPESmultimodule(BaseModuleClass):
 
         return disentangle_total
 
+    def _validate_likelihood_observations(
+        self,
+        x_obs: torch.Tensor,
+        likelihood_type: str,
+        context: str,
+        transformed_for_nb: bool = False,
+    ) -> None:
+        """Validate observed targets before likelihood log-prob evaluation.
+
+        This check is intentionally lightweight by default (finite + NB non-negative)
+        to avoid breaking legacy training behavior. Integer checks for count
+        likelihoods are opt-in via ``strict_likelihood_support`` and are only
+        enforced when NB targets are not log-transformed.
+        """
+        if not torch.isfinite(x_obs).all():
+            raise ValueError(
+                f"Invalid observations in {context}: expected finite values for "
+                f"likelihood '{likelihood_type}'."
+            )
+
+        if likelihood_type == "nb":
+            if (x_obs < 0).any():
+                raise ValueError(
+                    f"Invalid observations in {context}: NegativeBinomial likelihood "
+                    "requires non-negative targets."
+                )
+
+            if self.strict_likelihood_support and not transformed_for_nb:
+                nearest_int = torch.round(x_obs)
+                if not torch.allclose(x_obs, nearest_int, atol=1e-6, rtol=0.0):
+                    raise ValueError(
+                        f"Invalid observations in {context}: strict support validation "
+                        "requires integer-like count targets for NB likelihood. "
+                        "Disable strict_likelihood_support or provide integer counts."
+                    )
+
     def loss(
         self,
         tensors_by_group,
@@ -1142,9 +1191,6 @@ class spVIPESmultimodule(BaseModuleClass):
         x = {i: g[REGISTRY_KEYS.X_KEY] for i, g in enumerate(per_group)}
         x = {i: xs[:, self.groups_var_indices[i]] for i, xs in x.items()}
 
-        if self.log_variational_generative:
-            x = {i: torch.log(1 + xs) for i, xs in x.items()}  # logvariational
-
         n_groups = len(x)
         extra_metrics = {}
         reconst_losses = {}
@@ -1152,8 +1198,26 @@ class spVIPESmultimodule(BaseModuleClass):
         total_loss = None
 
         for g in range(n_groups):
+            x_obs = x[g]
+            self._validate_likelihood_observations(
+                x_obs,
+                likelihood_type="nb",
+                context=f"group={g}",
+                transformed_for_nb=False,
+            )
+
+            x_target = x_obs
+            if self.log_variational_generative:
+                x_target = torch.log(1 + x_obs)
+                self._validate_likelihood_observations(
+                    x_target,
+                    likelihood_type="nb",
+                    context=f"group={g}",
+                    transformed_for_nb=True,
+                )
+
             # Reconstruction loss
-            recon_loss = -generative_outputs["private_poe"][str(g)]["px"].log_prob(x[g]).sum(-1)
+            recon_loss = -generative_outputs["private_poe"][str(g)]["px"].log_prob(x_target).sum(-1)
 
             # KL divergence — private latent
             qz_private = inference_outputs["private_stats"][g]["qz"]
@@ -1190,6 +1254,10 @@ class spVIPESmultimodule(BaseModuleClass):
             inference_outputs, per_group, n_groups, extra_metrics
         )
 
+        if self.use_jeffreys_integ:
+            jeffreys_loss = self._compute_jeffreys_integ_loss(inference_outputs, n_groups, extra_metrics)
+            total_loss = total_loss + self.jeffreys_integ_weight * jeffreys_loss
+
         loss = torch.mean(total_loss)
 
         output = LossOutput(
@@ -1224,8 +1292,20 @@ class spVIPESmultimodule(BaseModuleClass):
                 x_mod = x_group[:, mod_var_indices]
 
                 likelihood_type = self.modality_likelihoods.get(modality, "nb")
+                self._validate_likelihood_observations(
+                    x_mod,
+                    likelihood_type=likelihood_type,
+                    context=f"group={g}, modality={modality}",
+                    transformed_for_nb=False,
+                )
                 if likelihood_type == "nb" and self.log_variational_generative:
                     x_mod = torch.log(1 + x_mod)
+                    self._validate_likelihood_observations(
+                        x_mod,
+                        likelihood_type=likelihood_type,
+                        context=f"group={g}, modality={modality}",
+                        transformed_for_nb=True,
+                    )
 
                 recon_loss = -gen_stats["px"].log_prob(x_mod).sum(-1)
                 reconst_losses[f"reconst_loss_group_{g}_{modality}"] = recon_loss
@@ -1233,13 +1313,17 @@ class spVIPESmultimodule(BaseModuleClass):
                 # Per-modality private KL (if available)
                 if (g, modality) in per_modality_private:
                     qz_mod_private = per_modality_private[(g, modality)]["qz"]
-                    kl_mod_private = kl(
-                        qz_mod_private,
-                        Normal(
-                            torch.zeros_like(per_modality_private[(g, modality)]["log_z"]),
-                            torch.ones_like(per_modality_private[(g, modality)]["log_z"]),
-                        ),
-                    ).sum(dim=1)
+                    z_mod_private = per_modality_private[(g, modality)]["log_z"]
+                    if self.use_nf_prior and self.nf_target in ("private", "both"):
+                        kl_mod_private = self._nf_kl(qz_mod_private, z_mod_private, "private")
+                    else:
+                        kl_mod_private = kl(
+                            qz_mod_private,
+                            Normal(
+                                torch.zeros_like(z_mod_private),
+                                torch.ones_like(z_mod_private),
+                            ),
+                        ).sum(dim=1)
                     kl_local[f"kl_divergence_group_{g}_{modality}_private"] = kl_mod_private
                     extra_metrics[f"kl_divergence_private_group_{g}_{modality}"] = kl_mod_private.mean()
                 else:

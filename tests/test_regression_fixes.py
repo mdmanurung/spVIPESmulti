@@ -19,6 +19,7 @@ import os
 import numpy as np
 import pytest
 import torch
+from scvi import REGISTRY_KEYS
 
 _SRC = os.path.join(os.path.dirname(__file__), "..", "src")
 
@@ -50,7 +51,7 @@ def _make_decoder(n_private=10, n_shared=25, n_output=50):
     )
 
 
-def _make_module(n_private=10, n_shared=25, n_genes=40, n_cells=30, n_groups=2):
+def _make_module(n_private=10, n_shared=25, n_genes=40, n_cells=30, n_groups=2, **kwargs):
     """Instantiate a minimal spVIPESmultimodule for use in unit tests."""
     import sys
     sys.path.insert(0, _SRC)
@@ -71,7 +72,55 @@ def _make_module(n_private=10, n_shared=25, n_genes=40, n_cells=30, n_groups=2):
         n_dimensions_private=n_private,
         n_dimensions_shared=n_shared,
         n_hidden=32,
+        **kwargs,
     )
+
+
+def _make_minimal_loss_inputs(module, frac=False):
+    """Create deterministic loss inputs without running full inference/generative passes."""
+    n_groups = len(module.input_dims)
+    n_private = module.n_dimensions_private
+    n_shared = module.n_dimensions_shared
+
+    per_group = []
+    inference_outputs = {"private_stats": {}, "poe_stats": {}}
+    generative_outputs = {"private_poe": {}}
+
+    for g in range(n_groups):
+        x = torch.tensor(
+            [[1.5, 2.0, 3.0], [2.0, 1.0, 4.0], [3.0, 2.0, 1.0]], dtype=torch.float32
+        ) if frac else torch.tensor(
+            [[1.0, 2.0, 3.0], [2.0, 1.0, 4.0], [3.0, 2.0, 1.0]], dtype=torch.float32
+        )
+        if module.input_dims[g] != x.shape[1]:
+            x = x[:, : module.input_dims[g]]
+        batch = torch.zeros((x.shape[0], 1), dtype=torch.long)
+        groups = torch.full((x.shape[0], 1), g, dtype=torch.long)
+        per_group.append(
+            {
+                REGISTRY_KEYS.X_KEY: x,
+                REGISTRY_KEYS.BATCH_KEY: batch,
+                "groups": groups,
+            }
+        )
+
+        z_private = torch.zeros((x.shape[0], n_private), dtype=torch.float32)
+        z_shared = torch.zeros((x.shape[0], n_shared), dtype=torch.float32)
+
+        inference_outputs["private_stats"][g] = {
+            "qz": torch.distributions.Normal(z_private, torch.ones_like(z_private)),
+            "log_z": z_private,
+        }
+        inference_outputs["poe_stats"][g] = {
+            "logtheta_qz": torch.distributions.Normal(z_shared, torch.ones_like(z_shared)),
+            "logtheta_log_z": z_shared,
+        }
+
+        generative_outputs["private_poe"][str(g)] = {
+            "px": torch.distributions.Normal(loc=x, scale=torch.ones_like(x)),
+        }
+
+    return per_group, inference_outputs, generative_outputs
 
 
 # ============================================================
@@ -577,3 +626,62 @@ class TestLatentRepresentationCompleteness:
                 f"Group {g}: expected {expected_n} shared rows, got {result['shared'][g].shape[0]}"
             assert result["private"][g].shape[0] == expected_n, \
                 f"Group {g}: expected {expected_n} private rows, got {result['private'][g].shape[0]}"
+
+
+class TestJeffreysAndLikelihoodHardening:
+    def test_single_modal_jeffreys_integration_changes_loss(self, monkeypatch):
+        module = _make_module(
+            n_private=2,
+            n_shared=3,
+            n_genes=3,
+            n_groups=2,
+            use_jeffreys_integ=False,
+            jeffreys_integ_weight=2.0,
+        )
+        module.eval()
+
+        tensors_by_group, inference_outputs, generative_outputs = _make_minimal_loss_inputs(module)
+
+        monkeypatch.setattr(module, "_compute_disentangle_losses", lambda *args, **kwargs: 0.0)
+        baseline = module.loss(
+            tensors_by_group,
+            inference_outputs,
+            generative_outputs,
+            kl_weight=1.0,
+        ).loss
+
+        module.use_jeffreys_integ = True
+        monkeypatch.setattr(
+            module,
+            "_compute_jeffreys_integ_loss",
+            lambda *args, **kwargs: torch.tensor(3.0),
+        )
+        with_jeffreys = module.loss(
+            tensors_by_group,
+            inference_outputs,
+            generative_outputs,
+            kl_weight=1.0,
+        ).loss
+
+        assert torch.isclose(with_jeffreys - baseline, torch.tensor(6.0), atol=1e-6)
+
+    def test_strict_likelihood_support_rejects_fractional_nb_counts(self):
+        module = _make_module(
+            n_private=2,
+            n_shared=3,
+            n_genes=3,
+            n_groups=2,
+            strict_likelihood_support=True,
+            log_variational_generative=False,
+        )
+        module.eval()
+
+        tensors_by_group, inference_outputs, generative_outputs = _make_minimal_loss_inputs(module, frac=True)
+
+        with pytest.raises(ValueError, match="strict support validation"):
+            module.loss(
+                tensors_by_group,
+                inference_outputs,
+                generative_outputs,
+                kl_weight=1.0,
+            )
