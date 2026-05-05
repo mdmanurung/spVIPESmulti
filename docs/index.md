@@ -17,6 +17,7 @@ notebooks/Tutorial
 notebooks/cinemaot_nf_vignette
 notebooks/pbmc_citeseq_tutorial
 notebooks/biolord_comparison_plasmodium_tutorial
+notebooks/malaria_bcells
 notebooks/multimodal_nf_tutorial
 notebooks/disentangle_ablation
 ```

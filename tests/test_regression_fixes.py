@@ -685,3 +685,185 @@ class TestJeffreysAndLikelihoodHardening:
                 generative_outputs,
                 kl_weight=1.0,
             )
+
+
+class TestUnequalGroupBatchLossAggregation:
+    def test_single_modal_loss_handles_unequal_group_batch_sizes(self, monkeypatch):
+        module = _make_module(
+            n_private=2,
+            n_shared=3,
+            n_genes=3,
+            n_groups=2,
+            log_variational_generative=False,
+        )
+        module.eval()
+
+        x0 = torch.tensor([[1.0, 2.0, 3.0], [2.0, 1.0, 4.0], [3.0, 2.0, 1.0], [1.0, 1.0, 1.0]])
+        x1 = torch.tensor([[1.0, 0.0, 2.0], [2.0, 2.0, 2.0], [3.0, 1.0, 1.0]])
+
+        tensors_by_group = [
+            {
+                REGISTRY_KEYS.X_KEY: x0,
+                REGISTRY_KEYS.BATCH_KEY: torch.zeros((x0.shape[0], 1), dtype=torch.long),
+                "groups": torch.zeros((x0.shape[0], 1), dtype=torch.long),
+            },
+            {
+                REGISTRY_KEYS.X_KEY: x1,
+                REGISTRY_KEYS.BATCH_KEY: torch.zeros((x1.shape[0], 1), dtype=torch.long),
+                "groups": torch.ones((x1.shape[0], 1), dtype=torch.long),
+            },
+        ]
+
+        z0_private = torch.zeros((x0.shape[0], module.n_dimensions_private), dtype=torch.float32)
+        z1_private = torch.zeros((x1.shape[0], module.n_dimensions_private), dtype=torch.float32)
+        z0_shared = torch.zeros((x0.shape[0], module.n_dimensions_shared), dtype=torch.float32)
+        z1_shared = torch.zeros((x1.shape[0], module.n_dimensions_shared), dtype=torch.float32)
+
+        inference_outputs = {
+            "private_stats": {
+                0: {
+                    "qz": torch.distributions.Normal(z0_private, torch.ones_like(z0_private)),
+                    "log_z": z0_private,
+                },
+                1: {
+                    "qz": torch.distributions.Normal(z1_private, torch.ones_like(z1_private)),
+                    "log_z": z1_private,
+                },
+            },
+            "poe_stats": {
+                0: {
+                    "logtheta_qz": torch.distributions.Normal(z0_shared, torch.ones_like(z0_shared)),
+                    "logtheta_log_z": z0_shared,
+                },
+                1: {
+                    "logtheta_qz": torch.distributions.Normal(z1_shared, torch.ones_like(z1_shared)),
+                    "logtheta_log_z": z1_shared,
+                },
+            },
+        }
+
+        generative_outputs = {
+            "private_poe": {
+                "0": {"px": torch.distributions.Normal(loc=x0, scale=torch.ones_like(x0))},
+                "1": {"px": torch.distributions.Normal(loc=x1, scale=torch.ones_like(x1))},
+            }
+        }
+
+        monkeypatch.setattr(module, "_compute_disentangle_losses", lambda *args, **kwargs: 0.0)
+        result = module.loss(tensors_by_group, inference_outputs, generative_outputs, kl_weight=1.0)
+
+        assert result.loss.ndim == 0
+        assert torch.isfinite(result.loss)
+
+    def test_multimodal_loss_handles_unequal_group_batch_sizes(self, monkeypatch):
+        import sys
+        sys.path.insert(0, _SRC)
+        from spVIPESmulti.module.spVIPESmultimodule import spVIPESmultimodule
+
+        groups_lengths = {0: 3, 1: 3}
+        groups_modality_lengths = {
+            0: {"rna": 2, "protein": 1},
+            1: {"rna": 2, "protein": 1},
+        }
+        groups_modality_var_indices = {
+            0: {"rna": [0, 1], "protein": [2]},
+            1: {"rna": [0, 1], "protein": [2]},
+        }
+
+        module = spVIPESmultimodule(
+            groups_lengths=groups_lengths,
+            groups_obs_names=[list(range(4)), list(range(3))],
+            groups_var_names=[["g0", "g1", "g2"], ["g0", "g1", "g2"]],
+            groups_obs_indices=[list(range(4)), list(range(3))],
+            groups_var_indices=[list(range(3)), list(range(3))],
+            n_dimensions_private=2,
+            n_dimensions_shared=3,
+            n_hidden=16,
+            groups_modality_lengths=groups_modality_lengths,
+            groups_modality_var_indices=groups_modality_var_indices,
+            modality_likelihoods={"rna": "nb", "protein": "nb"},
+            modality_names=["rna", "protein"],
+            log_variational_generative=False,
+        )
+        module.eval()
+
+        x0 = torch.tensor([[1.0, 2.0, 3.0], [2.0, 1.0, 4.0], [3.0, 2.0, 1.0], [1.0, 1.0, 1.0]])
+        x1 = torch.tensor([[1.0, 0.0, 2.0], [2.0, 2.0, 2.0], [3.0, 1.0, 1.0]])
+
+        tensors_by_group = [
+            {
+                REGISTRY_KEYS.X_KEY: x0,
+                REGISTRY_KEYS.BATCH_KEY: torch.zeros((x0.shape[0], 1), dtype=torch.long),
+                "groups": torch.zeros((x0.shape[0], 1), dtype=torch.long),
+            },
+            {
+                REGISTRY_KEYS.X_KEY: x1,
+                REGISTRY_KEYS.BATCH_KEY: torch.zeros((x1.shape[0], 1), dtype=torch.long),
+                "groups": torch.ones((x1.shape[0], 1), dtype=torch.long),
+            },
+        ]
+
+        z0_shared = torch.zeros((x0.shape[0], module.n_dimensions_shared), dtype=torch.float32)
+        z1_shared = torch.zeros((x1.shape[0], module.n_dimensions_shared), dtype=torch.float32)
+
+        per_modality_private = {}
+        for g, xg in enumerate([x0, x1]):
+            for modality in ["rna", "protein"]:
+                z = torch.zeros((xg.shape[0], module.n_dimensions_private), dtype=torch.float32)
+                per_modality_private[(g, modality)] = {
+                    "qz": torch.distributions.Normal(z, torch.ones_like(z)),
+                    "log_z": z,
+                }
+
+        inference_outputs = {
+            "private_stats": {
+                0: {"qz": per_modality_private[(0, "rna")]["qz"], "log_z": per_modality_private[(0, "rna")]["log_z"]},
+                1: {"qz": per_modality_private[(1, "rna")]["qz"], "log_z": per_modality_private[(1, "rna")]["log_z"]},
+            },
+            "poe_stats": {
+                0: {
+                    "logtheta_qz": torch.distributions.Normal(z0_shared, torch.ones_like(z0_shared)),
+                    "logtheta_log_z": z0_shared,
+                },
+                1: {
+                    "logtheta_qz": torch.distributions.Normal(z1_shared, torch.ones_like(z1_shared)),
+                    "logtheta_log_z": z1_shared,
+                },
+            },
+            "per_modality_private": per_modality_private,
+        }
+
+        generative_outputs = {
+            "private_poe": {
+                "0_rna": {
+                    "px": torch.distributions.Normal(
+                        loc=x0[:, groups_modality_var_indices[0]["rna"]],
+                        scale=torch.ones_like(x0[:, groups_modality_var_indices[0]["rna"]]),
+                    )
+                },
+                "0_protein": {
+                    "px": torch.distributions.Normal(
+                        loc=x0[:, groups_modality_var_indices[0]["protein"]],
+                        scale=torch.ones_like(x0[:, groups_modality_var_indices[0]["protein"]]),
+                    )
+                },
+                "1_rna": {
+                    "px": torch.distributions.Normal(
+                        loc=x1[:, groups_modality_var_indices[1]["rna"]],
+                        scale=torch.ones_like(x1[:, groups_modality_var_indices[1]["rna"]]),
+                    )
+                },
+                "1_protein": {
+                    "px": torch.distributions.Normal(
+                        loc=x1[:, groups_modality_var_indices[1]["protein"]],
+                        scale=torch.ones_like(x1[:, groups_modality_var_indices[1]["protein"]]),
+                    )
+                },
+            }
+        }
+
+        monkeypatch.setattr(module, "_compute_disentangle_losses", lambda *args, **kwargs: 0.0)
+        result = module._loss_multimodal(tensors_by_group, inference_outputs, generative_outputs, kl_weight=1.0)
+
+        assert result.loss.ndim == 0
+        assert torch.isfinite(result.loss)

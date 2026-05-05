@@ -456,6 +456,7 @@ fig.savefig("training.pdf")
 -   [PBMC CITE-seq vaccination](docs/notebooks/pbmc_citeseq_tutorial.ipynb) — Three time-point integration + multimodal appendix
 -   [CINEMA-OT + NF prior](docs/notebooks/cinemaot_nf_vignette.ipynb) — Gaussian vs. NSF prior vs. disentanglement
 -   [Plasmodium liver-stage](docs/notebooks/biolord_comparison_plasmodium_tutorial.ipynb) — Comparison with biolord
+-   [Malaria B-cell analysis](docs/notebooks/malaria_bcells.ipynb) — Lightweight end-to-end B-cell workflow from CSV inputs
 -   [Multimodal + NF prior](docs/notebooks/multimodal_nf_tutorial.ipynb) — RNA + protein integration with `prepare_multimodal_adatas`
 -   [API Documentation][link-api] — Comprehensive API reference
 

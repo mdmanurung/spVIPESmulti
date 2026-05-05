@@ -53,6 +53,7 @@ Notes: add optional `reference_group`; force shared-only decode for reference gr
 
 ## Last Updated
 
+- 2026-05-05: Unequal-batch loss aggregation fix completed: single-modal and multimodal loss paths now aggregate per-group/per-modality terms as scalars and provide shape-safe `LossOutput` bookkeeping; regression coverage added for unequal group batch lengths (`2 passed`) plus related training/multimodal suites (`23 passed`).
 - 2026-05-05: Documentation synchronization pass completed: updated README and docs/api for current public APIs (`sample_key`, `embed`, posterior/DA helpers, auto-inferred group indices), removed stale notebook links from docs index, and added an Unreleased changelog note.
 - 2026-05-05: Docs hardening pass completed: documented `strict_likelihood_support` in README/API and corrected stale multimodal `get_loadings()` API note.
 - 2026-05-05: Hardening follow-up completed: added regression tests for normalized latent path, multimodal get_loadings, and single-modal Jeffreys integration; added optional strict likelihood support validation; full suite green (`177 passed, 2 skipped`).

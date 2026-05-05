@@ -1243,11 +1243,14 @@ class spVIPESmultimodule(BaseModuleClass):
 
             extra_metrics[f"kl_divergence_private_group_{g}"] = kl_private.mean()
             extra_metrics[f"kl_divergence_poe_group_{g}"] = kl_poe.mean()
-            reconst_losses[f"reconst_loss_group_{g}_poe"] = recon_loss
-            kl_local[f"kl_divergence_group_{g}_private"] = kl_private
-            kl_local[f"kl_divergence_group_{g}_poe"] = kl_poe
+            reconst_losses[f"reconst_loss_group_{g}_poe"] = recon_loss.mean()
+            kl_local[f"kl_divergence_group_{g}_private"] = kl_private.mean()
+            kl_local[f"kl_divergence_group_{g}_poe"] = kl_poe.mean()
 
             group_loss = recon_loss + kl_weight * kl_private + kl_weight * kl_poe
+            # Aggregate each group to a scalar so groups with unequal batch
+            # lengths can be combined safely.
+            group_loss = group_loss.mean()
             total_loss = group_loss if total_loss is None else total_loss + group_loss
 
         total_loss = total_loss + self._compute_disentangle_losses(
@@ -1261,7 +1264,11 @@ class spVIPESmultimodule(BaseModuleClass):
         loss = torch.mean(total_loss)
 
         output = LossOutput(
-            loss=loss, reconstruction_loss=reconst_losses, kl_local=kl_local, extra_metrics=extra_metrics
+            loss=loss,
+            reconstruction_loss=reconst_losses,
+            kl_local=kl_local,
+            extra_metrics=extra_metrics,
+            n_obs_minibatch=sum(v.shape[0] for v in x.values()),
         )
 
         return output
@@ -1308,7 +1315,7 @@ class spVIPESmultimodule(BaseModuleClass):
                     )
 
                 recon_loss = -gen_stats["px"].log_prob(x_mod).sum(-1)
-                reconst_losses[f"reconst_loss_group_{g}_{modality}"] = recon_loss
+                reconst_losses[f"reconst_loss_group_{g}_{modality}"] = recon_loss.mean()
 
                 # Per-modality private KL (if available)
                 if (g, modality) in per_modality_private:
@@ -1324,7 +1331,7 @@ class spVIPESmultimodule(BaseModuleClass):
                                 torch.ones_like(z_mod_private),
                             ),
                         ).sum(dim=1)
-                    kl_local[f"kl_divergence_group_{g}_{modality}_private"] = kl_mod_private
+                    kl_local[f"kl_divergence_group_{g}_{modality}_private"] = kl_mod_private.mean()
                     extra_metrics[f"kl_divergence_private_group_{g}_{modality}"] = kl_mod_private.mean()
                 else:
                     kl_mod_private = torch.zeros(x_mod.shape[0], device=x_mod.device)
@@ -1332,6 +1339,7 @@ class spVIPESmultimodule(BaseModuleClass):
                 mod_weight = self.modality_loss_weights.get(modality, 1.0)
                 n_modalities = len(self.group_modalities[g])
                 mod_loss = mod_weight * recon_loss + kl_weight * (kl_mod_private / n_modalities)
+                mod_loss = mod_loss.mean()
                 total_loss = mod_loss if total_loss is None else total_loss + mod_loss
 
             # Per-group PoE KL (shared across modalities)
@@ -1349,8 +1357,8 @@ class spVIPESmultimodule(BaseModuleClass):
                 ).sum(dim=1)
 
             extra_metrics[f"kl_divergence_poe_group_{g}"] = kl_poe.mean()
-            kl_local[f"kl_divergence_group_{g}_poe"] = kl_poe
-            total_loss = total_loss + kl_weight * kl_poe
+            kl_local[f"kl_divergence_group_{g}_poe"] = kl_poe.mean()
+            total_loss = total_loss + kl_weight * kl_poe.mean()
 
         # P8: disentanglement objective on multimodal mode. The helper early-
         # exits when no component is enabled, so the cost is one tuple
@@ -1366,5 +1374,9 @@ class spVIPESmultimodule(BaseModuleClass):
         loss = torch.mean(total_loss)
 
         return LossOutput(
-            loss=loss, reconstruction_loss=reconst_losses, kl_local=kl_local, extra_metrics=extra_metrics
+            loss=loss,
+            reconstruction_loss=reconst_losses,
+            kl_local=kl_local,
+            extra_metrics=extra_metrics,
+            n_obs_minibatch=sum(v.shape[0] for v in x.values()),
         )

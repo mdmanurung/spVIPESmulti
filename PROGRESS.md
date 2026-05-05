@@ -9,36 +9,59 @@ How to use:
 
 ---
 
+## 2026-05-05 (unequal batch-size loss fix)
+
+### U1: Robust loss aggregation for unequal per-group minibatch sizes
+Status: completed
+
+What changed:
+- Fixed single-modal `loss()` aggregation in `spVIPESmultimodule` so group losses are reduced to scalars before cross-group accumulation.
+- Fixed multimodal `_loss_multimodal()` aggregation similarly for per-modality losses and shared PoE KL terms.
+- Updated `LossOutput` payload construction to remain shape-safe with unequal per-group sizes by:
+  - storing scalar means in `reconstruction_loss` and `kl_local` dictionaries,
+  - providing explicit `n_obs_minibatch`.
+- Added focused regression tests that directly exercise unequal per-group batch lengths in both single-modal and multimodal loss paths.
+
+Files:
+- `src/spVIPESmulti/module/spVIPESmultimodule.py`
+- `tests/test_regression_fixes.py`
+
+Verification:
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest tests/test_regression_fixes.py -k "UnequalGroupBatchLossAggregation or unequal" -q` passed (`2 passed`).
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest tests/test_lightning_trainer_compat.py tests/test_multimodal_disentangle.py tests/test_multigroup_multimodal.py -q` passed (`23 passed`).
+
 ## 2026-05-05 (documentation synchronization)
 
 ### D1: README/API/docs alignment with repository state
 Status: completed
 
 What changed:
-- Updated README quick-start workflow to reflect current setup and APIs:
   - added `sample_key` in `setup_anndata(...)` usage.
   - added optional sample-aware posterior aggregation and `differential_abundance(...)` usage in the basic workflow.
-- Updated API reference (`docs/api.md`) to match current signatures and exposed methods:
   - quick-reference table now includes `embed`, `get_shared_posterior`, `get_aggregated_posterior`, and `differential_abundance`.
   - `setup_anndata(...)` signature/table now documents `sample_key`.
   - `train(...)` docs now correctly show `group_indices_list` as optional (auto-inferred fallback).
   - `get_latent_representation(...)` docs now state `batch_size=None` defaults to `scvi.settings.batch_size`.
   - added dedicated sections for `embed`, `get_shared_posterior`, `get_aggregated_posterior`, and `differential_abundance`.
-- Updated docs toctree to remove stale notebook entries not present in tree:
   - removed `notebooks/dialogue_multigroup_vignette` and `notebooks/iri_days_vignette` from `docs/index.md`.
-- Added `CHANGELOG.md` `Unreleased` note documenting the docs sync pass.
 
 Files:
-- `README.md`
-- `docs/api.md`
-- `docs/index.md`
-- `CHANGELOG.md`
-- `PLAN.md`
-- `PROGRESS.md`
 
 Verification:
-- Editor diagnostics check passed for all modified docs files (`No errors found`).
-- Manual consistency sweep completed for notebook references and API signatures/defaults.
+
+### Final pass: vignette index accuracy (malaria notebook discoverability)
+Status: completed
+
+What changed:
+- Added `docs/notebooks/malaria_bcells.ipynb` to the Sphinx toctree in `docs/index.md`.
+- Added a corresponding tutorial bullet to `README.md` under "Documentation & Tutorials".
+
+Verification:
+- Confirmed `malaria_bcells` is referenced in both index locations (`README.md` and `docs/index.md`).
+- Checked diagnostics for modified files: no errors.
+
+Next action:
+- Keep build troubleshooting deferred; content indexing is now aligned with tracked notebook files.
 
 ## 2026-05-05 (audit session)
 
