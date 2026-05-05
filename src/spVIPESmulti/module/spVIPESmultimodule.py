@@ -1257,10 +1257,13 @@ class spVIPESmultimodule(BaseModuleClass):
 
         # Average over groups so the gradient scale is invariant to the
         # number of groups and unbalanced group sizes don't dominate.
+        # Disentangle helper sums across groups internally, so divide it by
+        # n_groups too — that keeps disentangle_*_weight in per-group units
+        # (i.e. the same relative scale they had before the sum→mean change).
         total_loss = total_loss / n_groups
 
         disentangle_scale = kl_weight if self.disentangle_warmup else 1.0
-        total_loss = total_loss + disentangle_scale * self._compute_disentangle_losses(
+        total_loss = total_loss + (disentangle_scale / n_groups) * self._compute_disentangle_losses(
             inference_outputs, per_group, n_groups, extra_metrics
         )
 
@@ -1373,9 +1376,11 @@ class spVIPESmultimodule(BaseModuleClass):
 
         # P8: disentanglement objective on multimodal mode. The helper early-
         # exits when no component is enabled, so the cost is one tuple
-        # comparison when disentangle_preset='off'.
+        # comparison when disentangle_preset='off'. Helper sums across groups
+        # internally, so divide by n_groups to keep disentangle_*_weight in
+        # per-group units (same relative scale as before the sum→mean change).
         disentangle_scale = kl_weight if self.disentangle_warmup else 1.0
-        total_loss = total_loss + disentangle_scale * self._compute_disentangle_losses(
+        total_loss = total_loss + (disentangle_scale / n_groups) * self._compute_disentangle_losses(
             inference_outputs, per_group, n_groups, extra_metrics
         )
 
