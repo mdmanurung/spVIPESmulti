@@ -246,6 +246,86 @@ class TestStoreLatents:
 
 
 # ===========================================================================
+# utils.resolve_group_indices_list
+# ===========================================================================
+
+
+class TestResolveGroupIndicesList:
+    def test_uses_explicit_indices(self, adata):
+        explicit = [list(range(0, 40)), list(range(40, 80)), list(range(80, 120))]
+        resolved, inferred = utils.resolve_group_indices_list(adata, explicit)
+        assert inferred is False
+        assert resolved == explicit
+
+    def test_infers_from_uns(self, adata):
+        adata.uns["groups_obs_indices"] = [
+            np.arange(0, 40),
+            np.arange(40, 80),
+            np.arange(80, 120),
+        ]
+        resolved, inferred = utils.resolve_group_indices_list(adata, None)
+        assert inferred is True
+        assert len(resolved) == 3
+        assert resolved[1][0] == 40
+
+    def test_missing_uns_raises(self, adata):
+        adata.uns.pop("groups_obs_indices", None)
+        with pytest.raises(ValueError, match="groups_obs_indices"):
+            utils.resolve_group_indices_list(adata, None)
+
+    def test_duplicate_cells_raise(self, adata):
+        bad = [list(range(0, 50)), list(range(49, 80)), list(range(80, 120))]
+        with pytest.raises(ValueError, match="duplicate"):
+            utils.resolve_group_indices_list(adata, bad)
+
+
+# ===========================================================================
+# utils.validate_enrichment_network
+# ===========================================================================
+
+
+class TestValidateEnrichmentNetwork:
+    def test_missing_required_columns_raises(self):
+        net = pd.DataFrame({"foo": ["A"], "bar": ["G1"]})
+        with pytest.raises(ValueError, match="missing required column"):
+            utils.validate_enrichment_network(net)
+
+    def test_tmin_filters_sources(self, adata):
+        net = pd.DataFrame(
+            {
+                "source": ["S1", "S1", "S2"],
+                "target": ["Gene1", "Gene2", "Gene3"],
+            }
+        )
+        clean, stats = utils.validate_enrichment_network(net, adata=adata, tmin=2)
+        assert clean["source"].nunique() == 1
+        assert clean["source"].iloc[0] == "S1"
+        assert stats["n_sources"] == 1
+
+    def test_low_overlap_adds_warning(self, adata):
+        net = pd.DataFrame(
+            {
+                "source": ["S1"] * 6,
+                "target": ["NoMatch1", "NoMatch2", "NoMatch3", "NoMatch4", "NoMatch5", "NoMatch6"],
+            }
+        )
+        _, stats = utils.validate_enrichment_network(net, adata=adata, tmin=5)
+        assert stats["n_targets_overlap"] == 0
+        assert any("No target overlap" in w for w in stats["warnings"])
+
+    def test_missing_weight_column_warns(self, adata):
+        net = pd.DataFrame(
+            {
+                "source": ["S1", "S1", "S1", "S1", "S1"],
+                "target": ["Gene1", "Gene2", "Gene3", "Gene4", "Gene5"],
+            }
+        )
+        _, stats = utils.validate_enrichment_network(net, adata=adata, tmin=5)
+        assert stats["has_weight"] is False
+        assert any("weight column" in w for w in stats["warnings"])
+
+
+# ===========================================================================
 # utils.add_latent_dims_to_obs
 # ===========================================================================
 

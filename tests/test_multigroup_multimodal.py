@@ -378,8 +378,11 @@ class TestLikelihoodFactory:
         px_rate_shared = torch.rand(batch_size, n_genes)
         px_r = torch.rand(n_genes)
         px_mixing = torch.randn(batch_size, n_genes)
+        px_scale = torch.rand(batch_size, n_genes)
+        log_scale = torch.nn.Parameter(torch.zeros(n_genes))
 
-        dist = self.build_likelihood("gaussian", px_rate_private, px_rate_shared, px_r, px_mixing)
+        dist = self.build_likelihood("gaussian", px_rate_private, px_rate_shared, px_r, px_mixing,
+                                     px_scale=px_scale, log_scale=log_scale)
         sample = torch.randn(batch_size, n_genes)
         log_prob = dist.log_prob(sample)
         assert log_prob.shape == (batch_size, n_genes)

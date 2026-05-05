@@ -8,6 +8,10 @@ Functions
 ---------
 heatmap_loadings
     Heatmap of top-N gene loadings per latent dimension.
+enrichment_heatmap
+    Heatmap of per-cell or per-group enrichment activity scores.
+interpretation_dashboard
+    Two-panel dashboard with shared embedding and enrichment heatmap.
 umap_shared
     Convenience wrapper for plotting the shared UMAP.
 umap_private
@@ -453,3 +457,151 @@ def loadings_dotplot(
         )
 
     sc.pl.dotplot(adata, var_names=var_names, groupby=groupby, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Enrichment interpretation helpers
+# ---------------------------------------------------------------------------
+
+
+def enrichment_heatmap(
+    scores_df: pd.DataFrame,
+    *,
+    group_labels: Optional[Sequence[object]] = None,
+    top_n: int = 20,
+    figsize: Optional[tuple[float, float]] = None,
+    ax: Optional["Axes"] = None,
+    cmap: str = "RdBu_r",
+    center: float = 0.0,
+) -> "Axes":
+    """Heatmap of enrichment activity scores.
+
+    Parameters
+    ----------
+    scores_df
+        Enrichment score matrix (cells x programs).
+    group_labels
+        Optional group labels for per-group mean aggregation before plotting.
+    top_n
+        Number of highest-variance programs to display.
+    figsize
+        Figure size when creating a new figure.
+    ax
+        Existing axes to draw on.
+    cmap
+        Matplotlib colormap name.
+    center
+        Value used to center the diverging colormap.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        Axes containing the heatmap.
+    """
+    if not isinstance(scores_df, pd.DataFrame):
+        raise TypeError(
+            f"scores_df must be a pandas DataFrame, got {type(scores_df).__name__}."
+        )
+    if scores_df.empty:
+        raise ValueError("scores_df is empty.")
+    if top_n < 1:
+        raise ValueError(f"top_n must be >= 1, got {top_n}.")
+
+    try:
+        import seaborn as sns
+    except ImportError:
+        raise ImportError(
+            "seaborn is required for enrichment_heatmap. "
+            "Install it with: pip install seaborn"
+        )
+    import matplotlib.pyplot as plt
+
+    plot_df = scores_df.copy()
+    if group_labels is not None:
+        if len(group_labels) != scores_df.shape[0]:
+            raise ValueError(
+                "group_labels length must match number of rows in scores_df."
+            )
+        grouped = plot_df.copy()
+        grouped["__group"] = [str(g) for g in group_labels]
+        plot_df = grouped.groupby("__group", observed=True).mean()
+
+    n_cols = min(top_n, plot_df.shape[1])
+    top_cols = plot_df.var(axis=0).nlargest(n_cols).index.tolist()
+    plot_df = plot_df[top_cols]
+
+    if ax is None:
+        if figsize is None:
+            figsize = (max(8, 0.4 * plot_df.shape[1]), max(4, 0.35 * plot_df.shape[0]))
+        _, ax = plt.subplots(figsize=figsize)
+
+    sns.heatmap(plot_df, cmap=cmap, center=center, ax=ax)
+    ax.set_xlabel("Program")
+    ax.set_ylabel("Group" if group_labels is not None else "Cell")
+    return ax
+
+
+def interpretation_dashboard(
+    adata: "AnnData",
+    scores_df: pd.DataFrame,
+    groupby: str,
+    *,
+    shared_basis: str = "X_umap_spvipesmulti_shared",
+    top_n: int = 20,
+    figsize: tuple[float, float] = (14.0, 5.0),
+    cmap: str = "RdBu_r",
+) -> "plt.Figure":
+    """Create a compact two-panel interpretation dashboard.
+
+    Left panel:
+        Shared embedding scatter colored by ``groupby`` (when available).
+    Right panel:
+        Enrichment heatmap aggregated by ``groupby``.
+    """
+    import matplotlib.pyplot as plt
+
+    if groupby not in adata.obs:
+        raise KeyError(
+            f"'{groupby}' not found in adata.obs. Available columns: {list(adata.obs.columns)}"
+        )
+
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+    ax_left, ax_right = axes
+
+    if shared_basis in adata.obsm:
+        coords = np.asarray(adata.obsm[shared_basis])
+        if coords.shape[1] < 2:
+            raise ValueError(
+                f"adata.obsm['{shared_basis}'] must have at least 2 columns."
+            )
+        cats = adata.obs[groupby].astype(str).values
+        unique = pd.unique(cats)
+        for name in unique:
+            mask = cats == name
+            ax_left.scatter(coords[mask, 0], coords[mask, 1], s=8, alpha=0.7, label=str(name))
+        ax_left.set_title(f"Shared embedding ({groupby})")
+        ax_left.set_xlabel("dim1")
+        ax_left.set_ylabel("dim2")
+        ax_left.legend(fontsize=7, loc="best")
+    else:
+        ax_left.text(
+            0.5,
+            0.5,
+            f"Missing embedding key: {shared_basis}",
+            ha="center",
+            va="center",
+            transform=ax_left.transAxes,
+        )
+        ax_left.set_axis_off()
+
+    enrichment_heatmap(
+        scores_df,
+        group_labels=adata.obs[groupby].values,
+        top_n=top_n,
+        ax=ax_right,
+        cmap=cmap,
+    )
+    ax_right.set_title("Enrichment summary")
+
+    fig.tight_layout()
+    return fig

@@ -82,7 +82,8 @@ class TestNFPrior:
 
         latent_dim = 5
         flow = zuko.flows.NSF(features=latent_dim, context=0, transforms=2)
-        optimizer = torch.optim.Adam(flow.parameters(), lr=1e-3)
+        # Use SGD here to keep the test CPU-safe on systems with partial/broken CUDA drivers.
+        optimizer = torch.optim.SGD(flow.parameters(), lr=1e-3)
 
         # One training step
         z = torch.randn(16, latent_dim)

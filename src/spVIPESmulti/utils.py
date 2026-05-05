@@ -31,6 +31,211 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
+def sanitize_obsm_token(value: object) -> str:
+    """Return a safe token for use in ``adata.obsm`` keys.
+
+    Non-alphanumeric characters are replaced with underscores and repeated
+    underscores are collapsed. Empty results fall back to ``"group"``.
+    """
+    token = re.sub(r"[^0-9A-Za-z]+", "_", str(value)).strip("_").lower()
+    return token or "group"
+
+
+def resolve_group_indices_list(
+    adata: "AnnData",
+    group_indices_list: Optional[list[Union[np.ndarray, list[int], tuple[int, ...]]]] = None,
+) -> tuple[list[list[int]], bool]:
+    """Resolve and validate group indices for training/latent APIs.
+
+    Parameters
+    ----------
+    adata:
+        AnnData carrying group metadata in ``adata.uns``.
+    group_indices_list:
+        Explicit per-group cell indices. If ``None``, indices are inferred from
+        ``adata.uns["groups_obs_indices"]``.
+
+    Returns
+    -------
+    tuple[list[list[int]], bool]
+        A validated list of Python ``list[int]`` plus a boolean indicating
+        whether values were inferred from ``adata.uns``.
+
+    Raises
+    ------
+    ValueError
+        If indices are missing/malformed, or contain out-of-range/duplicate cells.
+    """
+    inferred = group_indices_list is None
+    if inferred:
+        if "groups_obs_indices" not in adata.uns:
+            raise ValueError(
+                "Could not infer group indices: adata.uns['groups_obs_indices'] is missing. "
+                "Run spVIPESmulti.data.prepare_adatas(...) or "
+                "spVIPESmulti.data.prepare_multimodal_adatas(...), then call "
+                "spVIPESmulti.model.spVIPESmulti.setup_anndata(...), or pass "
+                "group_indices_list explicitly."
+            )
+        group_indices_list = adata.uns["groups_obs_indices"]
+
+    if not isinstance(group_indices_list, (list, tuple)) or len(group_indices_list) == 0:
+        raise ValueError(
+            "group_indices_list must be a non-empty list of per-group index lists."
+        )
+
+    normalized: list[list[int]] = []
+    for gi, group in enumerate(group_indices_list):
+        if group is None:
+            raise ValueError(f"group_indices_list[{gi}] is None; expected a sequence of integer indices.")
+        arr = np.asarray(group)
+        if arr.ndim != 1:
+            raise ValueError(f"group_indices_list[{gi}] must be one-dimensional, got shape {arr.shape}.")
+        if arr.size == 0:
+            raise ValueError(f"group_indices_list[{gi}] is empty; each group must contain at least one cell.")
+        if not np.issubdtype(arr.dtype, np.integer):
+            raise ValueError(
+                f"group_indices_list[{gi}] must contain integer indices, got dtype {arr.dtype}."
+            )
+        int_group = arr.astype(np.int64).tolist()
+        normalized.append(int_group)
+
+    n_obs = int(adata.n_obs)
+    flat = np.asarray([idx for group in normalized for idx in group], dtype=np.int64)
+    if np.any(flat < 0) or np.any(flat >= n_obs):
+        bad = flat[(flat < 0) | (flat >= n_obs)][:5].tolist()
+        raise ValueError(
+            f"group_indices_list contains out-of-range cell indices (first examples: {bad}); "
+            f"valid range is [0, {n_obs - 1}]."
+        )
+    if np.unique(flat).size != flat.size:
+        raise ValueError(
+            "group_indices_list contains duplicate cell indices across groups. "
+            "Each cell must appear in exactly one group."
+        )
+
+    return normalized, inferred
+
+
+def validate_enrichment_network(
+    network: pd.DataFrame,
+    *,
+    source_col: str = "source",
+    target_col: str = "target",
+    weight_col: str = "weight",
+    adata: Optional["AnnData"] = None,
+    tmin: int = 5,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Validate and normalize a decoupler-style long network table.
+
+    Parameters
+    ----------
+    network:
+        Long-format network table with at least source/target columns.
+    source_col:
+        Column containing program names (for example TF or pathway names).
+    target_col:
+        Column containing target features (for example gene symbols).
+    weight_col:
+        Optional column containing source-target weights.
+    adata:
+        Optional AnnData used to compute target overlap diagnostics.
+    tmin:
+        Minimum number of targets per source.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, dict[str, object]]
+        The normalized network table plus validation/coverage metadata.
+
+    Raises
+    ------
+    TypeError
+        If ``network`` is not a pandas DataFrame.
+    ValueError
+        If required columns are missing or the normalized table is empty.
+    """
+    if not isinstance(network, pd.DataFrame):
+        raise TypeError(
+            f"network must be a pandas DataFrame, got {type(network).__name__}."
+        )
+    if tmin < 1:
+        raise ValueError(f"tmin must be >= 1, got {tmin}.")
+
+    required = [source_col, target_col]
+    missing = [c for c in required if c not in network.columns]
+    if missing:
+        raise ValueError(
+            "network is missing required column(s): "
+            f"{missing}. Expected at least {required}."
+        )
+
+    keep_cols = [source_col, target_col]
+    has_weight = weight_col in network.columns
+    if has_weight:
+        keep_cols.append(weight_col)
+
+    df = network[keep_cols].copy()
+    df = df.dropna(subset=[source_col, target_col])
+    if df.empty:
+        raise ValueError(
+            "network is empty after dropping rows with missing source/target values."
+        )
+
+    df[source_col] = df[source_col].astype(str)
+    df[target_col] = df[target_col].astype(str)
+
+    source_sizes = df.groupby(source_col, observed=True)[target_col].nunique()
+    valid_sources = source_sizes[source_sizes >= int(tmin)].index
+    df = df[df[source_col].isin(valid_sources)].copy()
+    if df.empty:
+        raise ValueError(
+            "No sources satisfy the tmin threshold. "
+            f"Lower tmin (current: {tmin}) or provide a denser network."
+        )
+
+    warnings_list: list[str] = []
+    if not has_weight:
+        warnings_list.append(
+            f"weight column '{weight_col}' not found; weighted methods may be less informative."
+        )
+
+    overlap_stats = {
+        "n_targets_in_adata": None,
+        "n_targets_overlap": None,
+        "target_overlap_ratio": None,
+    }
+    if adata is not None:
+        var_names = pd.Index(adata.var_names.astype(str))
+        net_targets = pd.Index(df[target_col].astype(str).unique())
+        overlap = net_targets.intersection(var_names)
+        overlap_ratio = float(len(overlap) / max(1, len(net_targets)))
+        overlap_stats = {
+            "n_targets_in_adata": int(var_names.size),
+            "n_targets_overlap": int(len(overlap)),
+            "target_overlap_ratio": overlap_ratio,
+        }
+        if len(overlap) == 0:
+            warnings_list.append(
+                "No target overlap between network and adata.var_names; enrichment will likely fail."
+            )
+        elif overlap_ratio < 0.05:
+            warnings_list.append(
+                f"Low network target overlap with adata.var_names ({overlap_ratio:.1%})."
+            )
+
+    stats = {
+        "n_rows_input": int(network.shape[0]),
+        "n_rows_valid": int(df.shape[0]),
+        "n_sources": int(df[source_col].nunique()),
+        "n_targets": int(df[target_col].nunique()),
+        "tmin": int(tmin),
+        "has_weight": bool(has_weight),
+        "warnings": warnings_list,
+        **overlap_stats,
+    }
+    return df.reset_index(drop=True), stats
+
+
 def _validate_loadings_df(df: pd.DataFrame, latent_type: str) -> None:
     """Validate a pre-computed loadings DataFrame.
 
