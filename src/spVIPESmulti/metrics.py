@@ -312,10 +312,12 @@ def integration_report(
     rows = [shared_row]
 
     if z_private_dict is not None:
-        # Pool all private latents + group labels to compute cross-group silhouette
+        # Pool all private latents + group labels to compute cross-group silhouette.
+        # Use a distinct loop variable so we don't shadow the outer `k` (kNN size)
+        # and so a reader can't mistake the comprehension for a kNN computation.
         all_z = np.concatenate(list(z_private_dict.values()), axis=0)
         all_g = np.concatenate(
-            [np.full(v.shape[0], k) for k, v in z_private_dict.items()]
+            [np.full(v.shape[0], group_name) for group_name, v in z_private_dict.items()]
         )
         sil = per_group_silhouette(all_z, all_g)
         for group_name in z_private_dict:

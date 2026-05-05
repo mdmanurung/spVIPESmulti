@@ -1425,49 +1425,6 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             result["latent_private_multimodal"] = latent_private_multimodal
         return result
 
-    def _process_all_cells_with_cycling(self, group_indices_list, normalized, give_mean, mc_samples, batch_size):
-        """Process all cells using cycling approach to handle unequal group sizes."""
-        n_groups = len(group_indices_list)
-        group_sizes = [len(indices) for indices in group_indices_list]
-        min_group_size = min(group_sizes)
-        max_group_size = max(group_sizes)
-
-        if min_group_size == 0:
-            raise ValueError("One of the groups is empty")
-
-        results = {
-            "latent_shared": {g: [] for g in range(n_groups)},
-            "latent_private": {g: [] for g in range(n_groups)},
-            "shared_posterior_loc": {g: [] for g in range(n_groups)},
-            "shared_posterior_scale": {g: [] for g in range(n_groups)},
-            "original_indices": {g: [] for g in range(n_groups)},
-        }
-
-        for start_idx in range(0, max_group_size, min_group_size):
-            chunk_indices = []
-            for g in range(n_groups):
-                group_chunk = []
-                for i in range(min_group_size):
-                    idx = (start_idx + i) % len(group_indices_list[g])
-                    group_chunk.append(group_indices_list[g][idx])
-                chunk_indices.append(group_chunk)
-
-            chunk_scdl = ConcatDataLoader(
-                self.adata_manager,
-                indices_list=chunk_indices,
-                shuffle=False,
-                drop_last=False,
-                batch_size=batch_size,
-            )
-
-            chunk_results = self._process_batches(chunk_scdl, normalized, give_mean, mc_samples, n_groups)
-
-            for key in results:
-                for g in range(n_groups):
-                    results[key][g].extend(chunk_results[key][g])
-
-        return results
-
     def _format_results(self, results, n_per_group):
         """Format the final results dictionary for N groups."""
         n_groups = len(n_per_group)
