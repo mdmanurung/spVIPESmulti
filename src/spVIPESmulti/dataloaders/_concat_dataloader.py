@@ -51,7 +51,17 @@ class ConcatDataLoader(DataLoader):
         self._shuffle = shuffle
 
         self.dataloaders = []
-        for indices in indices_list:
+        for gi, indices in enumerate(indices_list):
+            # If a group is too small to fill a single batch under drop_last=True
+            # the resulting dataloader has length 0 — and `cycle()` over an empty
+            # iterator yields nothing, so `zip(*iter_list)` would silently end
+            # the epoch with zero training batches. Disable drop_last for any
+            # such group so it cycles its (smaller) batches instead.
+            n_indices = len(indices)
+            if drop_last and n_indices < batch_size:
+                group_drop_last: Union[bool, int] = False
+            else:
+                group_drop_last = drop_last
             self.dataloaders.append(
                 AnnDataLoader(
                     adata_manager,
@@ -60,7 +70,7 @@ class ConcatDataLoader(DataLoader):
                     use_labels=use_labels,
                     batch_size=batch_size,
                     data_and_attributes=data_and_attributes,
-                    drop_last=drop_last,
+                    drop_last=group_drop_last,
                     **self.dataloader_kwargs,
                 )
             )
@@ -70,6 +80,13 @@ class ConcatDataLoader(DataLoader):
                 "ConcatDataLoader requires at least one group (indices_list is empty)."
             )
         lens = [len(dl) for dl in self.dataloaders]
+        empty = [gi for gi, n in enumerate(lens) if n == 0]
+        if empty:
+            raise ValueError(
+                f"ConcatDataLoader: groups {empty} have zero batches "
+                f"(group sizes {[len(idx) for idx in indices_list]}, batch_size={batch_size}, "
+                f"drop_last={drop_last}). Lower batch_size or supply more cells."
+            )
         self.largest_dl = self.dataloaders[np.argmax(lens)]
         super().__init__(self.largest_dl, **data_loader_kwargs)
 

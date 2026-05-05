@@ -95,8 +95,14 @@ def prepare_adatas(
     if len(adatas) < 2:
         raise ValueError("At least 2 groups are required")
 
+    # Copy each adata before mutating .obs / .var_names so we don't modify the
+    # caller's input. Re-running prepare_adatas on the same dict would otherwise
+    # double-prefix var_names ("group_group_GENE1") and corrupt downstream state.
+    adatas_local: dict[str, ad.AnnData] = {}
     for i, (groups, adata) in enumerate(adatas.items()):
         if adata is not None:
+            adata = adata.copy()
+            adatas_local[groups] = adata
             groups_lengths[i] = adata.shape[1]
             groups_obs_names.append(adata.obs_names)
             if groups_obs.get(groups, None) is None:
@@ -112,7 +118,7 @@ def prepare_adatas(
             groups_var_names[groups] = adata.var_names
             groups_mapping[i] = groups
 
-    multigroups_adata = ad.concat(adatas, join="outer", label="groups", index_unique="-")
+    multigroups_adata = ad.concat(adatas_local, join="outer", label="groups", index_unique="-")
     multigroups_adata.uns["groups_var_indices"] = [
         np.where(multigroups_adata.var_names.str.startswith(k))[0] for k in adatas.keys()
     ]

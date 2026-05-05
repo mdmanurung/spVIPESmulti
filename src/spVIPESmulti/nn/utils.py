@@ -1,41 +1,38 @@
-import random
-
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.init as init
 
 
-def one_hot(index: torch.Tensor, n_cat: int) -> torch.Tensor:
-    """One hot a tensor of categories."""
-    onehot = torch.zeros(index.size(0), n_cat, device=index.device)
-    onehot.scatter_(1, index.type(torch.long), 1)
-    return onehot.type(torch.float32)
+def one_hot(index: torch.Tensor, n_cat: int, dtype: torch.dtype = torch.float32) -> torch.Tensor:
+    """One hot a tensor of categories.
 
-
-def kaiming_init(m, seed):
+    The output dtype is configurable so callers using mixed-precision training
+    (autocast / bf16 / fp16) can avoid an implicit upcast on every step.
     """
-    Initialize the parameters of a PyTorch model using the Kaiming initialization method.
+    onehot = torch.zeros(index.size(0), n_cat, device=index.device, dtype=dtype)
+    onehot.scatter_(1, index.type(torch.long), 1)
+    return onehot
+
+
+def kaiming_init(m):
+    """
+    Initialize the parameters of a PyTorch module using Kaiming initialization.
 
     Parameters
     ----------
         m (nn.Module): The PyTorch module for which to initialize the parameters.
-        seed (int): Random seed for initialization.
 
-    This function sets the weights and biases of the provided PyTorch module `m` using Kaiming initialization.
-    It also sets random seeds for reproducibility.
+    Notes
+    -----
+    BatchNorm layers are intentionally skipped: ``Encoder.lvar_encoder`` relies
+    on a hand-set post-BN bias of -1.0 to keep the posterior tight at init (see
+    ``nn/networks.py`` and PR #31). Resetting BN bias to 0 here would silently
+    re-introduce the early-training KL spike that fix prevents.
 
+    Caller is responsible for seeding the RNG before applying this function;
+    seeding inside the call would reset the global RNG on every layer.
     """
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-
     if isinstance(m, (nn.Linear, nn.Conv2d)):
         init.kaiming_uniform_(m.weight)
-        if m.bias is not None:
-            m.bias.data.fill_(0)
-    elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
-        m.weight.data.fill_(1)
         if m.bias is not None:
             m.bias.data.fill_(0)
