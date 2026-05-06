@@ -6,9 +6,9 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 # this import needs to come after prior imports to prevent circular import
-from . import data, metrics, model, module, nn, pl, utils
+from . import data, metrics, model, module, nn, pl, traversal, utils
 
-__all__ = ["data", "metrics", "model", "module", "nn", "pl", "utils"]
+__all__ = ["data", "metrics", "model", "module", "nn", "pl", "traversal", "utils"]
 
 # https://github.com/python-poetry/poetry/pull/2366#issuecomment-652418094
 # https://github.com/python-poetry/poetry/issues/144#issuecomment-623927302

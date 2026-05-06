@@ -22,6 +22,16 @@ training_curves
     Multi-panel plot of training history metrics.
 loadings_dotplot
     scanpy dotplot of top genes for selected latent dimensions.
+plot_latent_dims_in_umap
+    One UMAP panel per latent dimension, colored by that dimension's value.
+plot_latent_dims_in_heatmap
+    Heatmap of mean z_shared activity per cell type or grouping.
+plot_latent_dimension_stats
+    Barplot of per-dimension std, flagging vanished/inactive dimensions.
+show_top_differential_vars
+    Horizontal bar chart of top genes for one z_shared dimension (traversal).
+differential_vars_heatmap
+    Heatmap of traversal effects across all z_shared dimensions and top genes.
 """
 from __future__ import annotations
 
@@ -657,5 +667,383 @@ def interpretation_dashboard(
     )
     ax_right.set_title("Enrichment summary")
 
+    fig.tight_layout()
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Per-dimension UMAP coloring
+# ---------------------------------------------------------------------------
+
+
+def plot_latent_dims_in_umap(
+    adata: "AnnData",
+    obsm_key: str,
+    *,
+    dims: Optional[list[int]] = None,
+    basis: str = "X_umap",
+    ncols: int = 5,
+    point_size: float = 8.0,
+    cmap: str = "RdBu_r",
+    figsize_per_panel: tuple[float, float] = (3.5, 3.0),
+) -> "plt.Figure":
+    """One UMAP panel per latent dimension, colored by that dimension's value.
+
+    Useful for identifying what each z_shared dimension encodes biologically.
+    Requires a UMAP to already be computed (e.g., via scanpy.tl.umap).
+
+    Parameters
+    ----------
+    adata:
+        AnnData with ``adata.obsm[obsm_key]`` (latent matrix) and
+        ``adata.obsm[basis]`` (2-D UMAP coordinates).
+    obsm_key:
+        Key in ``adata.obsm`` for the latent space to visualize, e.g.
+        ``"X_spvm_shared"``.
+    dims:
+        Dimension indices to plot. ``None`` plots all dimensions.
+    basis:
+        Key in ``adata.obsm`` with 2-D UMAP coordinates.
+    ncols:
+        Number of panels per row.
+    point_size:
+        Scatter point size.
+    cmap:
+        Colormap for dimension values.
+    figsize_per_panel:
+        Width and height of each individual panel.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> fig = spVIPESmulti.pl.plot_latent_dims_in_umap(adata, "X_spvm_shared")
+    >>> fig.savefig("shared_dims_umap.pdf", bbox_inches="tight")
+    """
+    import matplotlib.pyplot as plt
+
+    if obsm_key not in adata.obsm:
+        raise KeyError(f"'{obsm_key}' not in adata.obsm.")
+    if basis not in adata.obsm:
+        raise KeyError(
+            f"'{basis}' not in adata.obsm. Run scanpy.tl.umap first, or pass the correct basis key."
+        )
+
+    latent = np.asarray(adata.obsm[obsm_key])
+    coords = np.asarray(adata.obsm[basis])[:, :2]
+    n_dims_total = latent.shape[1]
+
+    if dims is None:
+        dims = list(range(n_dims_total))
+
+    nrows = math.ceil(len(dims) / ncols)
+    fw = figsize_per_panel[0] * min(len(dims), ncols)
+    fh = figsize_per_panel[1] * nrows
+    fig, axes = plt.subplots(nrows, ncols, figsize=(fw, fh), squeeze=False)
+    axes_flat = axes.flatten()
+
+    for i, d in enumerate(dims):
+        ax = axes_flat[i]
+        vals = latent[:, d]
+        vmax = np.percentile(np.abs(vals), 99)
+        sc = ax.scatter(
+            coords[:, 0],
+            coords[:, 1],
+            c=vals,
+            s=point_size,
+            cmap=cmap,
+            vmin=-vmax,
+            vmax=vmax,
+            linewidths=0,
+        )
+        ax.set_title(f"Z_shared_{d}", fontsize=9)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        plt.colorbar(sc, ax=ax, pad=0.02, fraction=0.04)
+
+    for j in range(len(dims), len(axes_flat)):
+        axes_flat[j].set_visible(False)
+
+    fig.tight_layout()
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Cell-type × latent-dim heatmap
+# ---------------------------------------------------------------------------
+
+
+def plot_latent_dims_in_heatmap(
+    adata: "AnnData",
+    obsm_key: str,
+    groupby: str,
+    *,
+    normalize: bool = True,
+    figsize: Optional[tuple[float, float]] = None,
+    cmap: str = "RdBu_r",
+) -> "plt.Figure":
+    """Heatmap of mean z_shared activity per cell-type (or other grouping).
+
+    Shows which latent dimensions are active in which cell populations,
+    helping to reveal the biological meaning of each dimension.
+
+    Parameters
+    ----------
+    adata:
+        AnnData with ``adata.obsm[obsm_key]`` and ``adata.obs[groupby]``.
+    obsm_key:
+        Key in ``adata.obsm`` for the latent matrix, e.g. ``"X_spvm_shared"``.
+    groupby:
+        Column in ``adata.obs`` to group cells by (e.g. ``"cell_type"``).
+    normalize:
+        If ``True``, z-score each column (dimension) so all dims are on the
+        same scale despite different magnitudes.
+    figsize:
+        Figure size. Defaults to auto-scaled by number of dims and groups.
+    cmap:
+        Colormap for heatmap values.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> fig = spVIPESmulti.pl.plot_latent_dims_in_heatmap(
+    ...     adata, "X_spvm_shared", groupby="cell_type"
+    ... )
+    """
+    try:
+        import seaborn as sns
+    except ImportError:
+        raise ImportError("seaborn is required. Install with: pip install seaborn")
+    import matplotlib.pyplot as plt
+
+    if obsm_key not in adata.obsm:
+        raise KeyError(f"'{obsm_key}' not in adata.obsm.")
+    if groupby not in adata.obs:
+        raise KeyError(f"'{groupby}' not in adata.obs.")
+
+    latent = np.asarray(adata.obsm[obsm_key])
+    n_dims = latent.shape[1]
+    col_names = [f"Z_shared_{d}" for d in range(n_dims)]
+
+    df = pd.DataFrame(latent, columns=col_names, index=adata.obs_names)
+    df[groupby] = adata.obs[groupby].values
+    group_means = df.groupby(groupby, observed=True)[col_names].mean()
+
+    if normalize:
+        col_std = group_means.std(axis=0).replace(0, 1)
+        col_mean = group_means.mean(axis=0)
+        group_means = (group_means - col_mean) / col_std
+
+    n_groups_plot, n_dims_plot = group_means.shape
+    if figsize is None:
+        figsize = (max(6, 0.5 * n_dims_plot), max(3, 0.35 * n_groups_plot))
+
+    fig, ax = plt.subplots(figsize=figsize)
+    sns.heatmap(
+        group_means,
+        cmap=cmap,
+        center=0,
+        ax=ax,
+        linewidths=0.3,
+        linecolor="lightgrey",
+    )
+    ax.set_xlabel("Latent dimension")
+    ax.set_ylabel(groupby)
+    ax.tick_params(axis="x", rotation=90, labelsize=7)
+    ax.tick_params(axis="y", rotation=0, labelsize=8)
+    fig.tight_layout()
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Latent dimension activity statistics plot
+# ---------------------------------------------------------------------------
+
+
+def plot_latent_dimension_stats(
+    dim_stats_df: pd.DataFrame,
+    *,
+    highlight_vanished: bool = True,
+    figsize: Optional[tuple[float, float]] = None,
+) -> "plt.Figure":
+    """Barplot of per-dimension standard deviation, flagging vanished dims.
+
+    Parameters
+    ----------
+    dim_stats_df:
+        Output of :func:`~spVIPESmulti.metrics.latent_dimension_stats`.
+    highlight_vanished:
+        If ``True``, bars for vanished dimensions are colored red.
+    figsize:
+        Figure size. Defaults to auto-scaled by number of dimensions.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> stats = spVIPESmulti.metrics.latent_dimension_stats(z_shared)
+    >>> fig = spVIPESmulti.pl.plot_latent_dimension_stats(stats)
+    """
+    import matplotlib.pyplot as plt
+
+    n_dims = len(dim_stats_df)
+    if figsize is None:
+        figsize = (max(6, 0.35 * n_dims), 3.5)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    colors = [
+        "firebrick" if (highlight_vanished and v) else "steelblue"
+        for v in dim_stats_df["is_vanished"]
+    ]
+    ax.bar(dim_stats_df["dim"], dim_stats_df["std"], color=colors, width=0.7)
+    if highlight_vanished and dim_stats_df["is_vanished"].any():
+        ax.axhline(
+            y=dim_stats_df["std"][dim_stats_df["is_vanished"]].max(),
+            color="firebrick",
+            linestyle="--",
+            linewidth=1,
+            alpha=0.7,
+            label="vanished threshold",
+        )
+        ax.legend(fontsize=8)
+
+    ax.set_xlabel("Latent dimension index")
+    ax.set_ylabel("Std across cells")
+    ax.set_title("z_shared dimension activity")
+    ax.set_xticks(dim_stats_df["dim"])
+    ax.tick_params(axis="x", rotation=90 if n_dims > 20 else 0)
+    fig.tight_layout()
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Traversal gene plots
+# ---------------------------------------------------------------------------
+
+
+def show_top_differential_vars(
+    diff_vars_df: pd.DataFrame,
+    dim_idx: int,
+    *,
+    top_n: int = 20,
+    figsize: Optional[tuple[float, float]] = None,
+    color: str = "steelblue",
+) -> "plt.Figure":
+    """Horizontal bar chart of top genes for one z_shared dimension.
+
+    Parameters
+    ----------
+    diff_vars_df:
+        Output of :func:`~spVIPESmulti.traversal.calculate_differential_vars`.
+        Tidy DataFrame with columns ``dim``, ``gene``, ``effect``.
+    dim_idx:
+        Dimension index to plot (e.g. ``0`` to show ``Z_shared_0``).
+    top_n:
+        Number of top genes to show.
+    figsize:
+        Figure size. Defaults to ``(6, top_n * 0.35)``.
+    color:
+        Bar color.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> trav = spVIPESmulti.traversal.traverse_latent(model)
+    >>> top = spVIPESmulti.traversal.calculate_differential_vars(trav)
+    >>> fig = spVIPESmulti.pl.show_top_differential_vars(top, dim_idx=0)
+    """
+    import matplotlib.pyplot as plt
+
+    dim_name = f"Z_shared_{dim_idx}"
+    subset = diff_vars_df[diff_vars_df["dim"] == dim_name].head(top_n)
+    if subset.empty:
+        raise ValueError(
+            f"No entries for dim_idx={dim_idx} ('{dim_name}') in diff_vars_df. "
+            f"Available dims: {diff_vars_df['dim'].unique().tolist()}"
+        )
+
+    subset = subset.sort_values("effect", ascending=True)
+    if figsize is None:
+        figsize = (6, max(2.5, len(subset) * 0.35))
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.barh(subset["gene"], subset["effect"], color=color)
+    ax.set_xlabel("Traversal effect (max − min normalized expression)")
+    ax.set_title(f"Top genes driven by {dim_name}")
+    ax.tick_params(axis="y", labelsize=8)
+    fig.tight_layout()
+    return fig
+
+
+def differential_vars_heatmap(
+    traversal_df: pd.DataFrame,
+    *,
+    top_n_genes: int = 40,
+    figsize: Optional[tuple[float, float]] = None,
+    cmap: str = "YlOrRd",
+) -> "plt.Figure":
+    """Heatmap of traversal effects: z_shared dimensions × top genes.
+
+    Shows which genes are most affected by each latent dimension, giving a
+    global overview of what the shared latent space encodes.
+
+    Parameters
+    ----------
+    traversal_df:
+        Output of :func:`~spVIPESmulti.traversal.traverse_latent`.
+        Shape ``(n_genes, n_dims_shared)``.
+    top_n_genes:
+        Number of most-affected genes to include (selected by max effect
+        across all dimensions).
+    figsize:
+        Figure size. Defaults to auto-scaled.
+    cmap:
+        Colormap.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> trav = spVIPESmulti.traversal.traverse_latent(model)
+    >>> fig = spVIPESmulti.pl.differential_vars_heatmap(trav, top_n_genes=30)
+    """
+    try:
+        import seaborn as sns
+    except ImportError:
+        raise ImportError("seaborn is required. Install with: pip install seaborn")
+    import matplotlib.pyplot as plt
+
+    max_effect_per_gene = traversal_df.max(axis=1)
+    top_genes = max_effect_per_gene.nlargest(top_n_genes).index.tolist()
+    plot_df = traversal_df.loc[top_genes].T  # (n_dims, n_genes)
+
+    n_dims, n_genes = plot_df.shape
+    if figsize is None:
+        figsize = (max(8, 0.3 * n_genes), max(4, 0.45 * n_dims))
+
+    fig, ax = plt.subplots(figsize=figsize)
+    sns.heatmap(
+        plot_df,
+        cmap=cmap,
+        ax=ax,
+        linewidths=0.2,
+        linecolor="lightgrey",
+    )
+    ax.set_xlabel("Gene")
+    ax.set_ylabel("z_shared dimension")
+    ax.tick_params(axis="x", rotation=90, labelsize=7)
+    ax.tick_params(axis="y", rotation=0, labelsize=8)
     fig.tight_layout()
     return fig

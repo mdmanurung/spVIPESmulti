@@ -6,16 +6,17 @@ Read order: HANDOFF.md → PLAN.md → PROGRESS.md → ImplementationPlan.md (re
 
 ---
 
-## Current State (2026-05-05)
+## Current State (2026-05-06)
 
-All planned roadmap items complete (R1–R4). Independent deep-code audit completed; 8 confirmed bugs fixed in this session.
+C1 (CosineAnnealingLR support) and C2 (notebook v3 retuning) implemented and verified.
 
-Validation baseline: `pytest -q` → `174 passed, 1 skipped`.
+Validation baseline: `pytest -q` → `182 passed, 1 skipped` (1 pre-existing failure: `TestPrepareAdatasPrefixOverlap::test_multimodal_overlapping_prefixes`, unrelated to C1/C2).
 
 ## Immediate Next Action
 
-No active item. Select from PLAN.md Deferred Backlog or propose a new roadmap candidate, then move it to Current Iteration before coding.
+Run `docs/notebooks/malaria_bcells_recommended.ipynb` v3 to completion and verify:
+- `Trainer.fit` stops via early stopping (not `max_epochs reached`)
+- Final `reconstruction_loss_validation` lower than v2 final value
+- Model saved to `results/spvipes_bcells_recommended_v3`
 
-Lowest-effort next steps from the audit (not yet done):
-- Add regression tests for `normalized=True` latent extraction and for `get_loadings` on a multimodal model.
-- Add regression test for `use_jeffreys_integ=True` on a single-modal model.
+Pre-existing failing test (`test_multimodal_overlapping_prefixes`) needs investigation — prefix-overlap detection in `prepare_multimodal_adatas` returns empty obs indices for the `"cat"` group when `"category"` is present.

@@ -334,3 +334,199 @@ def integration_report(
             )
 
     return pd.DataFrame(rows, columns=["latent", "ilisi", "clisi", "kbet", "knn_purity", "leiden_ari", "silhouette"])
+
+
+# ---------------------------------------------------------------------------
+# Latent dimension statistics
+# ---------------------------------------------------------------------------
+
+
+def latent_dimension_stats(
+    latent_array: np.ndarray,
+    threshold: float = 0.5,
+) -> pd.DataFrame:
+    """Per-dimension activity statistics for a latent matrix.
+
+    Computes the standard deviation and mean absolute value of each column
+    and flags dimensions whose std falls below ``threshold`` as vanished.
+
+    Parameters
+    ----------
+    latent_array:
+        2-D array of shape ``(n_cells, n_dims)``.
+    threshold:
+        Dimensions with std < threshold are marked as vanished.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per dimension. Columns:
+
+        ``dim``
+            Dimension index.
+        ``std``
+            Population standard deviation across cells.
+        ``mean_abs``
+            Mean absolute value across cells.
+        ``is_vanished``
+            ``True`` if std < threshold.
+        ``rank``
+            Rank by std (1 = most active).
+
+    Examples
+    --------
+    >>> stats = spVIPESmulti.metrics.latent_dimension_stats(z_shared)
+    >>> print(stats[stats.is_vanished])
+    """
+    latent_array = np.asarray(latent_array)
+    n_dims = latent_array.shape[1]
+    stds = latent_array.std(axis=0)
+    mean_abs = np.abs(latent_array).mean(axis=0)
+    is_vanished = stds < threshold
+    ranks = (-stds).argsort().argsort() + 1  # rank 1 = largest std
+    return pd.DataFrame(
+        {
+            "dim": np.arange(n_dims),
+            "std": stds,
+            "mean_abs": mean_abs,
+            "is_vanished": is_vanished,
+            "rank": ranks,
+        }
+    )
+
+
+# ---------------------------------------------------------------------------
+# Reconstruction quality metrics
+# ---------------------------------------------------------------------------
+
+
+def reconstruction_error(
+    model,
+    adata=None,
+    group_indices_list=None,
+    batch_size: int = 256,
+) -> pd.DataFrame:
+    """Per-group reconstruction RMSE and Poisson NLL using the model's decoder.
+
+    Runs inference to obtain z_shared and z_private posteriors, passes them
+    through the decoder, and compares the expected expression (``px_scale``)
+    against the observed normalized counts.
+
+    Parameters
+    ----------
+    model:
+        Trained spVIPESmulti model.
+    adata:
+        AnnData to evaluate. Defaults to the model's registered AnnData.
+    group_indices_list:
+        Per-group cell indices. If ``None``, inferred from
+        ``adata.uns['groups_obs_indices']``.
+    batch_size:
+        Mini-batch size for inference.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per group. Columns:
+
+        ``group``
+            Group index.
+        ``rmse``
+            Root mean-squared error between ``px_scale`` (normalized predicted
+            expression) and observed normalized counts.
+        ``poisson_nll``
+            Mean Poisson negative log-likelihood of observed counts given the
+            predicted rate ``px_rate_shared``.
+
+    Examples
+    --------
+    >>> err = spVIPESmulti.metrics.reconstruction_error(model)
+    >>> print(err)
+    """
+    import torch
+    from scvi import REGISTRY_KEYS
+
+    from spVIPESmulti.dataloaders._concat_dataloader import ConcatDataLoader
+    from spVIPESmulti.utils import resolve_group_indices_list
+
+    if adata is None:
+        adata = model.adata
+
+    group_indices_list, _ = resolve_group_indices_list(adata, group_indices_list)
+    n_groups = len(group_indices_list)
+
+    scdl = ConcatDataLoader(
+        model.adata_manager,
+        indices_list=group_indices_list,
+        shuffle=False,
+        drop_last=False,
+        batch_size=batch_size,
+    )
+
+    module = model.module
+    was_training = module.training
+    module.eval()
+
+    accum_sq_err = {g: 0.0 for g in range(n_groups)}
+    accum_nll = {g: 0.0 for g in range(n_groups)}
+    accum_count = {g: 0 for g in range(n_groups)}
+
+    try:
+        with torch.no_grad():
+            for tensors_by_group in scdl:
+                per_group = module._split_tensors_by_group(tensors_by_group)
+                inference_inputs = module._get_inference_input(tensors_by_group)
+                inf_out = module.inference(**inference_inputs)
+                gen_out = module.generative(
+                    inf_out["private_stats"],
+                    inf_out["shared_stats"],
+                    inf_out["poe_stats"],
+                    inf_out["library"],
+                    inference_inputs["groups"],
+                    inference_inputs["batch_index"],
+                )
+
+                for g in range(n_groups):
+                    if g >= len(per_group):
+                        continue
+                    key = str(g)
+                    if key not in gen_out["private_poe"]:
+                        continue
+
+                    px_scale = gen_out["private_poe"][key]["px_scale"].cpu()
+                    px_rate = gen_out["private_poe"][key]["px_rate_shared"].cpu()
+
+                    # Raw observed counts, sliced to group's genes
+                    x_raw = per_group[g][REGISTRY_KEYS.X_KEY]
+                    if not isinstance(x_raw, torch.Tensor):
+                        x_raw = torch.tensor(x_raw, dtype=torch.float32)
+                    else:
+                        x_raw = x_raw.float()
+                    x_raw = x_raw[:, module.groups_var_indices[g]].cpu()
+
+                    # Normalize to proportion scale for RMSE comparison with px_scale
+                    lib = x_raw.sum(dim=1, keepdim=True).clamp(min=1.0)
+                    x_norm = x_raw / lib
+
+                    n_cells = px_scale.shape[0]
+                    sq_err = float(((px_scale - x_norm) ** 2).mean())
+                    rate = px_rate.clamp(min=1e-8)
+                    nll = float((-x_raw * torch.log(rate) + rate).mean())
+
+                    accum_sq_err[g] += sq_err * n_cells
+                    accum_nll[g] += nll * n_cells
+                    accum_count[g] += n_cells
+    finally:
+        module.train(was_training)
+
+    rows = []
+    for g in range(n_groups):
+        n = accum_count[g]
+        rows.append(
+            {
+                "group": g,
+                "rmse": float(np.sqrt(accum_sq_err[g] / n)) if n > 0 else float("nan"),
+                "poisson_nll": accum_nll[g] / n if n > 0 else float("nan"),
+            }
+        )
+    return pd.DataFrame(rows, columns=["group", "rmse", "poisson_nll"])

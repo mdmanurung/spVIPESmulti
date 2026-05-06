@@ -5,7 +5,7 @@ https://docs.scvi-tools.org/en/0.9.0/user_guide/notebooks/model_user_guide.html#
 """
 
 
-from typing import Optional
+from typing import Literal, Optional
 import warnings
 
 import numpy as np
@@ -14,26 +14,54 @@ from scvi.train._trainrunner import TrainRunner as OrigTrainRunner
 
 
 class SpVIPESmultiTrainingPlan(TrainingPlan):
-    """TrainingPlan subclass that aligns ReduceLROnPlateau stepping with validation frequency.
+    """TrainingPlan subclass with extended LR scheduler support.
 
-    When check_val_every_n_epoch > 1, Lightning only logs validation metrics every N epochs.
-    Without this fix, ReduceLROnPlateau raises MisconfigurationException at epoch 1 because
-    the monitored validation metric hasn't been logged yet.  Adding frequency=N to the
-    lr_scheduler config tells Lightning to only step the scheduler on epochs when the
-    metric is actually available.
+    Adds two capabilities on top of scvi's TrainingPlan:
+
+    1. ``lr_scheduler_type="cosine"``: replaces ReduceLROnPlateau with
+       CosineAnnealingLR so the LR decays on a fixed schedule regardless of
+       whether the monitored metric plateaus.  Use when the loss is still
+       declining throughout training and plateau detection never fires.
+
+    2. Validation-frequency alignment for ReduceLROnPlateau: when
+       ``check_val_every_n_epoch > 1``, Lightning only logs validation metrics
+       every N epochs.  Adding ``frequency=N`` to the scheduler config prevents
+       a MisconfigurationException at epoch 1 when the monitored metric is not
+       yet available.
     """
 
-    def __init__(self, *args, check_val_every_n_epoch: int = 1, **kwargs):
+    def __init__(
+        self,
+        *args,
+        check_val_every_n_epoch: int = 1,
+        lr_scheduler_type: Literal["plateau", "cosine"] = "plateau",
+        lr_cosine_T_max: int = 400,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self._check_val_every_n_epoch = check_val_every_n_epoch
+        self._lr_scheduler_type = lr_scheduler_type
+        self._lr_cosine_T_max = lr_cosine_T_max
 
     def configure_optimizers(self):
         config = super().configure_optimizers()
-        freq = self._check_val_every_n_epoch
-        if freq > 1:
-            lr_cfg = config.get("lr_scheduler")
-            if isinstance(lr_cfg, dict):
-                lr_cfg["frequency"] = freq
+
+        if self._lr_scheduler_type == "cosine":
+            from torch.optim.lr_scheduler import CosineAnnealingLR
+            scheduler = CosineAnnealingLR(
+                config["optimizer"],
+                T_max=self._lr_cosine_T_max,
+                eta_min=self.lr_min,
+            )
+            config["lr_scheduler"] = {"scheduler": scheduler, "interval": "epoch"}
+        else:
+            # plateau: align stepping frequency with validation cadence
+            freq = self._check_val_every_n_epoch
+            if freq > 1:
+                lr_cfg = config.get("lr_scheduler")
+                if isinstance(lr_cfg, dict):
+                    lr_cfg["frequency"] = freq
+
         return config
 
 
@@ -173,10 +201,12 @@ class MultiGroupTrainingMixin:
             "n_epochs_kl_warmup": n_epochs_kl_warmup,
             "n_steps_kl_warmup": n_steps_kl_warmup,
         }
-        if plan_kwargs is not None:
-            plan_kwargs.update(update_dict)
-        else:
-            plan_kwargs = update_dict
+        plan_kwargs.update(update_dict)
+
+        # When using cosine annealing, default T_max to the training horizon so
+        # the LR reaches eta_min exactly at the last epoch.
+        if plan_kwargs.get("lr_scheduler_type") == "cosine":
+            plan_kwargs.setdefault("lr_cosine_T_max", max_epochs)
 
         data_splitter = MultiGroupDataSplitter(
             self.adata_manager,

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/src -type f -name \"*.py\" -exec wc -l {} +)",
+      "Bash(conda run -n scvi-test python3 -c ' *)",
+      "WebFetch(domain:drvi.readthedocs.io)",
+      "Bash(python3 -c ' *)",
+      "Bash(conda activate *)",
+      "Read(//exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/**)",
+      "Bash(/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi/bin/python -c ' *)",
+      "Bash(python -c ' *)",
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python -m pytest tests/test_regression_fixes.py::TestPrepareAdatasPrefixOverlap::test_multimodal_overlapping_prefixes -q)",
+      "Bash(git stash *)"
+    ]
+  }
+}

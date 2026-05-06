@@ -1555,3 +1555,55 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
                 )
 
         return loadings_dict
+
+    def traverse_latent(
+        self,
+        adata=None,
+        group_idx: int = 0,
+        n_steps: int = 15,
+        n_samples: int = 50,
+        n_stds: float = 3.0,
+        seed: int = 0,
+    ) -> "pd.DataFrame":
+        """Score genes by traversal of each z_shared dimension.
+
+        Convenience wrapper around :func:`spVIPESmulti.traversal.traverse_latent`.
+        See that function for full documentation.
+
+        Parameters
+        ----------
+        adata:
+            AnnData to use. Defaults to the model's registered AnnData.
+        group_idx:
+            Which group's decoder to use (0-based).
+        n_steps:
+            Number of traversal steps per dimension.
+        n_samples:
+            Number of cells to average over during traversal.
+        n_stds:
+            Traversal range: ±n_stds × empirical std of each dimension.
+        seed:
+            Random seed for cell sampling.
+
+        Returns
+        -------
+        pd.DataFrame
+            Shape ``(n_genes, n_dims_shared)``. Each entry is the traversal
+            effect (max−min ``px_scale_shared``) of that dimension on that gene.
+
+        Examples
+        --------
+        >>> trav = model.traverse_latent(group_idx=0, n_steps=15)
+        >>> top = spVIPESmulti.traversal.calculate_differential_vars(trav)
+        """
+        from spVIPESmulti.traversal import traverse_latent as _traverse_latent
+
+        return _traverse_latent(
+            self,
+            adata=adata,
+            group_idx=group_idx,
+            n_steps=n_steps,
+            n_samples=n_samples,
+            n_stds=n_stds,
+            seed=seed,
+        )
