@@ -3,15 +3,17 @@
 These functions cover the post-training workflow that every tutorial notebook
 repeats manually:
 
-1. :func:`store_latents` — stitch per-group latents back into ``adata.obsm``
+1. :func:`highly_variable_genes_union` — compute per-group HVGs and return
+   their union, optionally subsetting the AnnData.
+2. :func:`store_latents` — stitch per-group latents back into ``adata.obsm``
    in original cell order.
-2. :func:`add_latent_dims_to_obs` — copy latent dimensions into ``adata.obs``
+3. :func:`add_latent_dims_to_obs` — copy latent dimensions into ``adata.obs``
    so they can be used as ``color=`` arguments in scanpy plots.
-3. :func:`compute_shared_umap` — run neighbours + UMAP on the shared latent
+4. :func:`compute_shared_umap` — run neighbours + UMAP on the shared latent
    and store the result under a named key.
-4. :func:`compute_private_umaps` — same for per-group private latents.
-5. :func:`get_top_genes` — rank genes by loading magnitude per latent dimension.
-6. :func:`score_cells_on_factor` — project a single latent dimension into
+5. :func:`compute_private_umaps` — same for per-group private latents.
+6. :func:`get_top_genes` — rank genes by loading magnitude per latent dimension.
+7. :func:`score_cells_on_factor` — project a single latent dimension into
    ``adata.obs``.
 """
 from __future__ import annotations
@@ -24,6 +26,87 @@ import pandas as pd
 
 if TYPE_CHECKING:
     from anndata import AnnData
+
+
+# ---------------------------------------------------------------------------
+# Pre-processing helpers
+# ---------------------------------------------------------------------------
+
+
+def highly_variable_genes_union(
+    adata: "AnnData",
+    group_key: str,
+    n_top_genes: int = 2000,
+    flavor: str = "seurat_v3",
+    subset: bool = True,
+    **hvg_kwargs,
+) -> "AnnData":
+    """Select highly variable genes (HVGs) per group and return their union.
+
+    Runs :func:`scanpy.pp.highly_variable_genes` independently on each group
+    defined by ``group_key``, then takes the union of all per-group HVG sets.
+    This avoids losing genes that are highly variable in only one condition.
+
+    Parameters
+    ----------
+    adata:
+        AnnData object. Must contain raw or normalised counts; make sure to
+        apply the same preprocessing you would pass to ``sc.pp.highly_variable_genes``.
+    group_key:
+        Column in ``adata.obs`` that defines the groups (e.g. ``"antigen_specific"``).
+    n_top_genes:
+        Number of HVGs to select per group.
+    flavor:
+        HVG flavour passed to :func:`scanpy.pp.highly_variable_genes`
+        (``"seurat_v3"``, ``"seurat"``, or ``"cell_ranger"``).
+    subset:
+        If ``True`` (default), return a copy of ``adata`` subsetted to the
+        union gene set. If ``False``, add a ``highly_variable_union`` boolean
+        column to ``adata.var`` and return the original (unsubsetted) object.
+    **hvg_kwargs:
+        Additional keyword arguments forwarded to
+        :func:`scanpy.pp.highly_variable_genes`.
+
+    Returns
+    -------
+    AnnData
+        When ``subset=True``: a new AnnData containing only the union HVGs.
+        When ``subset=False``: the original ``adata`` with
+        ``adata.var["highly_variable_union"]`` added.
+
+    Examples
+    --------
+    >>> import spVIPESmulti
+    >>> adata = spVIPESmulti.utils.highly_variable_genes_union(
+    ...     adata, group_key="antigen_specific", n_top_genes=2000
+    ... )
+    """
+    import scanpy as sc
+
+    if group_key not in adata.obs.columns:
+        raise KeyError(
+            f"'{group_key}' not found in adata.obs. "
+            f"Available columns: {list(adata.obs.columns)}"
+        )
+
+    hvg_sets: list[set] = []
+    for group in adata.obs[group_key].unique():
+        adata_group = adata[adata.obs[group_key] == group]
+        sc.pp.highly_variable_genes(
+            adata_group,
+            n_top_genes=n_top_genes,
+            flavor=flavor,
+            **hvg_kwargs,
+        )
+        hvg_sets.append(set(adata_group.var_names[adata_group.var["highly_variable"]]))
+
+    hvg_union = set.union(*hvg_sets)
+
+    if subset:
+        return adata[:, list(hvg_union)].copy()
+
+    adata.var["highly_variable_union"] = adata.var_names.isin(hvg_union)
+    return adata
 
 
 # ---------------------------------------------------------------------------
