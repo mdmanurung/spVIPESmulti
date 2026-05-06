@@ -11,6 +11,32 @@ import warnings
 import numpy as np
 from scvi.train import TrainingPlan, TrainRunner
 from scvi.train._trainrunner import TrainRunner as OrigTrainRunner
+
+
+class SpVIPESmultiTrainingPlan(TrainingPlan):
+    """TrainingPlan subclass that aligns ReduceLROnPlateau stepping with validation frequency.
+
+    When check_val_every_n_epoch > 1, Lightning only logs validation metrics every N epochs.
+    Without this fix, ReduceLROnPlateau raises MisconfigurationException at epoch 1 because
+    the monitored validation metric hasn't been logged yet.  Adding frequency=N to the
+    lr_scheduler config tells Lightning to only step the scheduler on epochs when the
+    metric is actually available.
+    """
+
+    def __init__(self, *args, check_val_every_n_epoch: int = 1, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._check_val_every_n_epoch = check_val_every_n_epoch
+
+    def configure_optimizers(self):
+        config = super().configure_optimizers()
+        freq = self._check_val_every_n_epoch
+        if freq > 1:
+            lr_cfg = config.get("lr_scheduler")
+            if isinstance(lr_cfg, dict):
+                lr_cfg["frequency"] = freq
+        return config
+
+
 class PatchedTrainRunner(OrigTrainRunner):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -159,7 +185,8 @@ class MultiGroupTrainingMixin:
             validation_size=validation_size,
             batch_size=batch_size,
         )
-        training_plan = TrainingPlan(self.module, **plan_kwargs)
+        cvene = trainer_kwargs.get("check_val_every_n_epoch", 1)
+        training_plan = SpVIPESmultiTrainingPlan(self.module, check_val_every_n_epoch=cvene, **plan_kwargs)
 
         es = "early_stopping"
         trainer_kwargs[es] = early_stopping if es not in trainer_kwargs.keys() else trainer_kwargs[es]
