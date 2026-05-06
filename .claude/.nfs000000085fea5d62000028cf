@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/src -type f -name \"*.py\" -exec wc -l {} +)"
+    ]
+  }
+}

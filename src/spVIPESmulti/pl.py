@@ -305,20 +305,23 @@ def training_curves(
 ) -> "plt.Figure":
     """Multi-panel plot of spVIPESmulti training history.
 
+    Train and validation curves for the same metric are overlaid on one panel.
+    The x-axis shows actual epoch numbers from the history index.
+
     Parameters
     ----------
     model:
         Fitted spVIPESmulti model with a ``history`` attribute.
     metrics:
-        List of keys in ``model.history`` to plot. ``None`` plots all
-        available keys.
+        Base metric names (without ``_train``/``_validation`` suffix) to plot.
+        ``None`` plots all available metrics.
     figsize:
         Total figure size. Defaults to ``(7 * ncols, 4 * nrows)``.
 
     Returns
     -------
     matplotlib.figure.Figure
-        Figure with one sub-panel per metric.
+        Figure with one sub-panel per metric, train and val overlaid.
 
     Examples
     --------
@@ -328,32 +331,82 @@ def training_curves(
     import matplotlib.pyplot as plt
 
     history = model.history
-    if metrics is None:
-        metrics = list(history.keys())
-    if not metrics:
+    if not history:
         raise ValueError("model.history is empty — has the model been trained?")
 
+    # --- group raw history keys into panels ---
+    # Each panel: base_name -> {"train": df, "val": df}  or {"only": df}
+    panels: dict[str, dict[str, object]] = {}
+
+    def _add(base: str, side: str, df: object) -> None:
+        panels.setdefault(base, {})[side] = df
+
+    processed: set[str] = set()
+    for key in history.keys():
+        if key in processed:
+            continue
+        if key == "train_loss":
+            _add("loss", "train", history[key])
+        elif key == "validation_loss":
+            _add("loss", "val", history[key])
+        elif key.endswith("_train"):
+            base = key[:-6]
+            _add(base, "train", history[key])
+            val_key = base + "_validation"
+            if val_key in history:
+                _add(base, "val", history[val_key])
+                processed.add(val_key)
+        elif key.endswith("_validation"):
+            base = key[:-11]
+            if "val" not in panels.get(base, {}):
+                _add(base, "val", history[key])
+        else:
+            _add(key, "only", history[key])
+        processed.add(key)
+
+    # filter to requested metrics when provided
+    if metrics is not None:
+        def _base(m: str) -> str:
+            if m.endswith("_train"):
+                return m[:-6]
+            if m.endswith("_validation"):
+                return m[:-11]
+            return m
+        requested = {_base(m) for m in metrics}
+        panels = {k: v for k, v in panels.items() if k in requested}
+
+    if not panels:
+        raise ValueError("No matching metrics found in model.history.")
+
+    panel_list = list(panels.items())
     ncols = 2
-    nrows = math.ceil(len(metrics) / ncols)
+    nrows = math.ceil(len(panel_list) / ncols)
     if figsize is None:
-        figsize = (7 * min(len(metrics), ncols), 4 * nrows)
+        figsize = (7 * min(len(panel_list), ncols), 4 * nrows)
 
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
     axes_flat = axes.flatten()
 
-    for i, key in enumerate(metrics):
+    _colors = {"train": "steelblue", "val": "darkorange", "only": "steelblue"}
+
+    def _xy(df):
+        x = df.index.to_numpy() if hasattr(df, "index") else range(len(df))
+        y = df.values.flatten() if hasattr(df, "values") else list(df)
+        return x, y
+
+    for i, (title, sides) in enumerate(panel_list):
         ax = axes_flat[i]
-        values = history[key]
-        # history values may be pd.Series or list
-        if hasattr(values, "values"):
-            values = values.values
-        ax.plot(values, label=key)
-        ax.set_title(key)
+        for side, df in sides.items():
+            x, y = _xy(df)
+            label = side if side != "only" else title
+            ax.plot(x, y, label=label, color=_colors.get(side, "steelblue"), alpha=0.85)
+        ax.set_title(title)
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Value")
-        ax.legend(fontsize=8)
+        if len(sides) > 1:
+            ax.legend(fontsize=8)
 
-    for j in range(len(metrics), len(axes_flat)):
+    for j in range(len(panel_list), len(axes_flat)):
         axes_flat[j].set_visible(False)
 
     fig.tight_layout()
