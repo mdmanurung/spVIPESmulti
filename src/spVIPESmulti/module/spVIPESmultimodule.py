@@ -62,7 +62,7 @@ class spVIPESmultimodule(BaseModuleClass):
         Level at which to model the dispersion parameter in the negative binomial distribution.
     encoder_activation : {"silu", "relu", "leakyrelu"}, default="silu"
         Activation function used in all encoder hidden layers.
-    use_low_rank_mixer : bool, default=False
+    use_low_rank_mixer : bool, default=True
         If ``True``, use a lightweight rank-``low_rank_mixer_rank`` bottleneck
         in the decoder mixer instead of the full FCLayers chain.
     low_rank_mixer_rank : int, default=4
@@ -127,7 +127,7 @@ class spVIPESmultimodule(BaseModuleClass):
         strict_likelihood_support: bool = False,
         validate_observations: bool = False,
         encoder_activation: str = "silu",
-        use_low_rank_mixer: bool = False,
+        use_low_rank_mixer: bool = True,
         low_rank_mixer_rank: int = 4,
         label_class_weights: Optional[torch.Tensor] = None,
     ):
