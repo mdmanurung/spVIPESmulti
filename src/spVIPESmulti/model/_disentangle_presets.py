@@ -26,10 +26,15 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
     },
     "full": {
         # All 4 classifiers + contrastive at sensible defaults.
+        # disentangle_label_private_weight is capped at 0.05 (N5-D): the GRL
+        # that erases label info from z_private also strips correlated group
+        # structure when cell type ≈ group (e.g. Atypical 76% CRXV), collapsing
+        # private silhouette. A small non-zero value retains the objective's
+        # direction without causing overreach.
         "disentangle_group_shared_weight": 1.0,
         "disentangle_label_shared_weight": 1.0,
         "disentangle_group_private_weight": 1.0,
-        "disentangle_label_private_weight": 1.0,
+        "disentangle_label_private_weight": 0.05,
         "contrastive_weight": 0.5,
     },
     "shared_only": {
@@ -66,10 +71,11 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
     },
     "no_contrastive": {
         # Full disentanglement but with contrastive disabled.
+        # Mirrors 'full' preset: disentangle_label_private_weight capped at 0.05 (N5-D).
         "disentangle_group_shared_weight": 1.0,
         "disentangle_label_shared_weight": 1.0,
         "disentangle_group_private_weight": 1.0,
-        "disentangle_label_private_weight": 1.0,
+        "disentangle_label_private_weight": 0.05,
         "contrastive_weight": 0.0,
     },
 }

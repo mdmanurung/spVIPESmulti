@@ -102,7 +102,8 @@ latents = model.get_latent_representation(batch_size=512)
 | `use_jeffreys_integ` | `bool` | `False` | Add a Jeffreys (symmetric KL) integration loss between every pair of group PoE posteriors on z_shared. |
 | `jeffreys_integ_weight` | `float` | `1.0` | Scalar multiplier on the Jeffreys integration loss. |
 | `strict_likelihood_support` | `bool` | `False` | Enable stricter likelihood-target validation before reconstruction `log_prob` calls. Always checks finite values (and NB non-negative). In strict mode, also requires integer-like NB counts when `log_variational_generative=False`. |
-| `**model_kwargs` | | | Forwarded to `spVIPESmultimodule`. |
+| `group_loss_weights` | `list[float] or None` | `None` | Per-group scalar multipliers on the reconstruction + KL loss. Useful for balancing imbalanced groups. E.g. `[1/n**0.5 for n in group_sizes]` for sqrt weighting. Normalized internally so absolute scale does not matter. |
+| `**model_kwargs` | | | Forwarded to `spVIPESmultimodule`. Includes `validate_observations` (default `False`): when `True`, enables two full tensor scans per step to check for non-finite or negative inputs before likelihood evaluation. Useful for debugging; disable in production for speed. |
 
 > **Tip:** Individual weight overrides stack on top of a preset.
 > `spVIPESmulti(adata, disentangle_preset="full", contrastive_weight=0.0)` enables
@@ -179,6 +180,7 @@ model.train(
     early_stopping=False,
     n_epochs_kl_warmup=400,
     n_steps_kl_warmup=None,
+    num_workers=0,
     plan_kwargs=None,
     **trainer_kwargs,
 )
@@ -194,6 +196,7 @@ model.train(
 | `early_stopping` | `bool` | `False` | Enable early stopping via Lightning's `EarlyStopping` callback. |
 | `n_epochs_kl_warmup` | `int` | `400` | Number of epochs over which the KL weight is linearly annealed from 0 to 1. |
 | `n_steps_kl_warmup` | `int or None` | `None` | Step-based KL warmup. Takes precedence over `n_epochs_kl_warmup` if set. |
+| `num_workers` | `int` | `0` | Number of DataLoader worker processes. `0` = load in main process (safest). Set to a positive integer (e.g. `4`) on multi-core HPC nodes to overlap data loading with GPU compute. |
 | `plan_kwargs` | `dict or None` | `None` | Extra keyword arguments forwarded to `scvi.train.TrainingPlan`. |
 | `**trainer_kwargs` | | | Forwarded to `pl.Trainer`. Use `accelerator="gpu", devices=1` to select a GPU (replaces the removed `use_gpu=True`). |
 

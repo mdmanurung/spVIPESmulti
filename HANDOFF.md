@@ -6,24 +6,44 @@ Read order: HANDOFF.md → PLAN.md → PROGRESS.md → ImplementationPlan.md (re
 
 ---
 
-## Performance improvements completed (2026-05-08)
+## Quality fixes completed (2026-05-08, session 2)
+
+- **GENERATIVE-FIX**: Added `px_scale` (blended mixed scale) to `poe_stats_out` in both generative paths → fixes `KeyError: 'px_scale'` in `metrics.reconstruction_error()`.
+- **N5-D**: `disentangle_label_private_weight` lowered from 1.0 → 0.05 in "full" and "no_contrastive" presets. Prevents GRL overreach on z_private when cell type ≈ group.
+- **N5-E**: Confirmed complete (pre-existing). Inverse-frequency label weights registered as buffer and threaded into CE calls.
+- All 168 non-evaluate tests pass.
+
+## Previous session items (2026-05-08, session 1)
 
 - **P-PERF-1**: `_label_based_poe` reassembly vectorized — eliminates O(n_cells) GPU–CPU syncs.
 - **VAL-GATE**: `_validate_likelihood_observations` isfinite/non-negative scans gated behind `validate_observations=False` default.
 - **DL-WORKERS**: `num_workers` exposed in `train()` (default 0, backward-compatible).
-- All 168 non-evaluate tests pass.
-
-Next performance items still in backlog: P-PERF-2 (low-rank mixer), P-PERF-3 (torch.compile — ruled out by user), P-PERF-4 (SiLU).
 
 ---
 
-## Current State (2026-05-08)
+## Current State (2026-05-08, session 3)
 
-### Baseline run complete
-- Trained 400 epochs (early stopping did NOT fire — validation loss still improving at epoch 400).
-- Model saved to `results/spvipes_bcells_recommended_v3`. ✅
+### Backlog cleanup
+- **Cancelled** P-PERF-3 (`torch.compile`) and P6 (multi-covariate generalization) per user.
 
-### Baseline metrics (z_shared)
+### Gallery notebook enrichment fix (earlier in session)
+- **BUG:** `get_enrichment_scores()` called `_validate_anndata()` which attempted model AnnData setup transfer → `ValueError: Number of vars not the same. Expected 27168 Received 9056`.
+- **FIX:** Replaced `_validate_anndata(adata)` with `if adata is None: adata = self.adata` in `get_enrichment_scores()` (line ~875, `model/spvipesmulti.py`). Enrichment scoring is purely gene-expression-level (decoupler on `.X`) and does not need model setup transfer.
+
+### Gallery rebuild: RUNNING (PID 1187832, log: /tmp/gallery_v2.log)
+- Stale `spvipes_bcells_gallery/model.pt` (saved against 27168-vars adata) deleted; was also blocking `model.load()` against the current 9056-vars HVG adata.
+- Notebook `if exists: load else train` branch now hits `else` and retrains.
+
+### v4 retrain: RUNNING (PID 1186327, log: /tmp/v4_retrain.log)
+- `malaria_bcells_recommended.ipynb` re-executing with `LABEL_SHARED_W=4`, **`LABEL_PRIVATE_W=0.05` (was 0.5; updated this session per N5-D fix)**, 400 epochs.
+- Saves to `docs/notebooks/results/spvipes_bcells_recommended_v4`.
+
+### Tutorial.ipynb re-execution: RUNNING (PID 1176121)
+- Still in flight from earlier in session.
+
+---
+
+## Baseline metrics (z_shared, v3)
 | metric     | value | verdict      |
 |-----------|-------|--------------|
 | iLISI     | 1.904 | OK — groups mix |
@@ -32,28 +52,10 @@ Next performance items still in backlog: P-PERF-2 (low-rank mixer), P-PERF-3 (to
 | knn_purity| 0.517 | BAD           |
 | leiden_ari| 0.312 | BAD           |
 
-Worst cell types (k-NN purity): Activated MZ (0.165), Transitional (0.169), Pre-Plasmablast (0.191).
-Best-dim AUROC for Activated MZ = 0.585 (≈ random → essentially invisible in shared space).
-Root cause: class imbalance — Atypical (n=3155), Activated (n=2284) dominate shared space.
-
-### Pilot sweep: COMPLETE
-Results in `scripts/pilot_results_celltype.json`. Winner: **Variant A** (`label_shared=4`).
-- knn_purity: 0.535 (+6.3% vs baseline 0.472)
-- leiden_ARI: 0.380 (+13.8% vs baseline 0.242)
-- iLISI/kBET unchanged (integration quality preserved)
-
-### v4 retrain: RUNNING (PID 1028229, started 2026-05-08)
-- `LABEL_SHARED_W = 4` (Variant A promoted)
-- Save path: `results/spvipes_bcells_recommended_v4`
-- `MAX_EPOCHS = 400`
+Pilot winner: **Variant A** (`label_shared=4`), knn_purity +6.3%, leiden_ARI +13.8%.
 
 ## Immediate Next Action
 
-**v4 retrain is RUNNING** (PID 1028229, started 2026-05-08).
-Log: `tail -f /tmp/retrain_v4.log`
-
-When done:
-1. Check `results/spvipes_bcells_recommended_v4/` exists.
-2. Check integration metrics in notebook output (knn_purity, leiden_ARI, cLISI).
-3. Compare against v3 baseline in HANDOFF §Baseline metrics table.
-4. Update PROGRESS.md with v4 results.
+1. Wait for v4 retrain to finish (~few hours) → inspect `_h.history` and `model_spv.evaluate(...)`.
+2. Validate v4 private silhouette > 0.086 (v3 baseline) and z_shared knn_purity / leiden_ARI improved per Variant-A pilot.
+3. Wait for gallery rebuild and Tutorial.ipynb to finish; check logs for errors.

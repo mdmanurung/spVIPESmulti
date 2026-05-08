@@ -75,6 +75,12 @@ adata2 = sc.read_h5ad("dataset2.h5ad")
 
 combined = spVIPESmulti.data.prepare_adatas({"control": adata1, "treatment": adata2})
 
+# Optional: use a specific layer per group instead of adata.X
+combined = spVIPESmulti.data.prepare_adatas(
+    {"control": adata1, "treatment": adata2},
+    layers={"control": "counts", "treatment": "counts"},
+)
+
 # Multimodal: dict of {group_name: {modality_name: AnnData}}
 combined = spVIPESmulti.data.prepare_multimodal_adatas({
     "control":   {"rna": rna1,   "protein": prot1},
@@ -176,6 +182,8 @@ model = spVIPESmulti.model.spVIPESmulti(
     n_dimensions_private=10,     # private latent dimensionality per group
     n_hidden=128,                # hidden layer width
     dropout_rate=0.1,
+    # Group loss balancing (optional, useful for imbalanced groups):
+    group_loss_weights=None,     # e.g. [1/n**0.5 for n in group_sizes] for sqrt weighting
     # Normalizing flow prior (optional):
     use_nf_prior=True,
     nf_type="NSF",               # "NSF" or "MAF"
@@ -185,6 +193,8 @@ model = spVIPESmulti.model.spVIPESmulti(
     disentangle_preset="full",   # see Disentanglement section below
         # Optional strict likelihood checks (default False):
         strict_likelihood_support=False,
+        # Optional: enable observation validation for debugging (default False):
+        validate_observations=False,
 )
 ```
 
@@ -205,6 +215,7 @@ model.train(
     batch_size=512,
     early_stopping=True,
     check_val_every_n_epoch=10,
+    num_workers=4,       # overlap data loading with GPU compute on multi-core HPC (default 0)
     accelerator="gpu",   # replaces the removed use_gpu=True
     devices=1,
 )
@@ -608,7 +619,11 @@ model.train(
 -   [PBMC CITE-seq vaccination](docs/notebooks/pbmc_citeseq_tutorial.ipynb) — Three time-point integration + multimodal appendix
 -   [CINEMA-OT + NF prior](docs/notebooks/cinemaot_nf_vignette.ipynb) — Gaussian vs. NSF prior vs. disentanglement
 -   [Plasmodium liver-stage](docs/notebooks/biolord_comparison_plasmodium_tutorial.ipynb) — Comparison with biolord
--   [Malaria B-cell analysis](docs/notebooks/malaria_bcells.ipynb) — Lightweight end-to-end B-cell workflow from CSV inputs
+-   [Malaria B-cell analysis (recommended)](docs/notebooks/malaria_bcells_recommended.ipynb) — End-to-end B-cell workflow: data prep → training → integration metrics
+-   [Malaria B-cell (time-resolved)](docs/notebooks/malaria_bcells_recommended_time.ipynb) — Time-course variant of the recommended workflow
+-   [Malaria B-cell (no disentanglement)](docs/notebooks/malaria_bcells_nodisentangle.ipynb) — Ablation: training without disentanglement objective
+-   [Malaria B-cell (hyperparameter exploration)](docs/notebooks/malaria_bcells_hparam_explore.ipynb) — Grid of hyperparameter variants
+-   [Malaria B-cell (gallery)](docs/notebooks/malaria_bcells_gallery.ipynb) — Visualization gallery of model outputs
 -   [Multimodal + NF prior](docs/notebooks/multimodal_nf_tutorial.ipynb) — RNA + protein integration with `prepare_multimodal_adatas`
 -   [API Documentation][link-api] — Comprehensive API reference
 

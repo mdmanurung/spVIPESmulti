@@ -872,7 +872,11 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             - ``scores_df``: combined scores DataFrame indexed by ``adata.obs_names``
             - ``metadata``: execution metadata and overlap diagnostics
         """
-        adata = self._validate_anndata(adata)
+        # Enrichment scoring uses gene expression directly (via decoupler) and
+        # does NOT require model-setup transfer. Accept any AnnData with matching
+        # cells, defaulting to the registered AnnData when none is supplied.
+        if adata is None:
+            adata = self.adata
 
         method_list = [m.lower() for m in (methods or ("ora", "gsea", "ulm"))]
         allowed_methods = {"ora", "gsea", "ulm"}

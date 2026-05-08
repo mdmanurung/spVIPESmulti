@@ -11,11 +11,38 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+### Added
+
+-   `prepare_adatas` and `prepare_multimodal_adatas` now accept a `layers=` kwarg for
+    per-group (and per-modality) layer selection before concatenation. Omitted keys or
+    `None` fall back to the group's existing `adata.X`. (L1, 2026-05-07)
+
+-   `MultiGroupTrainingMixin.train()` exposes a `num_workers` parameter (default `0`)
+    that is threaded through to `ConcatDataLoader`. Set to a positive integer on
+    multi-core HPC nodes to overlap data loading with GPU compute. (DL-WORKERS, 2026-05-08)
+
 ### Changed
 
--   Documentation sync pass:
-    -   removed stale notebook links from `docs/index.md` to match files present in `docs/notebooks/`.
-    -   refreshed `README.md` and `docs/api.md` examples/signatures for current public APIs (`sample_key`, auto-inferred group indices, `embed`, and DA helpers).
+-   `spVIPESmultimodule` now accepts `validate_observations: bool = False`. When `False`
+    (the default), the two full tensor scans per step (`isfinite` and `x < 0` checks)
+    are skipped entirely for speed. The unconditional `strict_likelihood_support` path
+    is unaffected. Pass `validate_observations=True` via `**model_kwargs` for debugging.
+    (VAL-GATE, 2026-05-08)
+
+-   `_label_based_poe` reassembly now uses vectorized boolean-mask scatter operations
+    instead of a per-cell Python loop, eliminating O(n_cells) GPU–CPU syncs per
+    training step. (P-PERF-1, 2026-05-08)
+
+-   `prepare_multimodal_adatas` now raises `ValueError` (with a clear message) when
+    modalities within the same group have non-matching `obs_names`, instead of silently
+    dropping cells via an implicit inner join. Mismatched ordering is auto-corrected by
+    aligning to the first modality's `obs_names`. (M2, 2026-05-07)
+
+### Fixed
+
+-   Broken documentation links to `malaria_bcells.ipynb` (renamed to
+    `malaria_bcells_recommended.ipynb`); `docs/index.md` toctree updated to list all
+    `malaria_bcells_*.ipynb` variants.
 
 ## [1.0.0] — 2026-05-01
 

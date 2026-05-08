@@ -930,6 +930,7 @@ class spVIPESmultimodule(BaseModuleClass):
             poe_stats_out[key] = {
                 "px_scale_private": px_scale_private,
                 "px_scale_shared": px_scale_shared,
+                "px_scale": px_scale,
                 "px_rate_private": px_rate_private,
                 "px_rate_shared": px_rate_shared,
                 "px": px,
@@ -987,6 +988,7 @@ class spVIPESmultimodule(BaseModuleClass):
                 poe_stats_out[key] = {
                     "px_scale_private": px_scale_private,
                     "px_scale_shared": px_scale_shared,
+                    "px_scale": px_scale,
                     "px_rate_private": px_rate_private,
                     "px_rate_shared": px_rate_shared,
                     "px": px,

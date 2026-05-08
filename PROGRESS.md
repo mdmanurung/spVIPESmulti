@@ -9,6 +9,100 @@ How to use:
 
 ---
 
+## 2026-05-08 (session 3, perf/accuracy review wrap-up)
+
+### Backlog cancellations (per user)
+- **P-PERF-3** (`torch.compile`): cancelled. Marginal expected gain after P-PERF-1 vectorization removed `.item()` graph-breaks; not worth the maintenance cost.
+- **P6** (multi-covariate generalization): cancelled. Broad refactor across data/model/loss not justified given current single-covariate scope.
+
+### v4 retrain config update
+- `docs/notebooks/malaria_bcells_recommended.ipynb`: `LABEL_PRIVATE_W` lowered `0.5 → 0.05` to align with the new "full" preset default established by N5-D. Comment updated.
+- v4 retrain launched (PID 1186327, log `/tmp/v4_retrain.log`); saves to `docs/notebooks/results/spvipes_bcells_recommended_v4`.
+
+### Gallery rebuild
+- Stale `docs/notebooks/results/spvipes_bcells_gallery/model.pt` (trained against 27168-var full gene set) deleted; current notebook applies HVG union and yields 9056 vars, so `model.load()` failed with `n_vars` mismatch.
+- Gallery notebook re-launched (PID 1187832, log `/tmp/gallery_v2.log`) and will retrain via the `else` branch of the `if exists: load else train` guard.
+
+---
+
+## 2026-05-08 (N5 quality fixes)
+
+### GENERATIVE-FIX: Add `px_scale` to generative output dict
+Status: completed
+
+**Root cause:** `metrics.reconstruction_error()` accessed `gen_out["private_poe"][key]["px_scale"]`,
+but the generative function stored only `px_scale_private` and `px_scale_shared` — omitting the
+blended mixed scale `px_scale` computed by the decoder.
+
+**Fix:** Added `"px_scale": px_scale` to `poe_stats_out[key]` in both:
+- `spVIPESmultimodule.generative()` (single-modal path)
+- `spVIPESmultimodule._generative_multimodal()` (multimodal path)
+
+Files: `src/spVIPESmulti/module/spVIPESmultimodule.py`
+
+Verification: 168 passed, 1 skipped, 0 failures (`pytest tests/ -q --ignore=tests/test_evaluate.py`).
+
+---
+
+### N5-D: Fix adversarial overreach on z_private
+Status: completed
+
+**Root cause:** `disentangle_label_private_weight=1.0` in the "full" and "no_contrastive" presets.
+The GRL erases label info from z_private, and because cell type ≈ antigen group (Atypical 76%
+CRXV, Classical 69% CRXV), it also strips group structure, collapsing private silhouette to 0.086.
+
+**Fix:** Reduced `disentangle_label_private_weight` from 1.0 to 0.05 in:
+- `"full"` preset
+- `"no_contrastive"` preset (mirrors "full" for consistency)
+
+The `"adversarial_only"` preset retains 1.0 as it is a specialized expert preset.
+
+Files: `src/spVIPESmulti/model/_disentangle_presets.py`
+
+Verification: 168 passed, 0 failures.
+
+---
+
+### N5-E: Class-weighted CE for minority cell types
+Status: confirmed complete (pre-existing implementation verified 2026-05-08)
+
+The implementation was already in place:
+- `label_class_weights` parameter accepted in `spVIPESmultimodule.__init__()`.
+- Registered as `nn.Module` buffer via `self.register_buffer("label_class_weights", ...)`.
+- Inverse-frequency weights computed from label counts at model init in `spvipesmulti.py` (lines 196–211).
+- `weight=self.label_class_weights` threaded into CE calls for Components 2 and 4.
+
+No code changes needed.
+
+---
+
+## 2026-05-08 (documentation pass)
+
+### DOC-1: README, api.md, CHANGELOG, CLAUDE.md sync
+Status: completed
+
+What changed:
+- `README.md`:
+  - `Data Preparation` snippet now shows `layers=` kwarg.
+  - `Model Parameters` snippet adds `group_loss_weights` and `validate_observations`.
+  - `Training` snippet adds `num_workers=4` example.
+  - Documentation & Tutorials: replaced broken `malaria_bcells.ipynb` link with all 5
+    `malaria_bcells_*.ipynb` variants (`recommended`, `recommended_time`,
+    `nodisentangle`, `hparam_explore`, `gallery`).
+- `docs/index.md`: toctree updated to include all 5 malaria notebooks.
+- `docs/api.md`:
+  - Constructor parameter table: added `group_loss_weights` and `validate_observations`
+    (via `**model_kwargs`) rows.
+  - `train()` signature: added `num_workers=0`.
+  - `train()` parameter table: added `num_workers` row.
+- `CHANGELOG.md [Unreleased]`: added entries for L1 (layers kwarg), M2 (multimodal
+  alignment hardening), P-PERF-1 (vectorized PoE reassembly), VAL-GATE
+  (validate_observations flag), DL-WORKERS (num_workers), and broken-link fix.
+- `CLAUDE.md`: removed stale OT-paired / OT-cluster PoE strategy descriptions (not in
+  code); PoE strategies section now documents only label-based and unsupervised.
+
+---
+
 ## 2026-05-08 (training performance — Tier 1)
 
 ### P-PERF-1: Vectorize `_label_based_poe` reassembly
@@ -53,6 +147,34 @@ Files:
 
 Verification:
 - `pytest tests/ -q --ignore=tests/test_evaluate.py` → 168 passed, 1 skipped, 0 failures.
+
+---
+
+## 2026-05-08 (documentation / vignette)
+
+### DOC-TUTORIAL-1: Modernize Tutorial.ipynb (simulated data vignette)
+Status: executing smoke test
+
+What changed:
+- Complete rewrite of `docs/notebooks/Tutorial.ipynb` from 56 cells (stale API) to 45 cells
+  covering the current API end-to-end.
+- Exercises 30+ functions across all package submodules:
+  - **data**: `prepare_adatas`
+  - **model**: `setup_anndata`, `spVIPESmulti`, `train`, `save`, `load`, `embed`, `get_loadings`
+  - **utils**: `compute_shared_umap`, `compute_private_umaps`, `add_latent_dims_to_obs`, `get_top_genes`
+  - **pl**: `training_curves`, `umap_shared`, `umap_private`, `plot_latent_dims_in_umap`,
+    `plot_latent_dims_in_heatmap`, `factor_violin`, `plot_latent_dimension_stats`,
+    `heatmap_loadings`, `loadings_dotplot`, `show_top_differential_vars`, `differential_vars_heatmap`
+  - **metrics**: `latent_dimension_stats`, `reconstruction_error`, `integration_report`
+  - **traversal**: `traverse_latent`, `calculate_differential_vars`
+- Two models trained: baseline (default) + `disentangle_preset="full"` (label_key="Celltypes" registered).
+- `metrics.integration_report` comparison table in final cell serves as quantitative validation.
+- End-to-end notebook execution is running as integration smoke test.
+
+Files:
+- `docs/notebooks/Tutorial.ipynb`
+
+Execution log: `/tmp/tutorial_rebuild.log`
 
 ---
 
