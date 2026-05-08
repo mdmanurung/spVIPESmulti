@@ -8,6 +8,12 @@ Status legend: `todo` | `in-progress` | `done` | `blocked`
 
 ## Current Iteration
 
+### AUDIT-REMEDIATION: 2026-05-08 audit findings
+Status: **done** (2026-05-09)
+- All W-001..W-056 items implemented. See PROGRESS.md §2026-05-09 for full change log.
+- Test result: **199 passed, 4 skipped, 0 failed** (`pytest tests/ -q`)
+- Breaking changes: W-053 (LayerNorm replaces BatchNorm1d in Encoder; checkpoint-breaking), W-040 (kbet() returns rejection rate, not exp(-mean_chi2)).
+
 ### DOC-TUTORIAL-1: Modernize Tutorial.ipynb (simulated data vignette)
 Status: **in-progress** (2026-05-08)
 - 45-cell rewrite complete; px_scale KeyError fixed (added `px_scale` to generative output).

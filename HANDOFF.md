@@ -6,6 +6,17 @@ Read order: HANDOFF.md → PLAN.md → PROGRESS.md → ImplementationPlan.md (re
 
 ---
 
+## Audit remediation plan landed (2026-05-08, session 4)
+
+- Plan: [ImplementationPlan_AuditRemediation.md](ImplementationPlan_AuditRemediation.md). Dependency-ordered TDD cards (W-001..W-056) covering both audit reports.
+- Red stubs: [tests/audit_regressions/](tests/audit_regressions/) — seven xfail tests pinned to the Critical findings; do not unxfail without implementing the matching W-### card.
+- Q-### items in §E of the plan (likelihood intent, PoE intent, DA null choice, embed default, harmonypy dep, NF-per-group, batch-vs-group) need PI sign-off **before** any code change touching W-012, W-020, W-022, W-030, W-040.
+
+### Immediate next action
+Pick **W-001 (F-GIVE-MEAN)** — no dependencies, single-line fix in [src/spVIPESmulti/model/spvipesmulti.py#L1413-L1432](src/spVIPESmulti/model/spvipesmulti.py#L1413-L1432); unblocks deterministic fixtures for all downstream metric work items.
+
+---
+
 ## Quality fixes completed (2026-05-08, session 2)
 
 - **GENERATIVE-FIX**: Added `px_scale` (blended mixed scale) to `poe_stats_out` in both generative paths → fixes `KeyError: 'px_scale'` in `metrics.reconstruction_error()`.

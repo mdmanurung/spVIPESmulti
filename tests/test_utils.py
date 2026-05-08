@@ -487,7 +487,8 @@ class TestKbet:
         z = rng.standard_normal((400, 10))
         groups = np.tile(["g0", "g1"], 200)
         score = metrics.kbet(z, groups, k=20)
-        assert score > 0.5
+        # kBET now returns rejection rate; well-mixed data → low rejection
+        assert score < 0.5
 
     def test_segregated_lower_than_mixed(self, rng):
         z_mixed = rng.standard_normal((200, 5))
@@ -496,7 +497,8 @@ class TestKbet:
             rng.standard_normal((100, 5)) + np.array([-10, 0, 0, 0, 0]),
         ])
         g = np.array(["g0"] * 100 + ["g1"] * 100)
-        assert metrics.kbet(z_mixed, g, k=10) > metrics.kbet(z_seg, g, k=10)
+        # Segregated data has a higher rejection rate (worse mixing) → higher score
+        assert metrics.kbet(z_seg, g, k=10) > metrics.kbet(z_mixed, g, k=10)
 
 
 class TestKnnPurity:

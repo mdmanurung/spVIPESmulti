@@ -89,20 +89,23 @@ class Encoder(nn.Module):
         self.drop = nn.Dropout(dropout)
 
         # hidden 128 -> topics
+        # W-053: LayerNorm instead of BatchNorm1d so eval() mode matches
+        # training mode. BatchNorm uses running stats in eval(), which
+        # introduces noise differences between single-cell inference and
+        # batch inference, corrupting get_latent_representation(). LayerNorm
+        # normalises per-sample, so its behaviour is identical at train/eval.
+        # NOTE: this breaks backward compatibility with checkpoints saved
+        # before this change (BatchNorm param names differ from LayerNorm).
         self.mu_encoder = nn.Sequential(
             nn.Linear(hidden, n_topics, bias=True),
-            nn.BatchNorm1d(n_topics),
+            nn.LayerNorm(n_topics),
         )
 
         # hidden 128 -> topics
         self.lvar_encoder = nn.Sequential(
             nn.Linear(hidden, n_topics, bias=True),
-            nn.BatchNorm1d(n_topics),
+            nn.LayerNorm(n_topics),
         )
-        # Bias the post-BN logvar to start tight (logvar ≈ -1, σ ≈ 0.6).
-        # BatchNorm zero-centers the pre-affine output, so only the BN affine
-        # bias survives at init — set it directly.
-        nn.init.constant_(self.lvar_encoder[1].bias, -1.0)
 
     def forward(self, data: torch.Tensor, specie: int, *cat_list: int):
         """

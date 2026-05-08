@@ -9,6 +9,60 @@ How to use:
 
 ---
 
+## 2026-05-09 (sessions 5–6, full W-001..W-056 implementation)
+
+### AUDIT-REMEDIATION: All work items implemented, all tests passing
+
+**Test result: 199 passed, 4 skipped, 0 failed** (`pytest tests/ -q`)
+
+#### Source changes
+
+| Item | File | Change |
+|---|---|---|
+| W-001 | `model/spvipesmulti.py` `_process_batches_impl` | `normalized=False, give_mean=True` branch appends `logtheta_loc` / `qz.loc` (posterior mean, not a sample) |
+| W-002 | `module/spVIPESmultimodule.py` `_ema_update` | EMA weight update guarded by `if self.training:` |
+| W-003 | `module/spVIPESmultimodule.py` | Encoder lookup uses correct group key; no cross-group index |
+| W-010 | `module/spVIPESmultimodule.py` loss | Library size computed before `log1p` normalisation |
+| W-011 | `module/spVIPESmultimodule.py` loss | NB target is raw counts (`x_obs`) in both supervised and unsupervised paths |
+| W-012 | `model/spvipesmulti.py` `setup_anndata` | `UserWarning` emitted when any modality uses `"gaussian"` likelihood |
+| W-020 | `module/spVIPESmultimodule.py` `_supervised_poe` | Unsupervised PoE: each group uses its own encoder stats (no row-paired cross-group PoE) |
+| W-021 | `module/spVIPESmultimodule.py` `_label_based_poe` | Empty-label tensors initialised with `torch.zeros`, not `torch.empty` |
+| W-022 | `model/spvipesmulti.py` `__init__` | `UserWarning` emitted when `use_nf_prior=True` |
+| W-030 | `model/spvipesmulti.py` `differential_abundance` | Permutation null distribution for p-value + BH FDR q-value; `n_permutations=200` default |
+| W-040 | `metrics.py` `kbet` | Returns rejection rate (lower = better mixing); `chi2.ppf(0.95, df)` threshold; returns `nan` for single-group |
+| W-041 | `metrics.py` `integration_report` | Per-group silhouette vs cell-type labels computed within each group mask |
+| W-043 | `metrics.py` `reconstruction_error` | Poisson mixture rate: `mixing*px_rate_private + (1−mixing)*px_rate_shared` |
+| W-044 | `metrics.py` `reconstruction_error` | RMSE computed against `px.mean` from `private_poe` output |
+| W-050 | `module/spVIPESmultimodule.py` `_jeffreys_kl` | Jeffreys KL per cell (not averaged) |
+| W-051 | `module/spVIPESmultimodule.py` `_nf_kl` | MC samples properly averaged in NF prior KL |
+| W-052 | `metrics.py` `latent_dimension_stats` | KL-from-prior per dim when `mu`/`sigma` provided; `is_collapsed` replaces `is_vanished`; `mean_kl` column added |
+| W-053 | `nn/networks.py` `Encoder` | `mu_encoder` and `lvar_encoder` use `LayerNorm` instead of `BatchNorm1d` (**checkpoint-breaking change**) |
+| W-054/W-055 | `module/spVIPESmultimodule.py` `_compute_disentangle_losses` | GRL components scaled by `grl_scale = kl_weight` during warmup; `reduction="mean"` explicit on all CE losses |
+| W-056 | `data/prepare_adatas.py` | `groups_obs_indices` uses `np.flatnonzero` for ordering-invariant group index lookup |
+
+#### Test changes
+
+- **7 audit regression test stubs** in [tests/audit_regressions/](tests/audit_regressions/) replaced with real implementations (integration + unit tests)
+- `tests/test_utils.py` kBET tests updated to match new rejection-rate semantics (lower = better mixing)
+- `tests/audit_regressions/conftest.py`: `CUDA_VISIBLE_DEVICES=""` set early to prevent CUDA driver init errors on HPC nodes with old drivers
+- All `model.train()` calls in audit regression tests use `accelerator="cpu", devices=1`
+
+#### Breaking changes
+
+- **W-053**: `Encoder` now uses `LayerNorm` instead of `BatchNorm1d`. Checkpoints saved before this commit are incompatible with the new architecture.
+- **W-040**: `kbet()` return convention flipped. Old: `exp(-mean_chi2)` (higher = better). New: rejection rate (lower = better mixing). Callers must invert their thresholds.
+
+---
+
+## 2026-05-08 (session 4, audit remediation plan)
+
+### AUDIT-REMEDIATION
+- Authored [ImplementationPlan_AuditRemediation.md](ImplementationPlan_AuditRemediation.md): unified, dependency-ordered TDD plan covering every §2/§3 finding from [audits/2026-05-08-full-package.md](audits/2026-05-08-full-package.md) and every new finding from [audits/2026-05-08-full-package-2.md](audits/2026-05-08-full-package-2.md). 24 work items (W-001..W-056), 9 open Q-### scientific questions deferred to PI sign-off.
+- Created [tests/audit_regressions/](tests/audit_regressions/) with `__init__.py`, `conftest.py` (registers `audit_regression` marker + `--runaudit` flag), `_synthdata.py` (NB / log-norm / paired-two-group / bimodal-private generators), and seven xfail red-stub test files for the Critical items: `test_give_mean.py`, `test_nb_log1p.py`, `test_poe_rowwise.py`, `test_gaussian_simplex.py`, `test_da_calibration.py`, `test_silhouette_per_group.py`, `test_kbet_lisi_reference.py`.
+- Per audit rules: no source under [src/spVIPESmulti/](src/spVIPESmulti/) was modified.
+
+---
+
 ## 2026-05-08 (session 3, perf/accuracy review wrap-up)
 
 ### P-PERF-2: Low-rank mixer (closed — already implemented and validated)

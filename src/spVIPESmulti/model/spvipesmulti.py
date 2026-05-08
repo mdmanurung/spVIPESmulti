@@ -235,6 +235,17 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
                     "Negative weights reverse the loss and will produce unexpected results."
                 )
 
+        # W-022: warn that the NF prior is global (one flow for all groups/modalities).
+        # Per-group flows are not currently supported.
+        if use_nf_prior:
+            warnings.warn(
+                "use_nf_prior=True: a single global normalizing flow is used as the prior "
+                "for all groups and modalities. This may not capture per-group structure. "
+                "Per-group flows are not currently supported.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         self.module = spVIPESmultimodule(
             groups_lengths=groups_lengths,
             groups_obs_names=groups_obs_names,
@@ -351,6 +362,22 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         if modality_likelihoods is not None:
             adata.uns["modality_likelihoods"] = modality_likelihoods
             logger.info("Multimodal: Configured with likelihoods %s", modality_likelihoods)
+            # W-012: warn if any modality uses Gaussian likelihood — the
+            # decoder mean is L1-normalised to a simplex, so data that lives
+            # outside [0, 1] (e.g. log-normalised CITE-seq protein values in
+            # [-4, +4]) will be poorly represented. Provide pre-normalised
+            # data in [0, 1] or treat this as a known limitation.
+            gaussian_mods = [m for m, lk in modality_likelihoods.items() if lk == "gaussian"]
+            if gaussian_mods:
+                warnings.warn(
+                    f"Modality(ies) {gaussian_mods} use 'gaussian' likelihood. "
+                    "The decoder mean is L1-normalised to a simplex, so it cannot "
+                    "represent values outside [0, 1]. Provide data normalised to [0, 1] "
+                    "(e.g. CLR normalised and shifted, or min-max scaled) or expect "
+                    "reconstruction quality to be limited for log-scale protein data.",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
         adata_manager = AnnDataManager(fields=anndata_fields, setup_method_args=setup_method_args)
         adata_manager.register_fields(adata, **kwargs)
@@ -700,6 +727,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         adata: Optional[AnnData] = None,
         batch_size: Optional[int] = None,
         sample_subset: Optional[Sequence[str]] = None,
+        n_permutations: int = 200,
     ) -> dict[str, object]:
         """Compute per-cell differential abundance score in shared latent space.
 
@@ -723,6 +751,10 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             Minibatch size for posterior extraction.
         sample_subset
             Optional list of sample identifiers to keep when aggregating.
+        n_permutations
+            Number of cell-label permutations for the permutation null used to
+            compute p-values and BH FDR (``q_value``). Set to 0 to skip
+            hypothesis testing (faster; ``p_value`` and ``q_value`` are ``nan``).
 
         Returns
         -------
@@ -807,6 +839,39 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             },
             index=adata.obs_names,
         )
+
+        # W-030: permutation null — compute p-value and BH FDR.
+        # Shuffles the group assignment of cells (not sample labels) to generate
+        # a null distribution for |da_score|, then computes a two-sided p-value.
+        if n_permutations > 0:
+            rng = np.random.default_rng(0)
+            obs_abs = np.abs(score_values)
+            perm_counts = np.zeros(adata.n_obs, dtype=np.float64)
+            for _ in range(n_permutations):
+                perm_scores = np.zeros(adata.n_obs, dtype=np.float32)
+                for gi, idxs in enumerate(group_indices_list):
+                    idxs_arr = np.asarray(idxs)
+                    z = np.asarray(shared["loc_reordered"][gi])
+                    # Shuffle which reference posterior to measure distance to
+                    perm_idx = rng.permutation(len(idxs_arr))
+                    z_perm = z[perm_idx]
+                    d_a_p = np.sum(np.square((z_perm - mu_a) / scale_a), axis=1)
+                    d_b_p = np.sum(np.square((z_perm - mu_b) / scale_b), axis=1)
+                    perm_scores[idxs_arr] = (d_a_p - d_b_p).astype(np.float32)
+                perm_counts += (np.abs(perm_scores) >= obs_abs).astype(np.float64)
+            p_values = (perm_counts + 1.0) / (n_permutations + 1.0)  # conservative
+            # BH FDR correction
+            order = np.argsort(p_values)
+            ranks = np.empty_like(order)
+            ranks[order] = np.arange(1, len(p_values) + 1)
+            q_values = p_values * len(p_values) / ranks
+            q_values = np.minimum.accumulate(q_values[order[::-1]])[::-1]
+            q_values = q_values[np.argsort(order)]
+            scores_df["p_value"] = p_values
+            scores_df["q_value"] = q_values
+        else:
+            scores_df["p_value"] = float("nan")
+            scores_df["q_value"] = float("nan")
 
         metadata = {
             "group_a": int(group_a),
@@ -1416,7 +1481,12 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
                 shared_posterior_loc[g].append(outputs["poe_stats"][g]["logtheta_loc"].cpu())
                 shared_posterior_scale[g].append(outputs["poe_stats"][g]["logtheta_scale"].cpu())
                 if not normalized:
-                    latent_shared[g].append(poe_log_z.cpu())
+                    # W-001: when give_mean=True, use the posterior mean (logtheta_loc)
+                    # rather than a single rsample (logtheta_log_z) for determinism.
+                    if give_mean:
+                        latent_shared[g].append(outputs["poe_stats"][g]["logtheta_loc"].cpu())
+                    else:
+                        latent_shared[g].append(poe_log_z.cpu())
                 else:
                     qz_poe = outputs["poe_stats"][g]["logtheta_qz"]
                     if give_mean:
@@ -1430,7 +1500,12 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
                 private_log_z = outputs["private_stats"][g]["log_z"]
                 private_qz = outputs["private_stats"][g]["qz"]
                 if not normalized:
-                    latent_private[g].append(private_log_z.cpu())
+                    # W-001: when give_mean=True, use qz.loc (posterior mean)
+                    # rather than log_z (a single rsample) for determinism.
+                    if give_mean:
+                        latent_private[g].append(outputs["private_stats"][g]["qz"].loc.cpu())
+                    else:
+                        latent_private[g].append(private_log_z.cpu())
                 else:
                     if give_mean:
                         samples = private_qz.sample([mc_samples])

@@ -5,6 +5,7 @@
 **Shared-private Variational Inference with Product of Experts and Supervision**
 
 [![PyPI][badge-pypi]][link-pypi]
+[![Tests][badge-tests]][link-tests]
 [![Documentation][badge-docs]][link-docs]
 
 </div>
@@ -60,6 +61,38 @@ With enrichment extras (decoupler integration):
 ```bash
 pip install -e ".[enrichment]"
 ```
+
+## 5-line Quickstart
+
+```python
+import spVIPESmulti
+
+adata = spVIPESmulti.data.prepare_adatas({"ctrl": adata_ctrl, "treat": adata_treat})
+spVIPESmulti.model.spVIPESmulti.setup_anndata(adata, groups_key="groups", label_key="cell_type")
+model = spVIPESmulti.model.spVIPESmulti(adata)
+model.train(max_epochs=200)
+model.embed()  # writes X_spvm_shared and X_spvm_private_<group> into adata.obsm
+```
+
+> **GPU:** Pass `accelerator="gpu", devices=1` to `model.train()` via `**trainer_kwargs`. The deprecated `use_gpu=True` is removed.
+
+<details>
+<summary><b>Multimodal quickstart (RNA + protein)</b></summary>
+```python
+mdata = spVIPESmulti.data.prepare_multimodal_adatas(
+    {"spleen": {"rna": rna_sp, "protein": prot_sp},
+     "lymph":  {"rna": rna_ln, "protein": prot_ln}},
+    modality_likelihoods={"rna": "nb", "protein": "nb"},
+)
+spVIPESmulti.model.spVIPESmulti.setup_anndata(
+    mdata, groups_key="groups", label_key="cell_types",
+    modality_likelihoods={"rna": "nb", "protein": "nb"},
+)
+model = spVIPESmulti.model.spVIPESmulti(mdata, use_nf_prior=True)
+model.train(max_epochs=100, batch_size=512)
+```
+
+</details>
 
 ## Quick Start
 

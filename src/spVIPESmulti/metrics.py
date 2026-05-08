@@ -86,12 +86,20 @@ def clisi(rep: np.ndarray, labels: np.ndarray, k: int = 30) -> float:
 
 
 def kbet(rep: np.ndarray, groups: np.ndarray, k: int = 20) -> float:
-    """Chi-squared proxy for kBET (Büttner et al., 2019).
+    """kBET rejection rate (Büttner et al., 2019) — chi-squared per-cell test.
 
     For each cell, compares the observed group frequency in its k-NN
     neighbourhood to the global expected frequency via a chi-squared
-    statistic. The per-cell chi-squared values are averaged and transformed
-    via ``exp(−chi_mean)`` so that perfect mixing maps to 1.0.
+    statistic, then returns the **fraction of cells whose neighbourhood
+    rejects H0 at alpha=0.05** (i.e. is *not* well-mixed).
+
+    A *lower* rejection rate means better mixing. In practice callers
+    typically report ``1 - kbet(...)`` so that higher = better.
+
+    .. note::
+        The previous implementation returned ``exp(-mean_chi2)`` which is
+        a monotone transformation, not the rejection rate. The new
+        implementation matches the original paper definition.
 
     Parameters
     ----------
@@ -105,18 +113,25 @@ def kbet(rep: np.ndarray, groups: np.ndarray, k: int = 20) -> float:
     Returns
     -------
     float
-        kBET score in [0, 1]. Higher = better mixing.
+        kBET rejection rate in [0, 1]. **Lower = better mixing.**
     """
+    from scipy.stats import chi2 as _chi2
     from sklearn.neighbors import NearestNeighbors
 
     groups = np.asarray(groups)
+    unique_groups = np.unique(groups)
+    dof = len(unique_groups) - 1
+    if dof < 1:
+        return float("nan")  # only one group — metric undefined
+    critical = _chi2.ppf(0.95, df=dof)
+
     nn = NearestNeighbors(n_neighbors=k + 1).fit(rep)
     _, idx = nn.kneighbors(rep)
     idx = idx[:, 1:]
     expected = (
         pd.Series(groups)
         .value_counts(normalize=True)
-        .reindex(np.unique(groups))
+        .reindex(unique_groups)
         .values
     )
     chi = np.empty(rep.shape[0])
@@ -124,11 +139,11 @@ def kbet(rep: np.ndarray, groups: np.ndarray, k: int = 20) -> float:
         observed = (
             pd.Series(groups[idx[i]])
             .value_counts(normalize=True)
-            .reindex(np.unique(groups), fill_value=0)
+            .reindex(unique_groups, fill_value=0)
             .values
         )
-        chi[i] = ((observed - expected) ** 2 / (expected + 1e-9)).sum()
-    return float(np.exp(-chi.mean()))
+        chi[i] = k * ((observed - expected) ** 2 / (expected + 1e-9)).sum()
+    return float((chi > critical).mean())
 
 
 def knn_purity(rep: np.ndarray, labels: np.ndarray, k: int = 20) -> float:
@@ -312,15 +327,40 @@ def integration_report(
     rows = [shared_row]
 
     if z_private_dict is not None:
-        # Pool all private latents + group labels to compute cross-group silhouette.
-        # Use a distinct loop variable so we don't shadow the outer `k` (kNN size)
-        # and so a reader can't mistake the comprehension for a kNN computation.
-        all_z = np.concatenate(list(z_private_dict.values()), axis=0)
-        all_g = np.concatenate(
-            [np.full(v.shape[0], group_name) for group_name, v in z_private_dict.items()]
-        )
-        sil = per_group_silhouette(all_z, all_g)
-        for group_name in z_private_dict:
+        # W-041: compute per-group silhouette using cell-type labels within
+        # each group's private latent space — not a global pool.
+        # The semantic question is: "within group g's z_private, do cell types
+        # separate?" Each group gets its own silhouette score.
+        #
+        # We need cell-type labels aligned to each group's rows. Build a mapping
+        # from global cell order: for group g we use the cells in group_labels==g.
+        unique_group_names = list(z_private_dict.keys())
+        group_label_arr = np.asarray(group_labels)
+        cell_label_arr = np.asarray(cell_labels)
+
+        # Build cumulative start indices assuming z_private_dict values are in
+        # the same row-order as the global arrays filtered by group.
+        group_pos = 0
+        for group_name, z_priv in z_private_dict.items():
+            n_g = z_priv.shape[0]
+            # Slice the cell-type labels for this group's cells
+            group_mask = group_label_arr == group_name
+            if group_mask.sum() == n_g:
+                ct_labels = cell_label_arr[group_mask]
+            else:
+                # Fallback: slice by position in the concatenated order
+                ct_labels = cell_label_arr[group_pos : group_pos + n_g]
+            group_pos += n_g
+
+            unique_ct = np.unique(ct_labels)
+            if len(unique_ct) >= 2 and n_g >= 2:
+                rng = np.random.default_rng(0)
+                n_sub = min(2000, n_g)
+                pick = rng.choice(n_g, size=n_sub, replace=False)
+                from sklearn.metrics import silhouette_score
+                sil = float(silhouette_score(z_priv[pick], ct_labels[pick]))
+            else:
+                sil = float("nan")
             rows.append(
                 {
                     "latent": f"z_private ({group_name})",
@@ -343,19 +383,39 @@ def integration_report(
 
 def latent_dimension_stats(
     latent_array: np.ndarray,
-    threshold: float = 0.5,
+    mu_array: Optional[np.ndarray] = None,
+    sigma_array: Optional[np.ndarray] = None,
+    threshold: float = 0.05,
 ) -> pd.DataFrame:
     """Per-dimension activity statistics for a latent matrix.
 
-    Computes the standard deviation and mean absolute value of each column
-    and flags dimensions whose std falls below ``threshold`` as vanished.
+    Computes the standard deviation and mean absolute value of each column.
+    When ``mu_array`` and ``sigma_array`` are provided (posterior mean and
+    standard deviation), uses the **per-dimension marginal KL** against
+    N(0, 1) to flag collapsed dimensions (W-052):
+
+    .. math::
+        \\text{KL}_d = \\frac{1}{N}\\sum_i \\left[
+            \\frac{\\mu_{i,d}^2 + \\sigma_{i,d}^2}{2}
+            - \\log \\sigma_{i,d} - \\frac{1}{2}
+        \\right]
+
+    A dimension is flagged ``is_collapsed`` when its mean KL < ``threshold``
+    (default 0.05, following Bowman et al. and the standard VAE collapse
+    literature). When only the sample array is provided, falls back to the
+    std-heuristic with the same ``threshold``.
 
     Parameters
     ----------
     latent_array:
         2-D array of shape ``(n_cells, n_dims)``.
+    mu_array:
+        Optional posterior mean array, same shape as ``latent_array``.
+    sigma_array:
+        Optional posterior std array, same shape as ``latent_array``.
     threshold:
-        Dimensions with std < threshold are marked as vanished.
+        KL threshold below which a dimension is flagged as collapsed
+        (when mu/sigma provided), or std threshold (fallback).
 
     Returns
     -------
@@ -365,31 +425,46 @@ def latent_dimension_stats(
         ``dim``
             Dimension index.
         ``std``
-            Population standard deviation across cells.
+            Population standard deviation of z across cells.
         ``mean_abs``
-            Mean absolute value across cells.
-        ``is_vanished``
-            ``True`` if std < threshold.
+            Mean absolute value of z across cells.
+        ``mean_kl``
+            Per-dimension mean KL against N(0, 1). ``nan`` if mu/sigma
+            not provided.
+        ``is_collapsed``
+            ``True`` if the dimension is deemed collapsed.
         ``rank``
             Rank by std (1 = most active).
 
     Examples
     --------
     >>> stats = spVIPESmulti.metrics.latent_dimension_stats(z_shared)
-    >>> print(stats[stats.is_vanished])
+    >>> print(stats[stats.is_collapsed])
     """
     latent_array = np.asarray(latent_array)
     n_dims = latent_array.shape[1]
     stds = latent_array.std(axis=0)
     mean_abs = np.abs(latent_array).mean(axis=0)
-    is_vanished = stds < threshold
     ranks = (-stds).argsort().argsort() + 1  # rank 1 = largest std
+
+    if mu_array is not None and sigma_array is not None:
+        mu = np.asarray(mu_array)
+        sigma = np.asarray(sigma_array).clip(min=1e-8)
+        # Marginal KL per dimension: mean over cells
+        kl_per_dim = (0.5 * (mu ** 2 + sigma ** 2 - 1.0 - 2.0 * np.log(sigma))).mean(axis=0)
+        is_collapsed = kl_per_dim < threshold
+    else:
+        # Fallback: std heuristic
+        kl_per_dim = np.full(n_dims, float("nan"))
+        is_collapsed = stds < threshold
+
     return pd.DataFrame(
         {
             "dim": np.arange(n_dims),
             "std": stds,
             "mean_abs": mean_abs,
-            "is_vanished": is_vanished,
+            "mean_kl": kl_per_dim,
+            "is_collapsed": is_collapsed,
             "rank": ranks,
         }
     )
@@ -504,14 +579,25 @@ def reconstruction_error(
                         x_raw = x_raw.float()
                     x_raw = x_raw[:, module.groups_var_indices[g]].cpu()
 
-                    # Normalize to proportion scale for RMSE comparison with px_scale
-                    lib = x_raw.sum(dim=1, keepdim=True).clamp(min=1.0)
-                    x_norm = x_raw / lib
+                    # W-044: RMSE compares expected counts (px.mean) to raw counts,
+                    # not the simplex-scaled px_scale vs normalised proportions.
+                    px_mean = gen_out["private_poe"][key]["px"].mean.cpu()
+                    n_cells = px_mean.shape[0]
+                    sq_err = float(((px_mean - x_raw) ** 2).mean())
 
-                    n_cells = px_scale.shape[0]
-                    sq_err = float(((px_scale - x_norm) ** 2).mean())
-                    rate = px_rate.clamp(min=1e-8)
-                    nll = float((-x_raw * torch.log(rate) + rate).mean())
+                    # W-043: Poisson NLL with mixed rate (private + shared blend)
+                    # and proper log-factorial term via torch.distributions.Poisson.
+                    import torch.distributions as _td
+                    px_rate_priv = gen_out["private_poe"][key]["px_rate_private"].cpu()
+                    px_rate_shar = gen_out["private_poe"][key]["px_rate_shared"].cpu()
+                    px_mixing = getattr(gen_out["private_poe"][key]["px"], "mixture_logits", None)
+                    if px_mixing is not None:
+                        mixing = torch.sigmoid(px_mixing.cpu())
+                        rate = mixing * px_rate_priv + (1 - mixing) * px_rate_shar
+                    else:
+                        rate = px_rate_shar
+                    rate = rate.clamp(min=1e-8)
+                    nll = float(-_td.Poisson(rate).log_prob(x_raw).mean())
 
                     accum_sq_err[g] += sq_err * n_cells
                     accum_nll[g] += nll * n_cells

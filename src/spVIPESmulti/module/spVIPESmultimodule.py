@@ -536,23 +536,31 @@ class spVIPESmultimodule(BaseModuleClass):
             i: xs[:, self.groups_var_indices[i]] for i, xs in x.items()
         }  # update each groups minibatch with its own gene indices
 
+        # W-010: compute library size from raw counts BEFORE log1p transform so
+        # that log-library reflects the true sequencing depth, not log(1+x) sums.
+        library = {i: torch.log(xs.sum(1).clamp(min=1e-6)).unsqueeze(1) for i, xs in x.items()}
+
         if self.log_variational_inference:
             x = {i: torch.log(1 + xs) for i, xs in x.items()}  # logvariational
-
-        library = {i: torch.log(xs.sum(1)).unsqueeze(1) for i, xs in x.items()}  # observed library size
 
         private_stats = {}
         shared_stats = {}
 
-        for group, (item, batch) in enumerate(zip(x.values(), batch_index)):
-            private_encoder = self.encoders[group]["private"]
-            shared_encoder = self.encoders[group]["shared"]
+        # W-003: use the actual group code from `groups` (the tensor passed in
+        # from the dataloader) rather than the loop-enumeration position. When a
+        # mini-batch is missing one group, enumerate() would select the wrong
+        # encoder for the remaining groups.
+        group_code_list = [int(g.reshape(-1)[0].item()) for g in groups]
+        for pos, (item, batch) in enumerate(zip(x.values(), batch_index)):
+            group_code = group_code_list[pos]
+            private_encoder = self.encoders[group_code]["private"]
+            shared_encoder = self.encoders[group_code]["shared"]
 
-            private_values = private_encoder(item, group, batch)
-            shared_values = shared_encoder(item, group, batch)
+            private_values = private_encoder(item, group_code, batch)
+            shared_values = shared_encoder(item, group_code, batch)
 
-            private_stats[group] = private_values
-            shared_stats[group] = shared_values
+            private_stats[pos] = private_values
+            shared_stats[pos] = shared_values
 
         labels = None
         if self.use_labels:
@@ -674,16 +682,27 @@ class spVIPESmultimodule(BaseModuleClass):
     ):
         if self.use_labels and labels is not None:
             return self._label_based_poe(shared_stats, labels)
-        # Unsupervised fallback: combine all groups via PoE without label alignment
-        poe_result = self._poe_n(shared_stats)
-        for g in sorted(poe_result.keys()):
-            poe_result[g]["logtheta_qz"] = Normal(
-                poe_result[g]["logtheta_loc"],
-                poe_result[g]["logtheta_scale"].clamp(min=1e-6),
-            )
-            poe_result[g]["logtheta_log_z"] = poe_result[g]["logtheta_qz"].rsample()
-            poe_result[g]["logtheta_theta"] = F.softmax(poe_result[g]["logtheta_log_z"], -1)
-        return poe_result
+        # W-020: Unsupervised fallback — use each group's own encoder posterior
+        # directly instead of cross-group PoE row-pairing.  Row-wise PoE without
+        # label alignment pairs cells by mini-batch position, which is arbitrary
+        # and makes z_shared of group A depend on the *row order* of group B.
+        # Integration quality is maintained through the Jeffreys / disentanglement
+        # objectives that pull distributions together without pairing cells.
+        result = {}
+        for g in sorted(shared_stats.keys()):
+            loc = shared_stats[g]["logtheta_loc"]
+            scale = shared_stats[g]["logtheta_scale"].clamp(min=1e-6)
+            qz = Normal(loc, scale)
+            log_z = qz.rsample()
+            result[g] = {
+                "logtheta_loc": loc,
+                "logtheta_logvar": shared_stats[g]["logtheta_logvar"],
+                "logtheta_scale": scale,
+                "logtheta_qz": qz,
+                "logtheta_log_z": log_z,
+                "logtheta_theta": F.softmax(log_z, -1),
+            }
+        return result
 
     def _paired_poe(self, *args, **kwargs):
         raise NotImplementedError("Paired PoE has been removed. Use label-based PoE (label_key=...) instead.")
@@ -691,17 +710,19 @@ class spVIPESmultimodule(BaseModuleClass):
     def _jeffreys_divergence_loss(self, mu1, logvar1, mu2, logvar2):
         """Symmetric KL (Jeffreys divergence) between two batches of Gaussian posteriors.
 
-        Aggregates each batch to a single representative Gaussian by averaging
-        means and variances, then returns KL(p1‖p2) + KL(p2‖p1) summed over
-        latent dimensions. This handles groups of unequal batch sizes.
+        W-050: Computes KL per cell then averages, instead of aggregating each
+        batch to a single Gaussian first. Per-cell computation avoids conflating
+        the mean-distance penalty with the variance-matching penalty and gives a
+        proper Monte Carlo estimate of the distribution-level objective. Unequal
+        batch sizes are handled by truncating to the smaller of the two batches.
         """
-        var1 = logvar1.exp().mean(dim=0)
-        var2 = logvar2.exp().mean(dim=0)
-        agg_mu1 = mu1.mean(dim=0)
-        agg_mu2 = mu2.mean(dim=0)
-        rv1 = Normal(agg_mu1, var1.sqrt().clamp(min=1e-6))
-        rv2 = Normal(agg_mu2, var2.sqrt().clamp(min=1e-6))
-        return (kl(rv1, rv2) + kl(rv2, rv1)).sum()
+        n = min(mu1.shape[0], mu2.shape[0])
+        mu1, logvar1 = mu1[:n], logvar1[:n]
+        mu2, logvar2 = mu2[:n], logvar2[:n]
+        rv1 = Normal(mu1, (0.5 * logvar1).exp().clamp(min=1e-6))
+        rv2 = Normal(mu2, (0.5 * logvar2).exp().clamp(min=1e-6))
+        # Sum over latent dims, mean over cells → scalar
+        return (kl(rv1, rv2) + kl(rv2, rv1)).sum(dim=-1).mean()
 
     def _compute_jeffreys_integ_loss(self, inference_outputs, n_groups, extra_metrics):
         """Pairwise Jeffreys divergence across all group PoE posteriors.
@@ -737,19 +758,26 @@ class spVIPESmultimodule(BaseModuleClass):
         logvars_joint = torch.log(logvars_joint)
         return mus_joint, logvars_joint
 
-    def _nf_kl(self, qz, z, target: str):
+    def _nf_kl(self, qz, z, target: str, n_mc_samples: int = 1):
         """Compute KL divergence using normalizing flow prior via Monte Carlo.
 
-        KL(q(z|x) || p_flow(z)) ≈ log q(z|x) - log p_flow(z)
+        KL(q(z|x) || p_flow(z)) ≈ E_q[log q(z|x) - log p_flow(z)]
+
+        W-051: ``n_mc_samples > 1`` draws multiple independent samples from
+        ``qz`` and averages the log-ratio, giving a lower-variance estimate
+        of the MC-KL. With ``n_mc_samples=1`` (default) behaviour is identical
+        to the previous single-sample implementation.
 
         Parameters
         ----------
         qz : Normal
             Posterior distribution q(z|x).
         z : torch.Tensor
-            Samples from q(z|x).
+            A single pre-drawn sample from q(z|x) (used when n_mc_samples=1).
         target : str
             Which flow to use: "shared" or "private".
+        n_mc_samples : int, default=1
+            Number of Monte Carlo samples for the KL estimate.
 
         Returns
         -------
@@ -760,8 +788,14 @@ class spVIPESmultimodule(BaseModuleClass):
             flow_dist = self.flow_prior_shared()
         else:
             flow_dist = self.flow_prior_private()
+        if n_mc_samples > 1:
+            # Shape: (n_mc_samples, batch_size, latent_dim)
+            z_mc = qz.rsample([n_mc_samples])
+            log_qz = qz.log_prob(z_mc).sum(dim=-1)  # (n_mc, batch)
+            log_pz = flow_dist.log_prob(z_mc)         # (n_mc, batch)
+            return (log_qz - log_pz).mean(dim=0)       # mean over MC samples
         log_qz = qz.log_prob(z).sum(dim=-1)  # sum over latent dims
-        log_pz = flow_dist.log_prob(z)  # flow gives scalar per sample
+        log_pz = flow_dist.log_prob(z)       # flow gives scalar per sample
         return log_qz - log_pz
 
     def _label_based_poe(self, shared_stats: dict, label_group: dict):
@@ -825,7 +859,10 @@ class spVIPESmultimodule(BaseModuleClass):
                     latent_dim = poe_result[groups_with_label[0]]["logtheta_loc"].shape[1]
                     device = poe_result[groups_with_label[0]]["logtheta_loc"].device
                     poe_result[g] = {
-                        k: torch.empty((0, latent_dim), device=device) for k in stat_keys
+                        # W-021: use zeros not empty — empty contains uninitialised
+                        # memory; these 0-row tensors are never read, but zeros
+                        # avoids accidental UB if shapes are mis-used downstream.
+                        k: torch.zeros((0, latent_dim), device=device) for k in stat_keys
                     }
 
                 poe_stats_per_label[label] = poe_result
@@ -853,7 +890,8 @@ class spVIPESmultimodule(BaseModuleClass):
                     if g == g_with:
                         final_result[g] = poe_result[g_with]
                     else:
-                        final_result[g] = {k: torch.empty((0, latent_dim), device=device) for k in stat_keys}
+                        # W-021: zeros not empty (see note above)
+                        final_result[g] = {k: torch.zeros((0, latent_dim), device=device) for k in stat_keys}
                 poe_stats_per_label[label] = final_result
 
         # Reassemble: for each group, fill output tensors in original cell order
@@ -864,7 +902,9 @@ class spVIPESmultimodule(BaseModuleClass):
         concat_poe_stats = {}
         for g in group_keys:
             n_cells = per_group_stats[g]["logtheta_loc"].shape[0]
-            group_output = {k: torch.empty(n_cells, latent_dim, dtype=torch.float32, device=ref_device) for k in stat_keys}
+            # W-021: torch.zeros not torch.empty — uninitialised positions (if any
+            # label mask missed a cell) default to 0 rather than garbage values.
+            group_output = {k: torch.zeros(n_cells, latent_dim, dtype=torch.float32, device=ref_device) for k in stat_keys}
 
             # Vectorized scatter: O(n_labels) boolean-mask ops instead of
             # O(n_cells) .item() calls — eliminates GPU→CPU syncs per cell.
@@ -1042,12 +1082,20 @@ class spVIPESmultimodule(BaseModuleClass):
 
         return loadings
 
-    def _compute_disentangle_losses(self, inference_outputs, tensors_by_group, n_groups, extra_metrics):
+    def _compute_disentangle_losses(self, inference_outputs, tensors_by_group, n_groups, extra_metrics, kl_weight: float = 1.0):
         """Compute disentanglement and contrastive losses (sum of all enabled, weighted terms).
 
         Each component is independently controlled by its weight at construction
         time — set the corresponding ``disentangle_*_weight`` to 0 to ablate that
         component (the network is then never created, no forward/backward cost).
+
+        W-054: All ``F.cross_entropy`` calls explicitly set ``reduction="mean"``
+        for clarity (PyTorch default is "mean", but explicit is better).
+
+        W-055: ``kl_weight`` warmup is applied **only** to adversarial GRL
+        components (1 and 4).  Supervised CE components (2, 3, 5) always train
+        at full weight so that cell-type alignment supervision is not suppressed
+        during the early KL warmup phase.
 
         Returns
         -------
@@ -1085,7 +1133,9 @@ class spVIPESmultimodule(BaseModuleClass):
         disentangle_total = 0.0
 
         # Component 1 (q_group_shared): adversarial group erasure on z_shared
+        # W-055: GRL component — apply kl_weight warmup
         if self.q_group_shared is not None:
+            grl_scale = kl_weight if self.disentangle_warmup else 1.0
             loss_val = sum(
                 F.cross_entropy(
                     self.q_group_shared(gradient_reversal(
@@ -1096,19 +1146,22 @@ class spVIPESmultimodule(BaseModuleClass):
                         g, dtype=torch.long,
                         device=inference_outputs["poe_stats"][g]["logtheta_log_z"].device,
                     ),
+                    reduction="mean",  # W-054: explicit
                 )
                 for g in range(n_groups)
             )
-            disentangle_total = disentangle_total + self.disentangle_group_shared_weight * loss_val
+            disentangle_total = disentangle_total + self.disentangle_group_shared_weight * grl_scale * loss_val
             extra_metrics["disentangle_group_shared_loss"] = loss_val / n_groups
 
         # Component 2 (q_label_shared): supervised label preservation on z_shared
+        # W-055: Supervised CE — always at full weight (no warmup)
         if self.q_label_shared is not None:
             loss_val = sum(
                 F.cross_entropy(
                     self.q_label_shared(inference_outputs["poe_stats"][g]["logtheta_log_z"]),
                     labels_by_group[g].long(),
                     weight=self.label_class_weights,
+                    reduction="mean",  # W-054: explicit
                 )
                 for g in range(n_groups)
             )
@@ -1135,11 +1188,13 @@ class spVIPESmultimodule(BaseModuleClass):
         # units regardless of n_modalities. In single-modality mode n_pairs
         # equals n_groups and the rescale is a no-op.
         # Component 3 (q_group_private): supervised group preservation on z_private
+        # W-055: Supervised CE — always at full weight (no warmup)
         if self.q_group_private is not None:
             pair_losses = [
                 F.cross_entropy(
                     self.q_group_private(z),
                     torch.full((z.size(0),), g, dtype=torch.long, device=z.device),
+                    reduction="mean",  # W-054: explicit
                 )
                 for g in range(n_groups)
                 for z in _private_zs(g)
@@ -1152,36 +1207,43 @@ class spVIPESmultimodule(BaseModuleClass):
             )
 
         # Component 4 (q_label_private): adversarial label erasure on z_private
+        # W-055: GRL component — apply kl_weight warmup
         if self.q_label_private is not None:
+            grl_scale = kl_weight if self.disentangle_warmup else 1.0
             pair_losses = [
                 F.cross_entropy(
                     self.q_label_private(gradient_reversal(z)),
                     labels_by_group[g].long(),
                     weight=self.label_class_weights,
+                    reduction="mean",  # W-054: explicit
                 )
                 for g in range(n_groups)
                 for z in _private_zs(g)
             ]
             n_pairs = len(pair_losses)
             loss_val = sum(pair_losses) * (n_groups / n_pairs) if n_pairs else 0.0
-            disentangle_total = disentangle_total + self.disentangle_label_private_weight * loss_val
+            disentangle_total = disentangle_total + self.disentangle_label_private_weight * grl_scale * loss_val
             extra_metrics["disentangle_label_private_loss"] = (
                 loss_val / n_groups if n_pairs else loss_val
             )
 
         # Component 5 (contrastive): InfoNCE on z_shared via EMA prototypes
         if self.prototypes is not None:
+            # W-002: only update EMA prototypes during training, never during
+            # validation / evaluation (would leak val-batch statistics into
+            # the prototype buffer and bias the training objective).
             with torch.no_grad():
-                for g in range(n_groups):
-                    z = inference_outputs["poe_stats"][g]["logtheta_log_z"].detach()
-                    labels_g = labels_by_group[g].long()
-                    for lbl in labels_g.unique():
-                        mask = labels_g == lbl
-                        if mask.sum() > 0:
-                            self.prototypes[g, lbl] = (
-                                self.prototype_momentum * self.prototypes[g, lbl]
-                                + (1 - self.prototype_momentum) * z[mask].mean(0)
-                            )
+                if self.training:
+                    for g in range(n_groups):
+                        z = inference_outputs["poe_stats"][g]["logtheta_log_z"].detach()
+                        labels_g = labels_by_group[g].long()
+                        for lbl in labels_g.unique():
+                            mask = labels_g == lbl
+                            if mask.sum() > 0:
+                                self.prototypes[g, lbl] = (
+                                    self.prototype_momentum * self.prototypes[g, lbl]
+                                    + (1 - self.prototype_momentum) * z[mask].mean(0)
+                                )
             if n_groups > 1:
                 other_groups = [
                     [gg for gg in range(n_groups) if gg != g] for g in range(n_groups)
@@ -1268,15 +1330,11 @@ class spVIPESmultimodule(BaseModuleClass):
                 transformed_for_nb=False,
             )
 
+            # W-011: always use raw counts as the NB likelihood target.
+            # log_variational_generative previously applied log1p here which
+            # is incorrect — NegativeBinomialMixture expects non-negative
+            # integer counts, not log-transformed values.
             x_target = x_obs
-            if self.log_variational_generative:
-                x_target = torch.log(1 + x_obs)
-                self._validate_likelihood_observations(
-                    x_target,
-                    likelihood_type="nb",
-                    context=f"group={g}",
-                    transformed_for_nb=True,
-                )
 
             # Reconstruction loss
             recon_loss = -generative_outputs["private_poe"][str(g)]["px"].log_prob(x_target).sum(-1)
@@ -1316,9 +1374,11 @@ class spVIPESmultimodule(BaseModuleClass):
             w = self.group_loss_weights[g] if self.group_loss_weights is not None else 1.0 / n_groups
             total_loss = group_loss * w if total_loss is None else total_loss + group_loss * w
 
-        disentangle_scale = kl_weight if self.disentangle_warmup else 1.0
-        total_loss = total_loss + (disentangle_scale / n_groups) * self._compute_disentangle_losses(
-            inference_outputs, per_group, n_groups, extra_metrics
+        # W-055: pass kl_weight into the disentangle helper so GRL (adversarial)
+        # components can be warmed up while supervised-CE components always
+        # train at full weight.
+        total_loss = total_loss + (1.0 / n_groups) * self._compute_disentangle_losses(
+            inference_outputs, per_group, n_groups, extra_metrics, kl_weight=kl_weight
         )
 
         if self.use_jeffreys_integ:
@@ -1370,14 +1430,8 @@ class spVIPESmultimodule(BaseModuleClass):
                     context=f"group={g}, modality={modality}",
                     transformed_for_nb=False,
                 )
-                if likelihood_type == "nb" and self.log_variational_generative:
-                    x_mod = torch.log(1 + x_mod)
-                    self._validate_likelihood_observations(
-                        x_mod,
-                        likelihood_type=likelihood_type,
-                        context=f"group={g}, modality={modality}",
-                        transformed_for_nb=True,
-                    )
+                # W-011: always use raw target for NB; log1p was incorrect.
+                # For Gaussian modality, x_mod is already log-normalised.
 
                 recon_loss = -gen_stats["px"].log_prob(x_mod).sum(-1)
                 reconst_losses[f"reconst_loss_group_{g}_{modality}"] = recon_loss.mean()
@@ -1433,9 +1487,9 @@ class spVIPESmultimodule(BaseModuleClass):
         # comparison when disentangle_preset='off'. Helper sums across groups
         # internally, so divide by n_groups to keep disentangle_*_weight in
         # per-group units (same relative scale as before the sum→mean change).
-        disentangle_scale = kl_weight if self.disentangle_warmup else 1.0
-        total_loss = total_loss + (disentangle_scale / n_groups) * self._compute_disentangle_losses(
-            inference_outputs, per_group, n_groups, extra_metrics
+        # W-055: kl_weight forwarded so warmup applies selectively inside helper.
+        total_loss = total_loss + (1.0 / n_groups) * self._compute_disentangle_losses(
+            inference_outputs, per_group, n_groups, extra_metrics, kl_weight=kl_weight
         )
 
         if self.use_jeffreys_integ:

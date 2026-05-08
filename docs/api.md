@@ -1042,6 +1042,145 @@ spVIPESmulti.pl.loadings_dotplot(adata, dims=[0, 2, 4], groupby="cell_type", mod
 
 ---
 
+### `enrichment_heatmap`
+
+```python
+spVIPESmulti.pl.enrichment_heatmap(
+    scores_df,
+    *,
+    group_labels=None,
+    top_n=20,
+    figsize=None,
+    ax=None,
+    cmap="RdBu_r",
+    center=0.0,
+)
+```
+
+Heatmap of enrichment activity scores (cells × programs). When `group_labels`
+is supplied, scores are first averaged per group; the top-`top_n`
+highest-variance programs are then displayed. Requires `seaborn`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `scores_df` | `pd.DataFrame` | — | Per-cell enrichment scores (rows = cells, columns = programs). |
+| `group_labels` | `Sequence or None` | `None` | Optional per-cell labels for per-group mean aggregation. |
+| `top_n` | `int` | `20` | Number of highest-variance programs to display. |
+| `figsize` | `tuple or None` | auto | Figure size when creating a new figure. |
+| `ax` | `Axes or None` | `None` | Existing matplotlib axes to draw on. |
+| `cmap` | `str` | `"RdBu_r"` | Colormap name. |
+| `center` | `float` | `0.0` | Center value for the diverging colormap. |
+
+Returns the `Axes` object.
+
+```python
+ax = spVIPESmulti.pl.enrichment_heatmap(
+    res["scores_df"], group_labels=adata.obs["groups"].values, top_n=15
+)
+```
+
+---
+
+### `interpretation_dashboard`
+
+```python
+spVIPESmulti.pl.interpretation_dashboard(
+    adata,
+    scores_df,
+    groupby,
+    *,
+    shared_basis="X_umap_spvipesmulti_shared",
+    top_n=20,
+    figsize=(14.0, 5.0),
+    cmap="RdBu_r",
+)
+```
+
+Two-panel matplotlib figure combining the shared embedding (left, coloured by
+`groupby`) with an enrichment heatmap aggregated by `groupby` (right).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `adata` | `AnnData` | — | AnnData with the shared UMAP in `obsm[shared_basis]`. |
+| `scores_df` | `pd.DataFrame` | — | Per-cell enrichment scores. |
+| `groupby` | `str` | — | Column in `adata.obs` for both the embedding colours and the heatmap aggregation. |
+| `shared_basis` | `str` | `"X_umap_spvipesmulti_shared"` | Key in `adata.obsm` with 2-D coordinates. |
+| `top_n` | `int` | `20` | Number of programs to show in the heatmap panel. |
+| `figsize` | `tuple` | `(14.0, 5.0)` | Total figure size. |
+| `cmap` | `str` | `"RdBu_r"` | Colormap for the heatmap panel. |
+
+Returns a `matplotlib.figure.Figure`.
+
+```python
+fig = spVIPESmulti.pl.interpretation_dashboard(
+    adata, res["scores_df"], groupby="groups"
+)
+fig.savefig("dashboard.pdf")
+```
+
+---
+
+### Plotting autosummary
+
+```{eval-rst}
+.. currentmodule:: spVIPESmulti
+
+.. autosummary::
+    :toctree: generated
+
+    pl.heatmap_loadings
+    pl.umap_shared
+    pl.umap_private
+    pl.factor_violin
+    pl.training_curves
+    pl.loadings_dotplot
+    pl.enrichment_heatmap
+    pl.interpretation_dashboard
+```
+
+---
+
+## DataLoader
+
+### `ConcatDataLoader`
+
+```python
+from spVIPESmulti.dataloaders import ConcatDataLoader
+
+loader = ConcatDataLoader(
+    adata_manager,
+    indices_list,
+    shuffle=False,
+    drop_last=False,
+    batch_size=128,
+)
+```
+
+Multi-group DataLoader used during both training and inference. Wraps one
+`AnnDataLoader` per group and **cycles smaller groups** so every group
+produces the same number of batches per epoch — this guarantees that PoE
+combination steps see one mini-batch from every group at every training step.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `adata_manager` | `AnnDataManager` | — | Manager built by `setup_anndata`. |
+| `indices_list` | `list[Sequence[int]]` | — | One inner list of cell indices per group. Determines per-group sampling pools. |
+| `shuffle` | `bool` | `False` | Whether to shuffle each group's indices each epoch. |
+| `drop_last` | `bool` | `False` | Whether to drop the last incomplete batch in any group. |
+| `batch_size` | `int` | `128` | Mini-batch size **per group** (so each step sees `n_groups × batch_size` cells). |
+
+**Key attribute**
+
+| Attribute | Description |
+|---|---|
+| `n_batches_per_epoch` | Number of batches per epoch, derived from the largest group (smaller groups are recycled to match). |
+
+This loader is constructed automatically by `model.train(...)` and
+`model.get_latent_representation(...)`; users normally do not instantiate it
+directly.
+
+---
+
 ## Internals
 
 These classes are part of the public package namespace but are primarily used
