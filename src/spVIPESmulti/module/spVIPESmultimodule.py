@@ -60,6 +60,8 @@ class spVIPESmultimodule(BaseModuleClass):
         Whether to log-transform data before decoding for numerical stability.
     dispersion : {"gene", "gene-batch", "gene-cell"}, default="gene"
         Level at which to model the dispersion parameter in the negative binomial distribution.
+    encoder_activation : {"silu", "relu", "leakyrelu"}, default="silu"
+        Activation function used in all encoder hidden layers.
 
     Notes
     -----
@@ -113,6 +115,7 @@ class spVIPESmultimodule(BaseModuleClass):
         group_loss_weights: Optional[list[float]] = None,
         strict_likelihood_support: bool = False,
         validate_observations: bool = False,
+        encoder_activation: str = "silu",
     ):
         """
         Initialize the spVIPESmulti variational autoencoder module.
@@ -151,6 +154,7 @@ class spVIPESmultimodule(BaseModuleClass):
         self.log_variational_generative = log_variational_generative
         self.strict_likelihood_support = strict_likelihood_support
         self.validate_observations = validate_observations
+        self.encoder_activation = encoder_activation
 
         # Multimodal configuration
         self.is_multimodal = groups_modality_lengths is not None
@@ -189,11 +193,13 @@ class spVIPESmultimodule(BaseModuleClass):
                             n_features, n_dimensions_shared,
                             hidden=n_hidden, dropout=dropout_rate,
                             n_cat_list=cat_list, groups=group,
+                            encoder_activation=encoder_activation,
                         ),
                         "private": Encoder(
                             n_features, n_dimensions_private,
                             hidden=n_hidden, dropout=dropout_rate,
                             n_cat_list=cat_list, groups=group,
+                            encoder_activation=encoder_activation,
                         ),
                     }
                     self.decoders[(group, modality)] = LinearDecoderSPVIPE(
@@ -219,11 +225,13 @@ class spVIPESmultimodule(BaseModuleClass):
                         x_dim, n_dimensions_shared,
                         hidden=n_hidden, dropout=dropout_rate,
                         n_cat_list=cat_list, groups=groups,
+                        encoder_activation=encoder_activation,
                     ),
                     "private": Encoder(
                         x_dim, n_dimensions_private,
                         hidden=n_hidden, dropout=dropout_rate,
                         n_cat_list=cat_list, groups=groups,
+                        encoder_activation=encoder_activation,
                     ),
                 }
                 for groups, x_dim in self.input_dims.items()

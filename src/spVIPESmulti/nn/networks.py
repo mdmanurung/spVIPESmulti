@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from typing import Literal
 
 import torch
 import torch.nn.functional as F
@@ -7,6 +8,12 @@ from torch import nn
 from torch.distributions import Normal
 
 from .utils import one_hot
+
+_ACTIVATIONS: dict[str, type[nn.Module]] = {
+    "relu": nn.ReLU,
+    "silu": nn.SiLU,
+    "leakyrelu": nn.LeakyReLU,
+}
 
 
 # Encoder without covariates
@@ -33,11 +40,15 @@ class Encoder(nn.Module):
         the number of categories for a categorical covariate (e.g., batch).
     groups : str, optional
         Group identifier for this encoder instance.
+    encoder_activation : {"silu", "relu", "leakyrelu"}, default="silu"
+        Activation function for hidden layers. ``"silu"`` (Swish) typically
+        converges faster than ``"relu"`` in deep VAEs. ``"leakyrelu"`` adds
+        a small gradient for negative inputs.
 
     Notes
     -----
-    The encoder uses a two-layer fully connected architecture with ReLU activations
-    and batch normalization on the output layers. It outputs parameters for a
+    The encoder uses a two-layer fully connected architecture with the chosen
+    activation and batch normalization on the output layers. It outputs parameters for a
     normal distribution in latent space, following the variational autoencoder framework.
 
     The forward pass returns both the latent representation (theta) and intermediate
@@ -52,6 +63,7 @@ class Encoder(nn.Module):
         dropout: float = 0.1,
         n_cat_list: Iterable[int] = None,
         groups: str = None,
+        encoder_activation: Literal["silu", "relu", "leakyrelu"] = "silu",
     ):
         super().__init__()
         self.n_topics = n_topics
@@ -67,7 +79,13 @@ class Encoder(nn.Module):
         # input -> hidden 128
         self.fc1 = nn.Linear(n_input + cat_dim, hidden)
         self.fc2 = nn.Linear(hidden, hidden)
-        self.relu = nn.ReLU()
+        _act_key = encoder_activation.lower()
+        if _act_key not in _ACTIVATIONS:
+            raise ValueError(
+                f"encoder_activation={encoder_activation!r} is not supported. "
+                f"Choose from: {list(_ACTIVATIONS)}."
+            )
+        self.relu = _ACTIVATIONS[_act_key]()
         self.drop = nn.Dropout(dropout)
 
         # hidden 128 -> topics
