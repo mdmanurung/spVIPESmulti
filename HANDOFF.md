@@ -11,7 +11,7 @@ Read order: HANDOFF.md → PLAN.md → PROGRESS.md → ImplementationPlan.md (re
 - **GENERATIVE-FIX**: Added `px_scale` (blended mixed scale) to `poe_stats_out` in both generative paths → fixes `KeyError: 'px_scale'` in `metrics.reconstruction_error()`.
 - **N5-D**: `disentangle_label_private_weight` lowered from 1.0 → 0.05 in "full" and "no_contrastive" presets. Prevents GRL overreach on z_private when cell type ≈ group.
 - **N5-E**: Confirmed complete (pre-existing). Inverse-frequency label weights registered as buffer and threaded into CE calls.
-- All 168 non-evaluate tests pass.
+- All 168 non-evaluate tests pass. `test_evaluate.py` also now passes (22/22) — `--ignore` flag no longer needed; full suite is **190 passed, 1 skipped**.
 
 ## Previous session items (2026-05-08, session 1)
 

@@ -11,6 +11,25 @@ How to use:
 
 ## 2026-05-08 (session 3, perf/accuracy review wrap-up)
 
+### P-PERF-2: Low-rank mixer (closed — already implemented and validated)
+- `LinearDecoderSPVIPE` exposes `use_low_rank_mixer: bool = True` and `low_rank_mixer_rank: int = 4` (default ON).
+- Ablation results in `scripts/ablate_low_rank_mixer.json`:
+
+  | variant | mixer params | knn_purity | leiden_ARI | cLISI | iLISI |
+  |---|---:|---:|---:|---:|---:|
+  | baseline (full mixer) | 2,735,328 | 0.5425 | 0.3182 | 2.227 | 1.933 |
+  | low-rank rank=4 (default) | 45,492 | **0.5756** | **0.4163** | **2.083** | 1.839 |
+  | low-rank rank=8 | 81,984 | 0.5404 | 0.2874 | 2.192 | 1.922 |
+
+  Rank=4 wins on every quality metric while shrinking the mixer ~60×. Default kept at rank=4.
+
+### P-PERF-4: SiLU activation (closed — already implemented)
+- `Encoder.encoder_activation` defaults to `"silu"` with `{"relu", "leakyrelu"}` selectable. See `src/spVIPESmulti/nn/networks.py` line 66.
+
+### test_evaluate.py now fully passes
+- `test_evaluate.py` (22 tests) was previously excluded because `metrics.reconstruction_error()` failed with `KeyError: 'px_scale'`.
+- GENERATIVE-FIX resolved that. Full suite: **190 passed, 1 skipped** (`pytest tests/ -q`). The `--ignore=tests/test_evaluate.py` workaround is no longer needed.
+
 ### Backlog cancellations (per user)
 - **P-PERF-3** (`torch.compile`): cancelled. Marginal expected gain after P-PERF-1 vectorization removed `.item()` graph-breaks; not worth the maintenance cost.
 - **P6** (multi-covariate generalization): cancelled. Broad refactor across data/model/loss not justified given current single-covariate scope.

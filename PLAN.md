@@ -32,10 +32,7 @@ Status: **done** (2026-05-08)
 ---
 
 ### P-PERF-2. Low-rank mixer in `LinearDecoderSPVIPE`
-Status: Deferred | Priority: MEDIUM
-Deferral reason: architecture change; requires ablation to confirm quality is preserved.
-Reactivation trigger: after P-PERF-1 done and profiled.
-→ Full spec: ImplementationPlan.md §P-PERF-2.
+Status: **done** (2026-05-08) — default `use_low_rank_mixer=True`, `rank=4`. Ablation (`scripts/ablate_low_rank_mixer.json`) shows rank=4 outperforms full mixer on knn_purity (+6%), leiden_ARI (+31%), cLISI (-6.5%) at 60× fewer mixer params (45K vs 2.7M). See PROGRESS.md.
 
 ---
 
@@ -45,10 +42,7 @@ Status: **cancelled** (2026-05-08) — dropped from backlog per user decision.
 ---
 
 ### P-PERF-4. SiLU activation in encoder
-Status: Deferred | Priority: LOW
-Deferral reason: minor change, no urgency.
-Reactivation trigger: any encoder-touching session.
-→ Full spec: ImplementationPlan.md §P-PERF-4.
+Status: **done** (2026-05-08) — `Encoder.encoder_activation` default is `"silu"`, configurable to `"relu"`/`"leakyrelu"`. See `src/spVIPESmulti/nn/networks.py` line 66.
 
 ---
 
