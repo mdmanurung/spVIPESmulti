@@ -6,6 +6,17 @@ Read order: HANDOFF.md → PLAN.md → PROGRESS.md → ImplementationPlan.md (re
 
 ---
 
+## Performance improvements completed (2026-05-08)
+
+- **P-PERF-1**: `_label_based_poe` reassembly vectorized — eliminates O(n_cells) GPU–CPU syncs.
+- **VAL-GATE**: `_validate_likelihood_observations` isfinite/non-negative scans gated behind `validate_observations=False` default.
+- **DL-WORKERS**: `num_workers` exposed in `train()` (default 0, backward-compatible).
+- All 168 non-evaluate tests pass.
+
+Next performance items still in backlog: P-PERF-2 (low-rank mixer), P-PERF-3 (torch.compile — ruled out by user), P-PERF-4 (SiLU).
+
+---
+
 ## Current State (2026-05-08)
 
 ### Baseline run complete

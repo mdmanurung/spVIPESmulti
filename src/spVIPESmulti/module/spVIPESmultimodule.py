@@ -112,6 +112,7 @@ class spVIPESmultimodule(BaseModuleClass):
         disentangle_warmup: bool = True,
         group_loss_weights: Optional[list[float]] = None,
         strict_likelihood_support: bool = False,
+        validate_observations: bool = False,
     ):
         """
         Initialize the spVIPESmulti variational autoencoder module.
@@ -149,6 +150,7 @@ class spVIPESmultimodule(BaseModuleClass):
         self.log_variational_inference = log_variational_inference
         self.log_variational_generative = log_variational_generative
         self.strict_likelihood_support = strict_likelihood_support
+        self.validate_observations = validate_observations
 
         # Multimodal configuration
         self.is_multimodal = groups_modality_lengths is not None
@@ -835,15 +837,16 @@ class spVIPESmultimodule(BaseModuleClass):
             n_cells = per_group_stats[g]["logtheta_loc"].shape[0]
             group_output = {k: torch.empty(n_cells, latent_dim, dtype=torch.float32, device=ref_device) for k in stat_keys}
 
-            label_count = {}
-            for i, label_tensor in enumerate(per_group_labels[g]):
-                label = label_tensor.item()
-                count = label_count.get(label, 0)
-                label_count[label] = count + 1
-                poe_g_stats = poe_stats_per_label[label][g]
-                tensor_index = count % poe_g_stats["logtheta_loc"].size(0)
+            # Vectorized scatter: O(n_labels) boolean-mask ops instead of
+            # O(n_cells) .item() calls — eliminates GPU→CPU syncs per cell.
+            labels_g = per_group_labels[g]  # 1D, already flattened in _get_inference_input
+            for label in all_labels:
+                mask = labels_g == label
+                if not mask.any():
+                    continue
+                poe_g = poe_stats_per_label[label][g]
                 for k in stat_keys:
-                    group_output[k][i] = poe_g_stats[k][tensor_index]
+                    group_output[k][mask] = poe_g[k]
 
             concat_poe_stats[g] = group_output
 
@@ -1173,32 +1176,34 @@ class spVIPESmultimodule(BaseModuleClass):
     ) -> None:
         """Validate observed targets before likelihood log-prob evaluation.
 
-        This check is intentionally lightweight by default (finite + NB non-negative)
-        to avoid breaking legacy training behavior. Integer checks for count
-        likelihoods are opt-in via ``strict_likelihood_support`` and are only
-        enforced when NB targets are not log-transformed.
+        The cheap isfinite / non-negative scans are gated behind
+        ``validate_observations`` (default ``False``) to avoid two full tensor
+        scans per group per training step.  The ``strict_likelihood_support``
+        integer-roundness check always runs when that flag is ``True`` because
+        it is already an explicit opt-in by the caller.
         """
-        if not torch.isfinite(x_obs).all():
-            raise ValueError(
-                f"Invalid observations in {context}: expected finite values for "
-                f"likelihood '{likelihood_type}'."
-            )
-
-        if likelihood_type == "nb":
-            if (x_obs < 0).any():
+        if self.validate_observations:
+            if not torch.isfinite(x_obs).all():
                 raise ValueError(
-                    f"Invalid observations in {context}: NegativeBinomial likelihood "
-                    "requires non-negative targets."
+                    f"Invalid observations in {context}: expected finite values for "
+                    f"likelihood '{likelihood_type}'."
                 )
 
-            if self.strict_likelihood_support and not transformed_for_nb:
-                nearest_int = torch.round(x_obs)
-                if not torch.allclose(x_obs, nearest_int, atol=1e-6, rtol=0.0):
+            if likelihood_type == "nb":
+                if (x_obs < 0).any():
                     raise ValueError(
-                        f"Invalid observations in {context}: strict support validation "
-                        "requires integer-like count targets for NB likelihood. "
-                        "Disable strict_likelihood_support or provide integer counts."
+                        f"Invalid observations in {context}: NegativeBinomial likelihood "
+                        "requires non-negative targets."
                     )
+
+        if likelihood_type == "nb" and self.strict_likelihood_support and not transformed_for_nb:
+            nearest_int = torch.round(x_obs)
+            if not torch.allclose(x_obs, nearest_int, atol=1e-6, rtol=0.0):
+                raise ValueError(
+                    f"Invalid observations in {context}: strict support validation "
+                    "requires integer-like count targets for NB likelihood. "
+                    "Disable strict_likelihood_support or provide integer counts."
+                )
 
     def loss(
         self,

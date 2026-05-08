@@ -9,6 +9,53 @@ How to use:
 
 ---
 
+## 2026-05-08 (training performance — Tier 1)
+
+### P-PERF-1: Vectorize `_label_based_poe` reassembly
+Status: completed
+
+What changed:
+- Replaced the per-cell Python loop (O(n_cells) GPU→CPU syncs via `.item()`) with a
+  vectorized boolean-mask scatter: O(n_labels) on-GPU tensor ops.
+- At batch_size=2048 × 5 groups this eliminates ~10,000+ GPU–CPU syncs per training step.
+- No change to output values; semantics are identical.
+
+Files:
+- `src/spVIPESmulti/module/spVIPESmultimodule.py` (reassembly block in `_label_based_poe`)
+
+### VAL-GATE: Gate `_validate_likelihood_observations` behind `validate_observations` flag
+Status: completed
+
+What changed:
+- Added `validate_observations: bool = False` constructor parameter to `spVIPESmultimodule`.
+- The `isfinite` and `x < 0` scans (2 full tensor scans per group per step) are now skipped
+  by default.
+- `strict_likelihood_support` check is preserved as an unconditional opt-in — it only runs
+  when `strict_likelihood_support=True` (already explicit) regardless of `validate_observations`.
+- Users can enable observation validation for debugging:
+  `spVIPESmulti(adata, validate_observations=True)` (via `**model_kwargs` passthrough).
+
+Files:
+- `src/spVIPESmulti/module/spVIPESmultimodule.py`
+
+### DL-WORKERS: Expose `num_workers` in `train()`
+Status: completed
+
+What changed:
+- Added `num_workers: int = 0` parameter to `MultiGroupTrainingMixin.train()`.
+- Threaded through `MultiGroupDataSplitter` → `ConcatDataLoader` → `AnnDataLoader`.
+- `pin_memory` was already set automatically from `torch.cuda.is_available()` in the splitter.
+- Default 0 is fully backward-compatible. Users on multi-core HPC nodes can set e.g.
+  `model.train(..., num_workers=4)` to overlap data loading with GPU compute.
+
+Files:
+- `src/spVIPESmulti/model/base/training_mixin.py`
+
+Verification:
+- `pytest tests/ -q --ignore=tests/test_evaluate.py` → 168 passed, 1 skipped, 0 failures.
+
+---
+
 ## 2026-05-07 (keyed layers support in data preparation)
 
 ### L1: Keyed per-group and per-modality layer selection
