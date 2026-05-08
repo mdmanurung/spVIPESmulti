@@ -36,39 +36,24 @@ Worst cell types (k-NN purity): Activated MZ (0.165), Transitional (0.169), Pre-
 Best-dim AUROC for Activated MZ = 0.585 (≈ random → essentially invisible in shared space).
 Root cause: class imbalance — Atypical (n=3155), Activated (n=2284) dominate shared space.
 
-### Pilot sweep: RUNNING (PID 665287, started 2026-05-07 23:32)
-Results → `scripts/pilot_results_celltype.{json,md}` when done.
+### Pilot sweep: COMPLETE
+Results in `scripts/pilot_results_celltype.json`. Winner: **Variant A** (`label_shared=4`).
+- knn_purity: 0.535 (+6.3% vs baseline 0.472)
+- leiden_ARI: 0.380 (+13.8% vs baseline 0.242)
+- iLISI/kBET unchanged (integration quality preserved)
 
-→ Root-cause analysis and Phase 4 follow-up items: see PLAN.md §N5-D and §N5-E.
+### v4 retrain: RUNNING (PID 1028229, started 2026-05-08)
+- `LABEL_SHARED_W = 4` (Variant A promoted)
+- Save path: `results/spvipes_bcells_recommended_v4`
+- `MAX_EPOCHS = 400`
 
 ## Immediate Next Action
 
-1. Wait for pilot to finish or check its output:
-   ```bash
-   tail -50 /tmp/pilot_run.log
-   cat scripts/pilot_results_celltype.md  # once it exists
-   ```
+**v4 retrain is RUNNING** (PID 1028229, started 2026-05-08).
+Log: `tail -f /tmp/retrain_v4.log`
 
-2. Promote winning variant using these pre-drafted notebook cell 10 changes:
-
-   **Variant A** (label_shared ↑): change ONE line in cell 10:
-   ```python
-   LABEL_SHARED_W = 4   # was 2
-   ```
-
-   **Variant B** (Jeffreys ↓): add ONE kwarg to `spVIPESmulti(...)` call in cell 10:
-   ```python
-   jeffreys_integ_weight=0.2,   # was 0.5
-   ```
-   Also update notebook markdown table row for `jeffreys_integ_weight`.
-
-   **Variant C** (HVG union): replace HVG cell (cell 6) body:
-   ```python
-   from spVIPESmulti.utils import highly_variable_genes_union
-   highly_variable_genes_union(adata, group_key="antigen_specific", n_top_genes=3000)
-   adata = adata[:, adata.var["highly_variable"]].copy()
-   print(f"HVG union: {adata.n_vars} genes")
-   ```
-
-3. After promoting: bump save path to `results/spvipes_bcells_recommended_v4`, set
-   `MAX_EPOCHS=400`, and run full retrain via nbconvert.
+When done:
+1. Check `results/spvipes_bcells_recommended_v4/` exists.
+2. Check integration metrics in notebook output (knn_purity, leiden_ARI, cLISI).
+3. Compare against v3 baseline in HANDOFF §Baseline metrics table.
+4. Update PROGRESS.md with v4 results.

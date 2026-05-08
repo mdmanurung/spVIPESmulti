@@ -123,7 +123,7 @@ Verification:
 ## 2026-05-07 (malaria B-cell latent retuning — Phase 1+2 setup)
 
 ### N5: Notebook instrumentation and pilot sweep scaffold
-Status: baseline complete; pilot sweep running (PID 665287, started 2026-05-07 23:32)
+Status: pilot complete; v4 retrain RUNNING (PID 1028229, started 2026-05-08)
 
 What changed:
 - `docs/notebooks/malaria_bcells_recommended.ipynb` (23 cells total, up from 19):
@@ -153,10 +153,14 @@ Files:
 - `docs/notebooks/malaria_bcells_recommended.ipynb`
 - `scripts/pilot_celltype_separation.py`
 
-Verification (pending):
+Verification:
 - Baseline complete: 400 epochs trained, early stopping did NOT fire, model saved to `results/spvipes_bcells_recommended_v3`.
-- Pilot sweep running; results will appear in `scripts/pilot_results_celltype.{json,md}`.
-- Root-cause analysis and Phase 4 follow-up specs: ImplementationPlan.md §N5-D and §N5-E.
+- Pilot sweep complete (`scripts/pilot_results_celltype.json`):
+  - Variant A winner: knn_purity 0.535 (+6.3%), leiden_ARI 0.380 (+13.8%), iLISI/kBET stable.
+  - Variant B (jeffreys=0.2): marginal gain, not selected.
+  - Variant C (HVG union): worst — cLISI 2.90 (vs 2.44 baseline), rejected.
+- v4 notebook updated: `LABEL_SHARED_W=4`, save path `results/spvipes_bcells_recommended_v4`, markdown table updated.
+- v4 retrain launched via nbconvert (PID 1028229, log: `/tmp/retrain_v4.log`).
 
 ---
 
