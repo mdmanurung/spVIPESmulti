@@ -399,17 +399,37 @@ def training_curves(
 
     _colors = {"train": "steelblue", "val": "darkorange", "only": "steelblue"}
 
+    # Authoritative source for validation frequency: the Trainer object stored
+    # on the model after training.  Falls back to 1 (every epoch) if not found.
+    _trainer = getattr(model, "trainer", None)
+    _cvene = int(getattr(_trainer, "check_val_every_n_epoch", None) or 1)
+
     def _xy(df):
         x = df.index.to_numpy() if hasattr(df, "index") else range(len(df))
         y = df.values.flatten() if hasattr(df, "values") else list(df)
-        return x, y
+        return x.astype(float) if hasattr(x, "astype") else x, y
 
     for i, (title, sides) in enumerate(panel_list):
         ax = axes_flat[i]
+        # Build (side, x, y) triples with val x scaled to actual epoch numbers.
+        plotdata = []
+        max_x = 0.0
         for side, df in sides.items():
             x, y = _xy(df)
+            if side == "val" and _cvene > 1:
+                # scvi appends val metrics sequentially (0, 1, 2, ...); multiply
+                # by check_val_every_n_epoch to recover actual epoch numbers.
+                x = x * _cvene
+            if len(x):
+                max_x = max(max_x, float(x[-1]))
+            plotdata.append((side, x, y))
+        for side, x, y in plotdata:
             label = side if side != "only" else title
             ax.plot(x, y, label=label, color=_colors.get(side, "steelblue"), alpha=0.85)
+        # Pin x-axis to [0, max_x] — suppresses matplotlib's default 5 % right
+        # margin that would make the axis extend beyond MAX_EPOCHS.
+        if max_x > 0:
+            ax.set_xlim(0, max_x)
         ax.set_title(title)
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Value")

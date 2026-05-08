@@ -448,6 +448,158 @@ fig.savefig("training.pdf")
 | `enrichment_heatmap` | `spVIPESmulti.pl` | Plot per-cell or per-group enrichment heatmaps |
 | `interpretation_dashboard` | `spVIPESmulti.pl` | Two-panel shared-embedding + enrichment dashboard |
 
+## Troubleshooting & Hyperparameter Guide
+
+This section covers common training pathologies visible in `spVIPESmulti.pl.training_curves(model)` and how to fix them.
+
+---
+
+### `kl_divergence_private_group_N` is orders of magnitude higher than other groups
+
+**Symptom:** One group's private KL divergence reaches values of hundreds or thousands while the others stay in the range 1–20.
+
+**Cause:** The `disentangle_label_private` gradient reversal layer (GRL) can drive a positive feedback loop in the private encoder's log-variance output. The GRL rewards the encoder for producing noisy `z_private` samples (high variance makes labels unclassifiable), but without an upper bound on the log-variance this snowballs — the encoder inflates variance without limit, which satisfies the GRL objective but makes the private latent useless for reconstruction. Groups with higher `group_loss_weights` (i.e. smaller groups with inverse-frequency weighting) are hit hardest because the reconstruction gradient competing against the GRL is proportionally stronger.
+
+**Fixes (in order of impact):**
+
+1. **Reduce `disentangle_label_private_weight`** (no code change needed). The default for `"no_contrastive"` and `"full"` presets is 1.0. Drop it to 0.1–0.3:
+   ```python
+   model = spVIPESmulti.model.spVIPESmulti(
+       adata_spv,
+       disentangle_preset="no_contrastive",
+       disentangle_label_private_weight=0.1,   # override the preset default of 1.0
+   )
+   ```
+
+2. **Increase KL warmup** (`n_epochs_kl_warmup`). A longer warmup (150–200 epochs) gives the KL penalty more time to regularise the private posterior before the GRL has fully pushed it toward high variance:
+   ```python
+   model.train(..., n_epochs_kl_warmup=150)
+   ```
+
+3. **Soften `group_loss_weights`**. Inverse-frequency weights (`1/n`) can give small groups an 8× higher effective loss scale. Square-root weights are a less aggressive alternative:
+   ```python
+   GROUP_LOSS_WEIGHTS = [1 / n**0.5 for n in GROUP_SIZES]
+   ```
+
+---
+
+### LR scheduler never fires / loss plateau not detected
+
+**Symptom:** Training curves show the learning rate is flat throughout training (with `lr_scheduler_type="plateau"`), even though reconstruction loss is still declining.
+
+**Cause:** `ReduceLROnPlateau` requires the monitored metric to have stopped improving by more than `threshold` for `patience` consecutive checks. If the metric is still slowly declining, the scheduler never triggers.
+
+**Fix:** Switch to a cosine schedule which decays on a fixed timeline regardless of plateau detection:
+```python
+model.train(
+    ...,
+    plan_kwargs={
+        "lr": 5e-4,
+        "lr_scheduler_type": "cosine",
+        "lr_min": 1e-5,
+    },
+)
+```
+
+---
+
+### Reconstruction loss stalls early; ELBO doesn't improve after KL warmup
+
+**Symptom:** Reconstruction loss drops fast in the first ~50 epochs and then plateaus, while KL keeps rising after warmup ends.
+
+**Causes and fixes:**
+
+| Likely cause | Fix |
+|---|---|
+| Hidden layer too narrow | Increase `n_hidden` from 128 to 256 (matches the default in `networks.py`) |
+| Too few HVGs | Use 3000–5000 genes; very few genes starve the encoder |
+| `batch_size` too small | Larger batches (512–2048) reduce gradient noise, especially on GPU |
+| KL weight fully active too fast | Increase `n_epochs_kl_warmup` (75→150) |
+
+---
+
+### Integration is poor — groups don't overlap in the shared UMAP
+
+**Symptom:** `spVIPESmulti.pl.umap_shared(adata, color="groups")` shows clearly separated clusters per group rather than mixing.
+
+**Causes and fixes:**
+
+1. **Label-PoE quality**: If `label_key` labels are inconsistent across groups (different annotation granularity, or one group has many unlabelled cells), the PoE posteriors are misaligned. Use a coarser, consensus annotation across groups.
+
+2. **`disentangle_group_shared_weight` too low**: Increase this to 1.0–2.0 to push group identity out of `z_shared`:
+   ```python
+   model = spVIPESmulti.model.spVIPESmulti(
+       adata_spv,
+       disentangle_preset="no_contrastive",
+       disentangle_group_shared_weight=2.0,
+   )
+   ```
+
+3. **Imbalanced groups**: Apply inverse-frequency `group_loss_weights` so the smallest group does not get overwhelmed during training:
+   ```python
+   GROUP_SIZES = [len(g) for g in group_indices_list]
+   GROUP_LOSS_WEIGHTS = [1 / n**0.5 for n in GROUP_SIZES]   # sqrt weighting
+   ```
+
+---
+
+### Recommended starting hyperparameters (3-group dataset, ~10k cells)
+
+These are the settings validated on the malaria B-cell dataset (CRXV/NANP/Njunc, 9978 cells, 3 batches):
+
+```python
+# Model
+model = spVIPESmulti.model.spVIPESmulti(
+    adata_spv,
+    n_hidden=256,
+    n_dimensions_shared=10,
+    n_dimensions_private=6,
+    dropout_rate=0.1,
+    disentangle_preset="no_contrastive",
+    disentangle_label_shared_weight=2.0,
+    disentangle_label_private_weight=0.1,   # keep low to avoid GRL-driven KL explosion
+    use_jeffreys_integ=True,
+    jeffreys_integ_weight=0.5,
+    use_nf_prior=True,
+    nf_type="MAF",
+    nf_transforms=3,
+    nf_target="shared",
+    group_loss_weights=[1 / n**0.5 for n in GROUP_SIZES],   # sqrt weighting
+)
+
+# Training
+model.train(
+    group_indices_list,
+    batch_size=1024,
+    max_epochs=400,
+    train_size=0.9,
+    n_epochs_kl_warmup=150,
+    early_stopping=True,
+    early_stopping_patience=20,
+    early_stopping_monitor="reconstruction_loss_validation",
+    check_val_every_n_epoch=5,
+    plan_kwargs={
+        "lr": 5e-4,
+        "lr_scheduler_type": "cosine",
+        "lr_min": 1e-5,
+    },
+)
+```
+
+| Parameter | Recommended | Notes |
+|---|---|---|
+| `n_hidden` | 256 | 128 is too narrow for 3000 HVGs |
+| `n_dimensions_shared` | 10–25 | Scale with dataset complexity |
+| `n_dimensions_private` | 5–10 | Scale with expected group-specific variation |
+| `n_epochs_kl_warmup` | 100–150 | Longer warmup stabilises private KL |
+| `lr` | 5×10⁻⁴ | 10⁻³ can cause instability in early epochs |
+| `lr_scheduler_type` | `"cosine"` | Plateau scheduler rarely fires when loss is still declining |
+| `batch_size` | 1024 | Larger batches reduce gradient noise on GPU |
+| `disentangle_label_private_weight` | 0.1 | Keep low; high values trigger GRL-driven variance explosion |
+| `group_loss_weights` | `1/sqrt(n)` | Less extreme than `1/n`; balances groups without over-weighting small ones |
+
+---
+
 ## Documentation & Tutorials
 
 -   [Enrichment quickstart (ORA/GSEA/ULM)](docs/enrichment_quickstart.md) — Interpretation-first workflow with reporting + plotting helpers

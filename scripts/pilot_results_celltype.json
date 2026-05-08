@@ -1,0 +1,62 @@
+[
+  {
+    "label": "baseline (label_shared=2.0, jeffreys=0.5, global HVG)",
+    "ilisi": 1.904,
+    "kbet": 0.8898,
+    "clisi": 2.4423,
+    "knn_purity": 0.472,
+    "leiden_ari": 0.2421,
+    "elapsed_s": 491.2,
+    "recon_train_final": 1.02,
+    "recon_train_epochs": 150,
+    "elbo_train_final": 1.06,
+    "elbo_train_epochs": 150,
+    "kl_train_final": 0.04,
+    "kl_train_epochs": 150
+  },
+  {
+    "label": "variant_A (label_shared=4.0)",
+    "ilisi": 1.9089,
+    "kbet": 0.8921,
+    "clisi": 2.32,
+    "knn_purity": 0.5354,
+    "leiden_ari": 0.3803,
+    "elapsed_s": 503.4,
+    "recon_train_final": 1.04,
+    "recon_train_epochs": 150,
+    "elbo_train_final": 1.08,
+    "elbo_train_epochs": 150,
+    "kl_train_final": 0.04,
+    "kl_train_epochs": 150
+  },
+  {
+    "label": "variant_B (jeffreys=0.2)",
+    "ilisi": 1.899,
+    "kbet": 0.8893,
+    "clisi": 2.3791,
+    "knn_purity": 0.4824,
+    "leiden_ari": 0.2903,
+    "elapsed_s": 501.6,
+    "recon_train_final": 1.02,
+    "recon_train_epochs": 150,
+    "elbo_train_final": 1.06,
+    "elbo_train_epochs": 150,
+    "kl_train_final": 0.04,
+    "kl_train_epochs": 150
+  },
+  {
+    "label": "variant_C (per-group HVG union)",
+    "ilisi": 1.9007,
+    "kbet": 0.8947,
+    "clisi": 2.9024,
+    "knn_purity": 0.371,
+    "leiden_ari": 0.2223,
+    "elapsed_s": 546.9,
+    "recon_train_final": 1.87,
+    "recon_train_epochs": 150,
+    "elbo_train_final": 1.91,
+    "elbo_train_epochs": 150,
+    "kl_train_final": 0.04,
+    "kl_train_epochs": 150
+  }
+]

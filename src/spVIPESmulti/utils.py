@@ -89,16 +89,65 @@ def highly_variable_genes_union(
             f"Available columns: {list(adata.obs.columns)}"
         )
 
+    import numpy as np
+    import scipy.sparse as sp_sparse
+
+    # Pull batch_key out of kwargs so we can handle it ourselves per (group, batch).
+    # Passing batch_key into sc.pp.highly_variable_genes causes it to fit LOESS
+    # independently per batch; if a batch has few cells or near-constant gene
+    # expression the design matrix becomes ill-conditioned (ValueError: reciprocal
+    # condition number). Computing HVG per (group × batch) independently avoids this.
+    batch_key = hvg_kwargs.pop("batch_key", None)
+
     hvg_sets: list[set] = []
     for group in adata.obs[group_key].unique():
         adata_group = adata[adata.obs[group_key] == group]
-        sc.pp.highly_variable_genes(
-            adata_group,
-            n_top_genes=n_top_genes,
-            flavor=flavor,
-            **hvg_kwargs,
+
+        batches: list = (
+            list(adata_group.obs[batch_key].unique())
+            if batch_key is not None and batch_key in adata_group.obs.columns
+            else [None]
         )
-        hvg_sets.append(set(adata_group.var_names[adata_group.var["highly_variable"]]))
+
+        group_hvg: set = set()
+        for batch in batches:
+            adata_b = (
+                adata_group[adata_group.obs[batch_key] == batch].copy()
+                if batch is not None
+                else adata_group.copy()
+            )
+            # Keep only genes expressed in at least min_cells cells within this
+            # (group, batch) slice.  sum > 0 is insufficient: near-constant genes
+            # with identical low means cause LOESS to become ill-conditioned.
+            n_cells = adata_b.n_obs
+            min_cells = max(3, int(n_cells * 0.02))
+            X = adata_b.X
+            if sp_sparse.issparse(X):
+                gene_cell_counts = np.asarray((X > 0).sum(axis=0)).flatten()
+            else:
+                gene_cell_counts = np.asarray((np.asarray(X) > 0).sum(axis=0)).flatten()
+            expressed = gene_cell_counts >= min_cells
+            n_expressed = int(expressed.sum())
+            if n_expressed < 10:
+                continue
+            adata_b = adata_b[:, expressed].copy()
+            # Retry with increasing LOESS span if the fit is ill-conditioned.
+            for _span in (0.3, 0.5, 0.75):
+                try:
+                    sc.pp.highly_variable_genes(
+                        adata_b,
+                        n_top_genes=min(n_top_genes, n_expressed),
+                        flavor=flavor,
+                        span=_span,
+                        **hvg_kwargs,
+                    )
+                    break
+                except ValueError:
+                    if _span == 0.75:
+                        raise
+            group_hvg |= set(adata_b.var_names[adata_b.var["highly_variable"]])
+
+        hvg_sets.append(group_hvg)
 
     hvg_union = set.union(*hvg_sets)
 

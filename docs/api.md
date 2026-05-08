@@ -399,7 +399,7 @@ for spVIPESmulti. At least 2 groups are required.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `adatas` | `dict[str, AnnData]` | — | Mapping from group name to AnnData. Dict insertion order determines group indices. |
-| `layers` | `list or None` | `None` | Reserved; not yet implemented. |
+| `layers` | `dict[str, str or None] or None` | `None` | Optional mapping from group name to layer name. For each group, the selected `adata.layers[layer]` is copied into `adata.X` before concatenation; `None` falls back to that group's existing `adata.X`. |
 
 **Metadata written to `.uns`:**
 
@@ -436,7 +436,7 @@ for spVIPESmulti. At least 2 groups are required.
 ```python
 from spVIPESmulti.data import prepare_multimodal_adatas
 
-mdata = prepare_multimodal_adatas(adatas, modality_likelihoods=None)
+mdata = prepare_multimodal_adatas(adatas, modality_likelihoods=None, layers=None)
 ```
 
 Concatenates a nested `{group: {modality: AnnData}}` dict into one AnnData
@@ -446,6 +446,7 @@ for multimodal spVIPESmulti runs. At least 2 groups are required.
 |---|---|---|---|
 | `adatas` | `dict[str, dict[str, AnnData]]` | — | Outer keys = group names, inner keys = modality names. All groups must share at least one modality. Cells within a group must be identical across modalities. |
 | `modality_likelihoods` | `dict[str, str] or None` | `None` | Likelihood per modality. Supported: `"nb"` (NegativeBinomial, default) and `"gaussian"` (for log-normalised data). |
+| `layers` | `dict[str, dict[str, str or None]] or None` | `None` | Optional nested mapping from group name to modality name to layer name. For each present `(group, modality)` pair, the selected `adata.layers[layer]` is copied into `adata.X` before concatenation; omitted keys or `None` fall back to the modality's existing `adata.X`. |
 
 **Metadata written to `.uns`** (all standard `prepare_adatas` keys plus):
 

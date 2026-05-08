@@ -125,7 +125,10 @@ class Encoder(nn.Module):
         data = self.drop(data)
 
         logtheta_loc = self.mu_encoder(data)
-        logtheta_logvar = self.lvar_encoder(data)
+        # Clamp logvar to prevent variance explosion under GRL-based disentanglement objectives.
+        # Without this, the GRL gradient on z_private creates a positive feedback loop:
+        # higher sigma → noisier z → label classifier more confused → GRL pushes logvar higher.
+        logtheta_logvar = self.lvar_encoder(data).clamp(-4, 4)
         logtheta_scale = (0.5 * logtheta_logvar).exp()
 
         qz = Normal(logtheta_loc, logtheta_scale)

@@ -9,6 +9,127 @@ How to use:
 
 ---
 
+## 2026-05-07 (keyed layers support in data preparation)
+
+### L1: Keyed per-group and per-modality layer selection
+Status: completed
+
+What changed:
+- Implemented keyed `layers` support in `src/spVIPESmulti/data/prepare_adatas.py` for both
+  preparation entry points:
+  - `prepare_adatas(adatas, layers={group: layer_name_or_None})`
+  - `prepare_multimodal_adatas(adatas, modality_likelihoods=..., layers={group: {modality: layer_name_or_None}})`
+- Added shared validation helpers so requested layers are applied by group/modality before
+  concatenation.
+- The implementation is partial-mapping-friendly:
+  - omitted groups/modalities fall back to the input object's existing `adata.X`,
+  - explicit `None` also falls back to `adata.X`.
+- Added clear validation errors for:
+  - unknown group keys in `layers`,
+  - unknown modality keys in nested multimodal `layers`,
+  - requested layer names absent from `adata.layers`.
+- Updated API docs to replace the old "reserved" placeholder description with the shipped keyed
+  mapping API.
+
+Files:
+- `src/spVIPESmulti/data/prepare_adatas.py`
+- `tests/test_multigroup_multimodal.py`
+- `docs/api.md`
+
+Verification:
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest tests/test_multigroup_multimodal.py -k "group_specific_layers or missing_group_layer or multimodal_group_modality_layers or missing_multimodal_layer" -q` passed (`4 passed`).
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest tests/test_multigroup_multimodal.py tests/test_regression_fixes.py -q` passed (`45 passed`).
+
+## 2026-05-07 (multimodal prep alignment hardening)
+
+### M2: Validate multimodal within-group cell alignment before concat
+Status: completed
+
+What changed:
+- Fixed `prepare_multimodal_adatas(...)` in `src/spVIPESmulti/data/prepare_adatas.py` so it no
+  longer silently returns zero cells when modalities within the same group have different
+  `obs_names`.
+- Added explicit within-group modality validation before the axis=1 concat:
+  - if modalities contain the same cells in a different order, they are realigned to the first
+    modality's `obs_names`,
+  - if modalities do not contain the same cells, the function now raises `ValueError` instead of
+    dropping cells via an implicit inner join.
+- Corrected the multimodal prefix-overlap regression test so it actually tests prefix overlap with
+  aligned cells, rather than accidentally triggering the cell-alignment bug.
+- Added a dedicated regression test asserting that mismatched multimodal `obs_names` raise a clear
+  error.
+
+Why it mattered:
+- The previously reported `test_multimodal_overlapping_prefixes` failure was a stale diagnosis.
+  Prefix-overlap bookkeeping for multimodal groups was already correct; the real defect was silent
+  cell loss during the per-group multimodal concat when RNA/protein modalities used different
+  `obs_names`.
+
+Files:
+- `src/spVIPESmulti/data/prepare_adatas.py`
+- `tests/test_regression_fixes.py`
+
+Verification:
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest tests/test_regression_fixes.py -k "overlapping_prefixes or mismatched_obs_names_raise" -q` passed (`3 passed`).
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m pytest tests/test_regression_fixes.py tests/test_multigroup_multimodal.py -q` passed (`41 passed`).
+
+## 2026-05-07 (malaria B-cell latent retuning — Phase 1+2 setup)
+
+### N5: Notebook instrumentation and pilot sweep scaffold
+Status: baseline complete; pilot sweep running (PID 665287, started 2026-05-07 23:32)
+
+What changed:
+- `docs/notebooks/malaria_bcells_recommended.ipynb` (23 cells total, up from 19):
+  - Fixed save path `results/spvipes_bcells_recommended_v1` → `results/spvipes_bcells_recommended_v3`.
+  - Added **training-history summary cell** (cell 12, after train): prints first/final/drop/epoch
+    count for reconstruction_loss_{train,validation}, elbo_train, kl_local_train; flags NaN.
+  - Added **markdown header cell** (cell 17, after compute_shared_umap).
+  - Added **integration-report cell** (cell 18): calls `spVIPESmulti.metrics.integration_report`
+    with z_shared, antigen_specific groups, cluster_label cell-types, and per-group private
+    latents; prints ilisi/kbet/clisi/knn_purity/leiden_ari/silhouette table.
+  - Added **failure-mode audit cell** (cell 19): per-cell-type k-NN purity (k=20) sorted table,
+    one-vs-rest AUROC per shared dimension per cell type, antigen×cluster_label crosstab.
+- `scripts/pilot_celltype_separation.py` (new): runs 4 conditions (baseline + 3 variants) at
+  150-epoch budget, outputs `scripts/pilot_results_celltype.{json,md}`.
+  - Variant A: `disentangle_label_shared_weight=4.0` (↑ from 2.0)
+  - Variant B: `jeffreys_integ_weight=0.2` (↓ from 0.5)
+  - Variant C: `highly_variable_genes_union(group_key="antigen_specific", n_top_genes=3000)`
+
+Context:
+- Motivation: visible shared UMAP shows moderate cell-type separation but no quantitative
+  evidence existed. Pilot targets the three most tractable root causes identified from
+  training-config analysis: insufficient label supervision, over-strong integration pressure,
+  and gene-set coverage gaps from global HVG selection.
+- Acceptance gate: knn_purity and/or leiden_ari up, clisi down, ilisi/kbet stable (≤10% drop).
+
+Files:
+- `docs/notebooks/malaria_bcells_recommended.ipynb`
+- `scripts/pilot_celltype_separation.py`
+
+Verification (pending):
+- Baseline complete: 400 epochs trained, early stopping did NOT fire, model saved to `results/spvipes_bcells_recommended_v3`.
+- Pilot sweep running; results will appear in `scripts/pilot_results_celltype.{json,md}`.
+- Root-cause analysis and Phase 4 follow-up specs: ImplementationPlan.md §N5-D and §N5-E.
+
+---
+
+## 2026-05-08 (performance audit)
+
+### P-PERF: Third-pass code audit — training-speed bottlenecks identified
+Status: completed (specs written; implementation deferred)
+
+Findings:
+- `_label_based_poe` reassembly loop issues ~16,384 GPU-CPU syncs per step (batch=2048, 8 groups). Fully vectorizable. → §P-PERF-1.
+- `LinearDecoderSPVIPE` `mixture` layer is 296×1000 (296K params × 8 decoders). Low-rank factorization possible. → §P-PERF-2.
+- `torch.compile` blocked on P-PERF-1 graph-break (`.item()` in hot path). → §P-PERF-3.
+- `Encoder` uses `nn.ReLU()`; SiLU would improve convergence speed. → §P-PERF-4.
+
+Files:
+- `ImplementationPlan.md` (specs added)
+- `PLAN.md` (stubs added to deferred backlog)
+
+---
+
 ## 2026-05-05 (malaria notebook DoRothEA/PROGENy MLM + consensus)
 
 ### N4: Add MLM + consensus scoring for shared_15 with DoRothEA and PROGENy

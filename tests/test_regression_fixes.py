@@ -246,14 +246,14 @@ class TestPrepareAdatasPrefixOverlap:
             os.path.join(_SRC, "spVIPESmulti", "data", "prepare_adatas.py"),
         ).prepare_multimodal_adatas
 
-    def _make_adata(self, n_obs, n_vars, seed):
+    def _make_adata(self, n_obs, n_vars, seed, obs_names=None):
         import anndata as ad
         from scipy.sparse import csr_matrix
 
         rng = np.random.default_rng(seed)
         X = rng.poisson(5, size=(n_obs, n_vars)).astype(np.float32)
         a = ad.AnnData(X=csr_matrix(X))
-        a.obs_names = [f"c{seed}_{i}" for i in range(n_obs)]
+        a.obs_names = obs_names if obs_names is not None else [f"c{seed}_{i}" for i in range(n_obs)]
         a.var_names = [f"g{i}" for i in range(n_vars)]
         return a
 
@@ -280,10 +280,12 @@ class TestPrepareAdatasPrefixOverlap:
 
     def test_multimodal_overlapping_prefixes(self):
         prepare_multimodal_adatas = self._load_prepare_multimodal()
-        a_rna = self._make_adata(20, 10, seed=0)
-        a_prot = self._make_adata(20, 5, seed=1)
-        b_rna = self._make_adata(20, 10, seed=2)
-        b_prot = self._make_adata(20, 5, seed=3)
+        obs_cat = [f"cat_{i}" for i in range(20)]
+        obs_category = [f"category_{i}" for i in range(20)]
+        a_rna = self._make_adata(20, 10, seed=0, obs_names=obs_cat)
+        a_prot = self._make_adata(20, 5, seed=1, obs_names=obs_cat)
+        b_rna = self._make_adata(20, 10, seed=2, obs_names=obs_category)
+        b_prot = self._make_adata(20, 5, seed=3, obs_names=obs_category)
 
         result = prepare_multimodal_adatas(
             {
@@ -303,6 +305,22 @@ class TestPrepareAdatasPrefixOverlap:
         assert (
             len(result.uns["groups_modality_var_indices"][1]["rna"]) == 10
         )
+
+    def test_multimodal_mismatched_obs_names_raise(self):
+        prepare_multimodal_adatas = self._load_prepare_multimodal()
+        a_rna = self._make_adata(20, 10, seed=0)
+        a_prot = self._make_adata(20, 5, seed=1)
+        b_obs = [f"shared_{i}" for i in range(20)]
+        b_rna = self._make_adata(20, 10, seed=2, obs_names=b_obs)
+        b_prot = self._make_adata(20, 5, seed=3, obs_names=b_obs)
+
+        with pytest.raises(ValueError, match="same cells with matching obs_names"):
+            prepare_multimodal_adatas(
+                {
+                    "cat": {"rna": a_rna, "protein": a_prot},
+                    "category": {"rna": b_rna, "protein": b_prot},
+                }
+            )
 
 
 # ============================================================

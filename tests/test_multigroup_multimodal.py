@@ -110,6 +110,44 @@ class TestPrepareAdatasMultiGroup:
         all_indices = np.concatenate(obs_indices)
         assert len(np.unique(all_indices)) == 75
 
+    def test_group_specific_layers(self):
+        """Per-group layer selection should populate the concatenated X matrix."""
+
+        adata1 = self._make_adata(4, 3, seed=0)
+        adata2 = self._make_adata(4, 3, seed=1)
+        adata1.X = csr_matrix(np.zeros((4, 3), dtype=np.float32))
+        adata2.X = csr_matrix(np.zeros((4, 3), dtype=np.float32))
+        adata1.layers["counts"] = csr_matrix(np.ones((4, 3), dtype=np.float32))
+        adata2.layers["counts"] = csr_matrix(np.full((4, 3), 2.0, dtype=np.float32))
+
+        result = prepare_adatas({"a": adata1, "b": adata2}, layers={"a": "counts"})
+
+        a_obs = result.uns["groups_obs_indices"][0]
+        a_var = result.uns["groups_var_indices"][0]
+        b_obs = result.uns["groups_obs_indices"][1]
+        b_var = result.uns["groups_var_indices"][1]
+
+        assert np.allclose(result.X[a_obs][:, a_var].toarray(), 1.0)
+        assert np.allclose(result.X[b_obs][:, b_var].toarray(), 0.0)
+
+    def test_missing_group_layer_raises(self):
+        """Missing requested group layer should raise a clear error."""
+
+        adata1 = self._make_adata(4, 3, seed=0)
+        adata2 = self._make_adata(4, 3, seed=1)
+
+        with pytest.raises(ValueError, match="Group 'a' requested layer 'counts'"):
+            prepare_adatas({"a": adata1, "b": adata2}, layers={"a": "counts"})
+
+    def test_unknown_group_in_layers_raises(self):
+        """Unknown group keys in layers should raise a clear error."""
+
+        adata1 = self._make_adata(4, 3, seed=0)
+        adata2 = self._make_adata(4, 3, seed=1)
+
+        with pytest.raises(ValueError, match="layers contains unknown groups"):
+            prepare_adatas({"a": adata1, "b": adata2}, layers={"missing": "counts"})
+
 
 # =============================================================================
 # Test prepare_multimodal_adatas
@@ -222,6 +260,79 @@ class TestPrepareMultimodalAdatas:
         assert len(result.uns["groups_obs_indices"]) == 2
         assert len(result.uns["groups_obs_indices"][0]) == 30
         assert len(result.uns["groups_obs_indices"][1]) == 20
+
+    def test_multimodal_group_modality_layers(self):
+        """Per-group, per-modality layer selection should populate the correct blocks."""
+
+        treatment_rna = self._make_adata(4, 3, seed=0)
+        treatment_protein = self._make_adata(4, 2, seed=1)
+        control_rna = self._make_adata(4, 3, seed=2)
+        control_protein = self._make_adata(4, 2, seed=3)
+
+        treatment_rna.X = csr_matrix(np.zeros((4, 3), dtype=np.float32))
+        treatment_protein.X = csr_matrix(np.zeros((4, 2), dtype=np.float32))
+        control_rna.X = csr_matrix(np.zeros((4, 3), dtype=np.float32))
+        control_protein.X = csr_matrix(np.zeros((4, 2), dtype=np.float32))
+
+        treatment_rna.layers["counts"] = csr_matrix(np.full((4, 3), 5.0, dtype=np.float32))
+        control_protein.layers["counts"] = csr_matrix(np.full((4, 2), 7.0, dtype=np.float32))
+
+        result = prepare_multimodal_adatas(
+            {
+                "treatment": {"rna": treatment_rna, "protein": treatment_protein},
+                "control": {"rna": control_rna, "protein": control_protein},
+            },
+            layers={
+                "treatment": {"rna": "counts"},
+                "control": {"protein": "counts"},
+            },
+        )
+
+        treatment_obs = result.uns["groups_obs_indices"][0]
+        control_obs = result.uns["groups_obs_indices"][1]
+        treatment_rna_var = result.uns["groups_modality_var_indices"][0]["rna"]
+        treatment_protein_var = result.uns["groups_modality_var_indices"][0]["protein"]
+        control_rna_var = result.uns["groups_modality_var_indices"][1]["rna"]
+        control_protein_var = result.uns["groups_modality_var_indices"][1]["protein"]
+
+        assert np.allclose(result.X[treatment_obs][:, treatment_rna_var].toarray(), 5.0)
+        assert np.allclose(result.X[treatment_obs][:, treatment_protein_var].toarray(), 0.0)
+        assert np.allclose(result.X[control_obs][:, control_rna_var].toarray(), 0.0)
+        assert np.allclose(result.X[control_obs][:, control_protein_var].toarray(), 7.0)
+
+    def test_missing_multimodal_layer_raises(self):
+        """Missing requested modality layer should raise a clear error."""
+
+        adatas = {
+            "treatment": {
+                "rna": self._make_adata(4, 3, seed=0),
+                "protein": self._make_adata(4, 2, seed=1),
+            },
+            "control": {
+                "rna": self._make_adata(4, 3, seed=2),
+                "protein": self._make_adata(4, 2, seed=3),
+            },
+        }
+
+        with pytest.raises(ValueError, match="Group 'treatment', modality 'rna' requested layer 'counts'"):
+            prepare_multimodal_adatas(adatas, layers={"treatment": {"rna": "counts"}})
+
+    def test_unknown_multimodal_layer_key_raises(self):
+        """Unknown modality keys in nested layers should raise a clear error."""
+
+        adatas = {
+            "treatment": {
+                "rna": self._make_adata(4, 3, seed=0),
+                "protein": self._make_adata(4, 2, seed=1),
+            },
+            "control": {
+                "rna": self._make_adata(4, 3, seed=2),
+                "protein": self._make_adata(4, 2, seed=3),
+            },
+        }
+
+        with pytest.raises(ValueError, match="unknown modalities"):
+            prepare_multimodal_adatas(adatas, layers={"treatment": {"atac": "counts"}})
 
 
 # =============================================================================

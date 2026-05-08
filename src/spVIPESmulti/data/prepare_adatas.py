@@ -1,13 +1,28 @@
-from typing import Optional, Union
+from typing import Optional
 
 import anndata as ad
 import numpy as np
 from scipy.sparse import issparse
 
 
+def _apply_selected_layer(adata: ad.AnnData, layer: Optional[str], *, context: str) -> ad.AnnData:
+    if layer is None:
+        return adata
+    if layer not in adata.layers:
+        raise ValueError(f"{context} requested layer '{layer}' but it was not found in adata.layers.")
+    adata.X = adata.layers[layer].copy()
+    return adata
+
+
+def _validate_requested_groups(adatas: dict, layers: dict, *, context: str = "layers") -> None:
+    unknown_groups = sorted(set(layers) - set(adatas))
+    if unknown_groups:
+        raise ValueError(f"{context} contains unknown groups: {unknown_groups}")
+
+
 def prepare_adatas(
     adatas: dict[str, ad.AnnData],
-    layers: Optional[list[list[Union[str, None]]]] = None,
+    layers: Optional[dict[str, Optional[str]]] = None,
 ):
     """
     Prepare and concatenate multiple AnnData objects for spVIPESmulti integration.
@@ -23,9 +38,10 @@ def prepare_adatas(
         Dictionary mapping group names (strings) to their corresponding AnnData objects.
         Each AnnData contains single-cell expression data for one group/dataset.
         Requires at least 2 groups.
-    layers : list[list[str or None]], optional
-        Specification of which layers to use from each AnnData object. Currently
-        not implemented in the function body.
+    layers : dict[str, str or None], optional
+        Optional mapping from group name to layer name. For each group, the
+        requested `adata.layers[layer]` matrix is copied into `adata.X` before
+        concatenation. Use `None` to fall back to the group's existing `adata.X`.
 
     Returns
     -------
@@ -94,6 +110,8 @@ def prepare_adatas(
     groups_mapping = {}
     if len(adatas) < 2:
         raise ValueError("At least 2 groups are required")
+    layers = {} if layers is None else dict(layers)
+    _validate_requested_groups(adatas, layers)
 
     # Copy each adata before mutating .obs / .var_names so we don't modify the
     # caller's input. Re-running prepare_adatas on the same dict would otherwise
@@ -102,6 +120,7 @@ def prepare_adatas(
     for i, (groups, adata) in enumerate(adatas.items()):
         if adata is not None:
             adata = adata.copy()
+            adata = _apply_selected_layer(adata, layers.get(groups), context=f"Group '{groups}'")
             adatas_local[groups] = adata
             groups_lengths[i] = adata.shape[1]
             groups_obs_names.append(adata.obs_names)
@@ -148,6 +167,7 @@ def prepare_adatas(
 def prepare_multimodal_adatas(
     adatas: dict[str, dict[str, ad.AnnData]],
     modality_likelihoods: Optional[dict[str, str]] = None,
+    layers: Optional[dict[str, dict[str, Optional[str]]]] = None,
 ):
     """
     Prepare and concatenate multimodal AnnData objects for spVIPESmulti integration.
@@ -173,6 +193,11 @@ def prepare_multimodal_adatas(
         Mapping from modality name to likelihood type. Supported values:
         ``"nb"`` (NegativeBinomial for count data) and ``"gaussian"``
         (for log-normalized data). If ``None``, all modalities default to ``"nb"``.
+    layers : dict[str, dict[str, str or None]], optional
+        Optional nested mapping from group name to modality name to layer name.
+        For each present `(group, modality)` pair, the requested
+        `adata.layers[layer]` matrix is copied into `adata.X` before concatenation.
+        Omitted keys or ``None`` fall back to the modality's existing `adata.X`.
 
     Returns
     -------
@@ -198,6 +223,8 @@ def prepare_multimodal_adatas(
     """
     if len(adatas) < 2:
         raise ValueError("At least 2 groups are required")
+    layers = {} if layers is None else dict(layers)
+    _validate_requested_groups(adatas, layers)
 
     group_names = list(adatas.keys())
     all_modalities = set()
@@ -243,18 +270,42 @@ def prepare_multimodal_adatas(
     for i, group_name in enumerate(group_names):
         groups_mapping[i] = group_name
         mod_dict = adatas[group_name]
+        requested_group_layers = layers.get(group_name, {})
+        if requested_group_layers is None:
+            requested_group_layers = {}
+        requested_group_layers = dict(requested_group_layers)
+        unknown_modalities = sorted(set(requested_group_layers) - set(mod_dict))
+        if unknown_modalities:
+            raise ValueError(
+                f"layers for group '{group_name}' contains unknown modalities: {unknown_modalities}"
+            )
         mod_adatas = []
         groups_modality_lengths[i] = {}
         group_modality_var_prefixes[i] = {}
 
         # Get the shared obs (cells) from first modality
         first_mod = next(iter(mod_dict.values()))
-        groups_obs_names.append(first_mod.obs_names)
+        first_obs_names = first_mod.obs_names.copy()
+        groups_obs_names.append(first_obs_names)
 
         for modality in modality_names:
             if modality not in mod_dict:
                 continue
             mod_adata = mod_dict[modality].copy()
+            mod_adata = _apply_selected_layer(
+                mod_adata,
+                requested_group_layers.get(modality),
+                context=f"Group '{group_name}', modality '{modality}'",
+            )
+
+            if not mod_adata.obs_names.equals(first_obs_names):
+                if len(mod_adata.obs_names) == len(first_obs_names) and set(mod_adata.obs_names) == set(first_obs_names):
+                    mod_adata = mod_adata[first_obs_names].copy()
+                else:
+                    raise ValueError(
+                        f"All modalities within group '{group_name}' must contain the same cells with matching obs_names."
+                    )
+
             n_features = mod_adata.n_vars
             groups_modality_lengths[i][modality] = n_features
 
