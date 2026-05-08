@@ -136,6 +136,7 @@ class MultiGroupTrainingMixin:
         plan_kwargs: Optional[dict] = None,
         n_steps_kl_warmup: Optional[int] = None,
         n_epochs_kl_warmup: Optional[int] = 400,
+        num_workers: int = 0,
         **trainer_kwargs,
     ) -> None:
         """
@@ -176,6 +177,13 @@ class MultiGroupTrainingMixin:
             Additional keyword arguments forwarded to ``pl.Trainer`` via scvi-tools'
             ``TrainRunner``. To select an accelerator (replaces the removed ``use_gpu``
             argument), pass e.g. ``accelerator="gpu"`` and ``devices=1``.
+        num_workers : int, default=0
+            Number of worker processes for the DataLoader. ``0`` means data is
+            loaded in the main process (safest, compatible with all platforms).
+            Set to a positive integer (e.g. ``4``) on multi-core HPC nodes with
+            a GPU to overlap data loading with forward/backward passes.
+            Requires that your dataset supports multi-process access (standard
+            AnnData on disk does).
 
         Returns
         -------
@@ -214,6 +222,7 @@ class MultiGroupTrainingMixin:
             train_size=train_size,
             validation_size=validation_size,
             batch_size=batch_size,
+            num_workers=num_workers,
         )
         cvene = trainer_kwargs.get("check_val_every_n_epoch", 1)
         training_plan = SpVIPESmultiTrainingPlan(self.module, check_val_every_n_epoch=cvene, **plan_kwargs)

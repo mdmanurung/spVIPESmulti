@@ -26,10 +26,8 @@ Rules: every item needs deferral reason and reactivation trigger. Move to Curren
 Full implementation specs for all items live in ImplementationPlan.md.
 
 ### P-PERF-1. Vectorize `_label_based_poe` reassembly
-Status: Deferred | Priority: HIGH
-Deferral reason: needs regression coverage before touching hot-path forward code.
-Reactivation trigger: any training-speed work session.
-→ Full spec: ImplementationPlan.md §P-PERF-1.
+Status: **done** (2026-05-08)
+→ See PROGRESS.md for implementation detail.
 
 ---
 
