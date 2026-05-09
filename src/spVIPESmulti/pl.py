@@ -891,14 +891,14 @@ def plot_latent_dimension_stats(
     highlight_vanished: bool = True,
     figsize: Optional[tuple[float, float]] = None,
 ) -> "plt.Figure":
-    """Barplot of per-dimension standard deviation, flagging vanished dims.
+    """Barplot of per-dimension standard deviation, flagging collapsed dims.
 
     Parameters
     ----------
     dim_stats_df:
         Output of :func:`~spVIPESmulti.metrics.latent_dimension_stats`.
     highlight_vanished:
-        If ``True``, bars for vanished dimensions are colored red.
+        If ``True``, bars for collapsed dimensions are colored red.
     figsize:
         Figure size. Defaults to auto-scaled by number of dimensions.
 
@@ -913,6 +913,17 @@ def plot_latent_dimension_stats(
     """
     import matplotlib.pyplot as plt
 
+    if "is_collapsed" in dim_stats_df.columns:
+        activity_col = "is_collapsed"
+    elif "is_vanished" in dim_stats_df.columns:
+        # Backward compatibility for old notebooks/dataframes produced before
+        # the column rename in latent_dimension_stats.
+        activity_col = "is_vanished"
+    else:
+        raise KeyError(
+            "dim_stats_df must contain either 'is_collapsed' or legacy 'is_vanished' column"
+        )
+
     n_dims = len(dim_stats_df)
     if figsize is None:
         figsize = (max(6, 0.35 * n_dims), 3.5)
@@ -920,17 +931,17 @@ def plot_latent_dimension_stats(
     fig, ax = plt.subplots(figsize=figsize)
     colors = [
         "firebrick" if (highlight_vanished and v) else "steelblue"
-        for v in dim_stats_df["is_vanished"]
+        for v in dim_stats_df[activity_col]
     ]
     ax.bar(dim_stats_df["dim"], dim_stats_df["std"], color=colors, width=0.7)
-    if highlight_vanished and dim_stats_df["is_vanished"].any():
+    if highlight_vanished and dim_stats_df[activity_col].any():
         ax.axhline(
-            y=dim_stats_df["std"][dim_stats_df["is_vanished"]].max(),
+            y=dim_stats_df["std"][dim_stats_df[activity_col]].max(),
             color="firebrick",
             linestyle="--",
             linewidth=1,
             alpha=0.7,
-            label="vanished threshold",
+            label="collapsed threshold",
         )
         ax.legend(fontsize=8)
 

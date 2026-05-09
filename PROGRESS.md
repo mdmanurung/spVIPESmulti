@@ -5,7 +5,98 @@ Purpose: dated execution ledger of what has been implemented, validated, and dec
 How to use:
 - Add concise milestone entries with verification evidence.
 - Keep implementation detail here, not in PLAN.md or HANDOFF.md.
-- Omit "Next action" footers for completed entries; active pointer lives in HANDOFF.md only.
+- Record only completed, validated, or explicitly cancelled work. Pending work stays in PLAN.md; the single immediate next action lives in HANDOFF.md.
+- Omit "Next action" footers for completed entries.
+
+---
+
+## 2026-05-09 (session 7, legacy spVIPES reproduction vignette)
+
+### DOC-LEGACY-1: Phase 1 vignette generated
+
+**Goal.** Show that `spVIPESmulti`, configured with all post-spVIPES additions disabled, qualitatively reproduces the integration result of the original [`nrclaudio/spVIPES` Tutorial.ipynb](https://github.com/nrclaudio/spVIPES/blob/main/docs/notebooks/Tutorial.ipynb) on the Splatter simulation ([Zenodo 10070301](https://zenodo.org/records/10070301)).
+
+**Scoping decisions** (user-confirmed via multi-choice prompts):
+- 2-group, RNA-only, **label-based PoE** (closest supervised analogue to the original OT-paired strategy, which `spVIPESmulti` does not implement).
+- `max_epochs=400`; on-disk model cache at `results/spvipes_legacy_reproduction/` to avoid re-training on notebook re-runs.
+- Quantitative parity comparison **deferred to Phase 2** (see PLAN DOC-LEGACY-2).
+
+**Files added.**
+- `scripts/build_legacy_reproduction_notebook.py` — programmatic notebook builder (mirrors `scripts/build_notebook.py` pattern; `md()`/`code()` helpers, `cells: list[dict]` accumulator, single `json.dumps` write at end).
+- `docs/notebooks/legacy_spVIPES_reproduction.ipynb` — 31-cell vignette: front matter + API mapping table → env setup → Zenodo download + load + obs derivation (Dataset / Celltypes / Gene_programs from Subgroup/Group via the original tutorial's `.replace()` mapping) → `prepare_adatas` + `setup_anndata(label_key='Celltypes')` → model with `disentangle_preset="off"`, `n_dim_shared=10`, `n_dim_private=7` → train (cached) → embed → shared UMAP coloured by `Celltypes`/`Dataset` → per-group private UMAPs coloured by `Gene_programs` → reproducibility footer.
+
+**Bug-fix iterations during builder development.**
+1. First generation referenced obs columns (`Dataset`, `Celltypes`, `Gene_programs`) that don't exist in the raw Splatter file (only `Group`, `Subgroup`, `sizeFactor`). Resolution: added an obs-derivation cell using the exact `.replace()` mapping from the original tutorial.
+2. Second pass made the data load reproducible for any user — added Zenodo download (with cache check) so the notebook is self-contained and not tied to a path on the maintainer's machine.
+
+**Status.** Builder runs (exit 0, `Cells: 31`). End-to-end notebook execution still pending — DOC-LEGACY-1 remains `todo` in PLAN.md until the notebook executes cleanly and produces the expected qualitative UMAPs.
+
+## 2026-05-09 (session 8, Lightning no-validation compatibility)
+
+### DOC-TUTORIAL-1 / DOC-LEGACY-1: No-validation training path fixed
+
+**Goal.** Remove the Lightning 2.6.x failure mode where `train_size=1.0` causes `MultiGroupDataSplitter.val_dataloader()` to return `None` and crash `Trainer.fit(...)` during notebook rebuilds.
+
+**Files changed.**
+- `src/spVIPESmulti/model/base/training_mixin.py` — `PatchedTrainRunner` now branches on `data_splitter.n_val`; when there is no validation split it calls `self.data_splitter.setup("fit")` and `trainer.fit(..., train_dataloaders=self.data_splitter.train_dataloader())` instead of handing Lightning a datamodule with `val_dataloader() -> None`.
+- `tests/test_lightning_trainer_compat.py` — added regression coverage proving the no-validation branch routes `Trainer.fit` through explicit train loaders.
+
+**Verification.** `pytest -v tests/test_lightning_trainer_compat.py` passed all 3 tests, including the new no-validation regression.
+
+**Status.** The compatibility fix is validated at the unit/integration-test level. Tutorial and legacy notebook reruns are still pending, so DOC-TUTORIAL-1 and DOC-LEGACY-1 remain active in PLAN.md until their notebook executions are re-run under the fix and complete cleanly.
+
+## 2026-05-09 (session 9, independent hardening before Tutorial rerun)
+
+### Plotting backward-compatibility + regression guard
+
+**Goal.** Unblock notebook execution paths that still provide legacy latent-dimension stats tables using `is_vanished` while the codebase now emits `is_collapsed`.
+
+**Files changed.**
+- `src/spVIPESmulti/pl.py`
+  - `plot_latent_dimension_stats(...)` now accepts either `is_collapsed` (current) or `is_vanished` (legacy) and raises a clear `KeyError` only if neither column is present.
+- `tests/test_utils.py`
+  - Added `TestPlotLatentDimensionStatsCompatibility` with 3 tests:
+    - accepts `is_collapsed`
+    - accepts legacy `is_vanished`
+    - raises when both activity columns are absent
+
+**Validation.**
+- `pytest -q tests/test_utils.py -k "PlotLatentDimensionStatsCompatibility or perfect_clustering_gives_1"`
+- Result: **4 passed, 58 deselected**.
+
+### Legacy notebook train-config resync
+
+**Action.** Regenerated `docs/notebooks/legacy_spVIPES_reproduction.ipynb` via `scripts/build_legacy_reproduction_notebook.py` so the notebook training cell matches the intended legacy settings (`train_size=1.0`, `n_epochs_kl_warmup=0`).
+
+**Status.** Independent hardening complete; end-to-end notebook executions remain pending in PLAN.md.
+
+## 2026-05-09 (session 10, notebook rerun attempts)
+
+### DOC-TUTORIAL-1 / DOC-LEGACY-1: Execution attempts in configured env
+
+**Goal.** Close the two remaining notebook-execution items by rerunning:
+- `docs/notebooks/Tutorial.ipynb`
+- `docs/notebooks/legacy_spVIPES_reproduction.ipynb`
+
+**Environment used.** Configured Python from tooling:
+- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python` (Python 3.13.11)
+
+**Commands attempted.**
+- Tutorial:
+  - `python -m jupyter nbconvert --to notebook --execute --inplace docs/notebooks/Tutorial.ipynb > tutorial_rerun.log 2>&1`
+- Legacy vignette:
+  - `python -m jupyter nbconvert --to notebook --execute --inplace docs/notebooks/legacy_spVIPES_reproduction.ipynb > legacy_repro_rerun.log 2>&1`
+  - fallback: `python -m nbconvert --to notebook --execute --inplace docs/notebooks/legacy_spVIPES_reproduction.ipynb > legacy_repro_rerun_v2.log 2>&1`
+
+**Observed outcome.**
+- `legacy_repro_rerun.log` captured a traceback rooted in `importlib.metadata` entry-point discovery while importing nbconvert app modules under Python 3.13.
+- `tutorial_rerun.log` currently contains only nbconvert's conversion start line; no clean completion signal was captured before terminal exit.
+- `legacy_repro_rerun_v2.log` shows conversion start and warning output, but no final success/failure footer was captured before terminal exit.
+
+**Additional diagnostic note.**
+- `pip` in the configured env reports: `WARNING: Ignoring invalid distribution ~orch (...)`.
+
+**Status.** Notebook smoke completion is not validated yet; both DOC-TUTORIAL-1 and DOC-LEGACY-1 are now tracked as blocked in PLAN.md pending environment decision/fix.
 
 ---
 

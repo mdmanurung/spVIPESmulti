@@ -122,7 +122,7 @@ def traverse_latent(
     z_private_zero = torch.zeros(z_shared_sample.shape[0], n_dims_private, device=device)
     library_fixed = torch.full((z_shared_sample.shape[0], 1), float(np.log(1e4)), device=device)
     cat_args = (
-        (torch.zeros(z_shared_sample.shape[0], 1, dtype=torch.long, device=device),) if n_batch > 1 else ()
+        (torch.zeros(z_shared_sample.shape[0], 1, dtype=torch.long, device=device),) if n_batch > 0 else ()
     )
 
     was_training = module.training

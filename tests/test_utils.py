@@ -32,6 +32,7 @@ def _load(name: str):
 
 utils = _load("utils")
 metrics = _load("metrics")
+pl = _load("pl")
 
 
 # ---------------------------------------------------------------------------
@@ -521,6 +522,53 @@ class TestKnnPurity:
         labels = np.repeat(["A", "B", "C", "D"], 50)
         score = metrics.knn_purity(z, labels, k=5)
         assert score == pytest.approx(1.0)
+
+
+# ===========================================================================
+# pl.plot_latent_dimension_stats compatibility
+# ===========================================================================
+
+
+class TestPlotLatentDimensionStatsCompatibility:
+    def test_accepts_is_collapsed_column(self):
+        import matplotlib.pyplot as plt
+
+        df = pd.DataFrame(
+            {
+                "dim": [0, 1, 2],
+                "std": [0.9, 0.02, 0.7],
+                "is_collapsed": [False, True, False],
+            }
+        )
+        fig = pl.plot_latent_dimension_stats(df)
+        assert fig is not None
+        assert len(fig.axes) == 1
+        plt.close(fig)
+
+    def test_accepts_legacy_is_vanished_column(self):
+        import matplotlib.pyplot as plt
+
+        df = pd.DataFrame(
+            {
+                "dim": [0, 1, 2],
+                "std": [0.9, 0.02, 0.7],
+                "is_vanished": [False, True, False],
+            }
+        )
+        fig = pl.plot_latent_dimension_stats(df)
+        assert fig is not None
+        assert len(fig.axes) == 1
+        plt.close(fig)
+
+    def test_raises_when_activity_column_missing(self):
+        df = pd.DataFrame(
+            {
+                "dim": [0, 1],
+                "std": [0.5, 0.6],
+            }
+        )
+        with pytest.raises(KeyError, match="is_collapsed"):
+            pl.plot_latent_dimension_stats(df)
 
 
 class TestPerGroupSilhouette:

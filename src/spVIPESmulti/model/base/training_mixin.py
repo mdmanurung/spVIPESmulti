@@ -87,23 +87,54 @@ class PatchedTrainRunner(OrigTrainRunner):
 
         # Lightning-version-aware trainer.fit() call
         lightning_version = pl.__version__
+        n_val = getattr(self.data_splitter, "n_val", 0)
+        
+        # Warn if validation checking was requested but there's no validation data
+        if n_val == 0 and getattr(self.trainer, "check_val_every_n_epoch", 1) > 1:
+            warnings.warn(
+                f"check_val_every_n_epoch={self.trainer.check_val_every_n_epoch} was set, but "
+                "train_size=1.0 leaves no validation data. Validation checking will be skipped.",
+                UserWarning,
+                stacklevel=3,
+            )
+        
         if version.parse(lightning_version) >= version.parse("2.0.0"):
             try:
-                self.trainer.fit(
-                    self.training_plan,
-                    datamodule=self.data_splitter,
-                    ckpt_path=getattr(self, "ckpt_path", None),
-                )
+                if n_val == 0:
+                    # Lightning 2.6.x rejects a datamodule whose val_dataloader()
+                    # returns None, so use the explicit train-dataloader path when
+                    # the requested split leaves no validation cells.
+                    self.data_splitter.setup("fit")
+                    self.trainer.fit(
+                        self.training_plan,
+                        train_dataloaders=self.data_splitter.train_dataloader(),
+                        val_dataloaders=None,  # Explicitly set to None to prevent Lightning from calling val_dataloader()
+                        ckpt_path=getattr(self, "ckpt_path", None),
+                    )
+                else:
+                    self.trainer.fit(
+                        self.training_plan,
+                        datamodule=self.data_splitter,
+                        ckpt_path=getattr(self, "ckpt_path", None),
+                    )
             except TypeError as e:
                 raise RuntimeError(f"PatchedTrainRunner: Trainer.fit argument mismatch (Lightning {lightning_version}): {e}\n"
                                    f"training_plan={type(self.training_plan)}, data_splitter={type(self.data_splitter)}")
         else:
             try:
-                self.trainer.fit(
-                    self.training_plan,
-                    self.data_splitter,
-                    ckpt_path=getattr(self, "ckpt_path", None),
-                )
+                if n_val == 0:
+                    self.data_splitter.setup("fit")
+                    self.trainer.fit(
+                        self.training_plan,
+                        self.data_splitter.train_dataloader(),
+                        ckpt_path=getattr(self, "ckpt_path", None),
+                    )
+                else:
+                    self.trainer.fit(
+                        self.training_plan,
+                        self.data_splitter,
+                        ckpt_path=getattr(self, "ckpt_path", None),
+                    )
             except TypeError as e:
                 raise RuntimeError(f"PatchedTrainRunner: Trainer.fit argument mismatch (Lightning {lightning_version}): {e}\n"
                                    f"training_plan={type(self.training_plan)}, data_splitter={type(self.data_splitter)}")

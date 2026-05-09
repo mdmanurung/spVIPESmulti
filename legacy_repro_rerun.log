@@ -1,0 +1,34 @@
+Traceback (most recent call last):
+  File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/jupyter-nbconvert", line 6, in <module>
+    from nbconvert.nbconvertapp import main
+  File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/lib/python3.13/site-packages/nbconvert/nbconvertapp.py", line 193, in <module>
+    class NbConvertApp(JupyterApp):
+    ...<456 lines>...
+            return sections.replace(" : ", r" \: ")
+  File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/lib/python3.13/site-packages/nbconvert/nbconvertapp.py", line 252, in NbConvertApp
+    Options include {get_export_names()}.
+                     ~~~~~~~~~~~~~~~~^^
+  File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/lib/python3.13/site-packages/nbconvert/exporters/base.py", line 145, in get_export_names
+    e = get_exporter(exporter_name)(config=config)
+        ~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/lib/python3.13/site-packages/nbconvert/exporters/base.py", line 104, in get_exporter
+    exporters = entry_points(group="nbconvert.exporters")
+  File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/lib/python3.13/importlib/metadata/__init__.py", line 1011, in entry_points
+    return EntryPoints(eps).select(**params)
+           ~~~~~~~~~~~^^^^^
+  File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/lib/python3.13/importlib/metadata/__init__.py", line 1009, in <genexpr>
+    dist.entry_points for dist in _unique(distributions())
+    ^^^^^^^^^^^^^^^^^
+  File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/lib/python3.13/importlib/metadata/__init__.py", line 496, in entry_points
+    return EntryPoints._from_text_for(self.read_text('entry_points.txt'), self)
+                                      ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/lib/python3.13/importlib/metadata/__init__.py", line 915, in read_text
+    return self._path.joinpath(filename).read_text(encoding='utf-8')
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/lib/python3.13/pathlib/_local.py", line 546, in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/lib/python3.13/pathlib/_abc.py", line 632, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

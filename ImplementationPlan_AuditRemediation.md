@@ -10,6 +10,8 @@
 regression tests live under [tests/audit_regressions/](tests/audit_regressions/) and
 are marked `xfail(strict=True)` so the suite stays green until each fix lands.
 
+**Archive note:** this remediation plan has been fully executed. Treat the W-### cards below as the historical specification for the completed audit work; the current status and remaining work live in [PROGRESS.md](PROGRESS.md) and [PLAN.md](PLAN.md).
+
 ---
 
 ## 0. How to use this plan

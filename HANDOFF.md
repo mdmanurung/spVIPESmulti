@@ -1,6 +1,6 @@
 # HANDOFF.md
 
-Purpose: next-session bootstrap in under one minute.
+Purpose: next-session bootstrap in under one minute. Keep only the single next action, active blockers, and live run pointers here; completed work belongs in PROGRESS.md.
 
 Read order: HANDOFF.md → PLAN.md → PROGRESS.md → ImplementationPlan.md (relevant section only)
 
@@ -13,7 +13,7 @@ Read order: HANDOFF.md → PLAN.md → PROGRESS.md → ImplementationPlan.md (re
 - Q-### items in §E of the plan (likelihood intent, PoE intent, DA null choice, embed default, harmonypy dep, NF-per-group, batch-vs-group) need PI sign-off **before** any code change touching W-012, W-020, W-022, W-030, W-040.
 
 ### Immediate next action
-Pick **W-001 (F-GIVE-MEAN)** — no dependencies, single-line fix in [src/spVIPESmulti/model/spvipesmulti.py#L1413-L1432](src/spVIPESmulti/model/spvipesmulti.py#L1413-L1432); unblocks deterministic fixtures for all downstream metric work items.
+Rerun the Tutorial rebuild under the no-validation Lightning fix, then inspect [/tmp/tutorial_rebuild.log](/tmp/tutorial_rebuild.log) for DOC-TUTORIAL-1 and close it out if the smoke test is clean. After that, start DOC-LEGACY-1.
 
 ---
 
