@@ -10,7 +10,26 @@ How to use:
 
 ---
 
-## 2026-05-09 (session 7, legacy spVIPES reproduction vignette)
+## 2026-05-09 (session 12, Tutorial completion + legacy execution start)
+
+### DOC-TUTORIAL-1: End-to-end notebook execution complete
+
+**Command used.**
+- `CUDA_VISIBLE_DEVICES='' SCVI_DISABLE_CUDA=true python -m nbconvert --to notebook --execute --ExecutePreprocessor.timeout=-1 docs/notebooks/Tutorial.ipynb --output-dir /tmp`
+
+**Outcome.**
+- Nbconvert completed successfully and wrote `/tmp/Tutorial.ipynb`.
+- Wall-clock runtime: `real 173m58.818s`.
+- This closes DOC-TUTORIAL-1 in PLAN.md.
+
+### DOC-LEGACY-1: End-to-end execution started
+
+**Command used.**
+- `CUDA_VISIBLE_DEVICES='' SCVI_DISABLE_CUDA=true python -m nbconvert --to notebook --execute --ExecutePreprocessor.timeout=-1 docs/notebooks/legacy_spVIPES_reproduction.ipynb --output-dir /tmp`
+
+**Current status.**
+- Execution is active and long-running.
+- Early nbconvert output includes `MissingIDFieldWarning` from nbformat validation; this is non-fatal and execution continues.
 
 ## 2026-05-09 (session 11, CPU validation while notebook reruns are in flight)
 

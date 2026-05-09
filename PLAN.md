@@ -16,28 +16,29 @@ Status: **done** (2026-05-09)
 - Remaining Q-### audit questions are intentionally deferred and are not part of the active queue unless explicitly reactivated.
 
 ### DOC-TUTORIAL-1: Modernize Tutorial.ipynb (simulated data vignette)
-Status: **in-progress** (2026-05-09, restarted with CPU-only)
+Status: **done** (2026-05-09)
 - All 7 smoke test cases **PASS** on CPU (CUDA disabled; 22.5s total). Validates core API compatibility.
 - Focused regression tests also pass on CPU: `tests/test_lightning_trainer_compat.py` (3/3) and `tests/test_utils.py -k PlotLatentDimensionStatsCompatibility` (3/3).
-- Direct notebook execution restarted via `nbconvert --execute` with unbounded timeout on CPU:
-	- **Tutorial.ipynb**: actively executing (long-running).
-	- **legacy_spVIPES_reproduction.ipynb**: queued to start after Tutorial completes.
-- Technical note: HPC driver (v12.0.80) incompatible with PyTorch cu130; CPU execution avoids the mismatch.
-- Completion criterion: both notebooks finish without traceback.
+- End-to-end notebook execution completed successfully via CPU-only nbconvert:
+	- `CUDA_VISIBLE_DEVICES='' SCVI_DISABLE_CUDA=true python -m nbconvert --to notebook --execute --ExecutePreprocessor.timeout=-1 docs/notebooks/Tutorial.ipynb --output-dir /tmp`
+	- Output written: `/tmp/Tutorial.ipynb`
+	- Wall-clock runtime: `real 173m58.818s`
+- Technical note: HPC driver (v12.0.80) is incompatible with PyTorch cu130; CPU execution is the validated fallback path.
 
 ### DOC-LEGACY-1: Legacy spVIPES reproduction vignette (Phase 1 — qualitative)
-Status: **in-progress** (notebook generated 2026-05-09; execution queued behind Tutorial run)
+Status: **in-progress** (execution active on 2026-05-09)
 - Builder: `scripts/build_legacy_reproduction_notebook.py` → `docs/notebooks/legacy_spVIPES_reproduction.ipynb` (31 cells).
 - Scope: 2-group RNA-only label-based PoE on Splatter sim ([Zenodo 10070301](https://zenodo.org/records/10070301)) with all post-spVIPES additions disabled (`disentangle_preset="off"`, `use_nf_prior=False`, `use_jeffreys_integ=False`, `group_loss_weights=None`).
 - Config mirrors original tutorial: `n_dim_shared=10`, `n_dim_private=7`, `n_hidden=128`, `dropout=0.1`, `batch_size=128`, `train_size=1.0`, `max_epochs=400`, no early stopping, no KL warmup.
 - Notebook training cell re-synced with the builder/config (`train_size=1.0`, `n_epochs_kl_warmup=0`) after a drifted in-notebook edit.
 - API substitution: original `transport_plan_key='transport_plan'` (OT-paired) → `label_key='Celltypes'` (label-based) — closest supervised analogue.
-- Training path now has a Lightning 2.6.x no-validation compatibility fix in `PatchedTrainRunner`, which should unblock the `train_size=1.0` notebook execution branch once rerun.
+- Training path now has a Lightning 2.6.x no-validation compatibility fix in `PatchedTrainRunner`, which unblocks the `train_size=1.0` notebook execution branch.
 - Data: notebook downloads `splatter_simulation-2.h5ad` (~1 GB) from Zenodo on first run, caches in `data/`.
 - Model cached to `results/spvipes_legacy_reproduction/`.
 - Acceptance: shared UMAP separates `Celltypes`; per-group private UMAPs separate `Gene_programs` within each dataset.
-- Execution note:
-	- Prior Python 3.13 environment was unstable for nbconvert; active rerun strategy uses base Python 3.10 with CPU-only flags and unbounded timeout.
+- Active execution command:
+	- `CUDA_VISIBLE_DEVICES='' SCVI_DISABLE_CUDA=true python -m nbconvert --to notebook --execute --ExecutePreprocessor.timeout=-1 docs/notebooks/legacy_spVIPES_reproduction.ipynb --output-dir /tmp`
+- Runtime note: nbconvert emitted a non-fatal `MissingIDFieldWarning` about cell id normalization; execution continues.
 
 ### DOC-LEGACY-2: Quantitative parity benchmark (Phase 2 — deferred)
 Status: **deferred**
@@ -49,7 +50,8 @@ Status: **deferred**
 ## Blockers / Decisions Needed
 
 - No blocking decision currently required.
-- Active execution path is base Python 3.10 + CPU-only notebook runs; only remaining dependency is wall-clock runtime until completion.
+- Active execution path is base Python 3.10 + CPU-only notebook runs.
+- Remaining dependency is only wall-clock time until `legacy_spVIPES_reproduction.ipynb` completes.
 
 ---
 
