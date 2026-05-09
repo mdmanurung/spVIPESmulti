@@ -50,9 +50,11 @@ def test_give_mean_unnormalized_is_deterministic():
     ad_b.obs_names = [f"B_{i}" for i in range(n_cells_per)]
     ad_a.var_names = [f"g{i}" for i in range(n_genes)]
     ad_b.var_names = [f"g{i}" for i in range(n_genes)]
+    ad_a.obs["cell_type"] = ["A"] * (n_cells_per // 2) + ["B"] * (n_cells_per - n_cells_per // 2)
+    ad_b.obs["cell_type"] = ["A"] * (n_cells_per // 2) + ["B"] * (n_cells_per - n_cells_per // 2)
 
     adata = prepare_adatas({"A": ad_a, "B": ad_b})
-    spVIPESmulti.model.spVIPESmulti.setup_anndata(adata, groups_key="groups")
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(adata, groups_key="groups", label_key="cell_type")
     model = spVIPESmulti.model.spVIPESmulti(adata, n_dimensions_shared=4, n_dimensions_private=4)
     model.train(max_epochs=1, batch_size=120, accelerator="cpu", devices=1)
 

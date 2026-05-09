@@ -144,10 +144,8 @@ class TestMultimodalDisentangle:
         loss.backward()
 
     def test_label_required_guard_still_fires(self):
-        """Without labels, label-using disentangle weights should still raise."""
-        # Build adata WITHOUT label_key; setup_anndata won't register labels.
+        """setup_anndata must raise when label_key is omitted (unsupervised mode removed)."""
         groups = {}
-        rng = np.random.default_rng(0)
         for gi in range(3):
             gname = f"g{gi}"
             rna = _make_mod(60, 50, seed=10 * gi)
@@ -158,12 +156,8 @@ class TestMultimodalDisentangle:
         prepared = spVIPESmulti.data.prepare_multimodal_adatas(
             groups, modality_likelihoods={"rna": "nb", "protein": "nb"}
         )
-        spVIPESmulti.model.spVIPESmulti.setup_anndata(
-            prepared, groups_key="groups",  # no label_key
-            modality_likelihoods={"rna": "nb", "protein": "nb"},
-        )
-        with pytest.raises(ValueError, match="use_labels=True"):
-            spVIPESmulti.model.spVIPESmulti(
-                prepared, n_hidden=32, n_dimensions_shared=8, n_dimensions_private=4,
-                disentangle_preset="full",
+        with pytest.raises((TypeError, ValueError)):
+            spVIPESmulti.model.spVIPESmulti.setup_anndata(
+                prepared, groups_key="groups",  # no label_key — must raise now
+                modality_likelihoods={"rna": "nb", "protein": "nb"},
             )

@@ -62,9 +62,12 @@ class spVIPESmultimodule(BaseModuleClass):
         Level at which to model the dispersion parameter in the negative binomial distribution.
     encoder_activation : {"silu", "relu", "leakyrelu"}, default="silu"
         Activation function used in all encoder hidden layers.
-    use_low_rank_mixer : bool, default=True
+    use_low_rank_mixer : bool, default=False
         If ``True``, use a lightweight rank-``low_rank_mixer_rank`` bottleneck
-        in the decoder mixer instead of the full FCLayers chain.
+        in the decoder mixer instead of the full FCLayers chain. Opt-in
+        regularizer: ablation data show rank-4 gives ~4% worse reconstruction
+        than the full mixer on B-cell data. Use only when parameter budget is
+        a strict constraint.
     low_rank_mixer_rank : int, default=4
         Bottleneck rank when ``use_low_rank_mixer=True``.
     label_class_weights : torch.Tensor, optional
@@ -127,7 +130,7 @@ class spVIPESmultimodule(BaseModuleClass):
         strict_likelihood_support: bool = False,
         validate_observations: bool = False,
         encoder_activation: str = "silu",
-        use_low_rank_mixer: bool = True,
+        use_low_rank_mixer: bool = False,
         low_rank_mixer_rank: int = 4,
         label_class_weights: Optional[torch.Tensor] = None,
     ):
@@ -680,29 +683,13 @@ class spVIPESmultimodule(BaseModuleClass):
         shared_stats,
         labels: Optional[dict[int, torch.Tensor]],
     ):
-        if self.use_labels and labels is not None:
-            return self._label_based_poe(shared_stats, labels)
-        # W-020: Unsupervised fallback — use each group's own encoder posterior
-        # directly instead of cross-group PoE row-pairing.  Row-wise PoE without
-        # label alignment pairs cells by mini-batch position, which is arbitrary
-        # and makes z_shared of group A depend on the *row order* of group B.
-        # Integration quality is maintained through the Jeffreys / disentanglement
-        # objectives that pull distributions together without pairing cells.
-        result = {}
-        for g in sorted(shared_stats.keys()):
-            loc = shared_stats[g]["logtheta_loc"]
-            scale = shared_stats[g]["logtheta_scale"].clamp(min=1e-6)
-            qz = Normal(loc, scale)
-            log_z = qz.rsample()
-            result[g] = {
-                "logtheta_loc": loc,
-                "logtheta_logvar": shared_stats[g]["logtheta_logvar"],
-                "logtheta_scale": scale,
-                "logtheta_qz": qz,
-                "logtheta_log_z": log_z,
-                "logtheta_theta": F.softmax(log_z, -1),
-            }
-        return result
+        if not (self.use_labels and labels is not None):
+            raise RuntimeError(
+                "internal: labels missing in _supervised_poe — "
+                "setup_anndata enforcement was bypassed. "
+                "This should never happen; please report as a bug."
+            )
+        return self._label_based_poe(shared_stats, labels)
 
     def _paired_poe(self, *args, **kwargs):
         raise NotImplementedError("Paired PoE has been removed. Use label-based PoE (label_key=...) instead.")

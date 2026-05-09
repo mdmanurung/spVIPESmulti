@@ -44,6 +44,10 @@ def test_gaussian_mean_can_match_lognorm_range():
     ad_prot_b.obs_names = ad_rna_b.obs_names
     ad_rna_b.var_names = [f"gene{i}" for i in range(n_rna)]
     ad_prot_b.var_names = [f"prot{i}" for i in range(n_prot)]
+    for _a in (ad_rna_a, ad_prot_a):
+        _a.obs["cell_type"] = ["ct0"] * (n_cells // 2) + ["ct1"] * (n_cells - n_cells // 2)
+    for _a in (ad_rna_b, ad_prot_b):
+        _a.obs["cell_type"] = ["ct0"] * (n_cells // 2) + ["ct1"] * (n_cells - n_cells // 2)
 
     adata = spVIPESmulti.data.prepare_multimodal_adatas(
         {"A": {"rna": ad_rna_a, "protein": ad_prot_a},
@@ -56,6 +60,7 @@ def test_gaussian_mean_can_match_lognorm_range():
         spVIPESmulti.model.spVIPESmulti.setup_anndata(
             adata,
             groups_key="groups",
+            label_key="cell_type",
             modality_likelihoods={"rna": "nb", "protein": "gaussian"},
         )
     messages = [str(wi.message) for wi in w if issubclass(wi.category, UserWarning)]

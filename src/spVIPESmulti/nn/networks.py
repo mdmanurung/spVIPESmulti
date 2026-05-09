@@ -195,12 +195,12 @@ class LinearDecoderSPVIPE(nn.Module):
         Whether to include bias terms in linear layers.
     n_hidden : int, default=256
         Number of hidden units in the mixing network.
-    use_low_rank_mixer : bool, default=True
+    use_low_rank_mixer : bool, default=False
         If ``True``, replace the two-step ``sigmoid_decoder`` + ``mixture`` FCLayers
         (≈300 K params/decoder) with a rank-``low_rank_mixer_rank`` bottleneck
-        (≈5 K params/decoder at rank 4). Reduces parameter count and matmul cost
-        with negligible quality impact in most settings. Requires ablation before
-        setting as default.
+        (≈5 K params/decoder at rank 4). Opt-in regularizer: ablation data show
+        rank-4 gives ~4% worse reconstruction than the full mixer on B-cell data.
+        Use only when parameter budget is a strict constraint.
     low_rank_mixer_rank : int, default=4
         Bottleneck rank when ``use_low_rank_mixer=True``.
     **kwargs
@@ -228,7 +228,7 @@ class LinearDecoderSPVIPE(nn.Module):
         use_layer_norm: bool = False,
         bias: bool = False,
         n_hidden: int = 256,
-        use_low_rank_mixer: bool = True,
+        use_low_rank_mixer: bool = False,
         low_rank_mixer_rank: int = 4,
         **kwargs,
     ):

@@ -52,9 +52,11 @@ def test_nb_recovery_synthetic():
     ad_b.obs_names = [f"B_{i}" for i in range(200)]
     ad_a.var_names = [f"g{i}" for i in range(50)]
     ad_b.var_names = [f"g{i}" for i in range(50)]
+    ad_a.obs["cell_type"] = ["A"] * 100 + ["B"] * 100
+    ad_b.obs["cell_type"] = ["A"] * 100 + ["B"] * 100
 
     adata = prepare_adatas({"A": ad_a, "B": ad_b})
-    spVIPESmulti.model.spVIPESmulti.setup_anndata(adata, groups_key="groups")
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(adata, groups_key="groups", label_key="cell_type")
     model = spVIPESmulti.model.spVIPESmulti(adata, n_dimensions_shared=8, n_dimensions_private=4)
     model.train(max_epochs=3, batch_size=400, accelerator="cpu", devices=1)
     # Verify training completes without error (W-011: NB target is raw counts)

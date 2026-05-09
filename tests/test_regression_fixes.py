@@ -508,9 +508,10 @@ class TestNegativeWeightGuard:
         adata.var_names = [f"g{i}" for i in range(30)]
         adata.obs["group"] = ["A"] * 20 + ["B"] * 20
         adata.obs["idx"] = list(range(40))
+        adata.obs["ct"] = ["ct0"] * 20 + ["ct1"] * 20
 
         prepared = spVIPESmulti.data.prepare_adatas({"A": adata[:20].copy(), "B": adata[20:].copy()})
-        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups")
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="ct")
 
         with pytest.raises(ValueError, match="must be >= 0"):
             spVIPESmulti.model.spVIPESmulti(
@@ -539,9 +540,10 @@ class TestConcatDataLoaderGuard:
         adata.var_names = [f"g{i}" for i in range(30)]
         adata.obs["group"] = ["A"] * 20 + ["B"] * 20
         adata.obs["idx"] = list(range(40))
+        adata.obs["ct"] = ["ct0"] * 20 + ["ct1"] * 20
 
         prepared = spVIPESmulti.data.prepare_adatas({"A": adata[:20].copy(), "B": adata[20:].copy()})
-        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups")
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="ct")
         model = spVIPESmulti.model.spVIPESmulti(prepared)
 
         from spVIPESmulti.dataloaders._concat_dataloader import ConcatDataLoader
@@ -563,9 +565,10 @@ class TestConcatDataLoaderGuard:
         adata.var_names = [f"g{i}" for i in range(30)]
         adata.obs["group"] = ["A"] * 40 + ["B"] * 40
         adata.obs["idx"] = list(range(80))
+        adata.obs["ct"] = ["ct0"] * 40 + ["ct1"] * 40
 
         prepared = spVIPESmulti.data.prepare_adatas({"A": adata[:40].copy(), "B": adata[40:].copy()})
-        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups")
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="ct")
         model = spVIPESmulti.model.spVIPESmulti(prepared)
 
         gi = [list(map(int, g)) for g in prepared.uns["groups_obs_indices"]]
@@ -661,9 +664,10 @@ class TestDisentanglePresetEdgeCases:
         adata.var_names = [f"g{i}" for i in range(20)]
         adata.obs["group"] = ["A"] * 20 + ["B"] * 20
         adata.obs["idx"] = list(range(40))
+        adata.obs["ct"] = ["ct0"] * 20 + ["ct1"] * 20
 
         prepared = spVIPESmulti.data.prepare_adatas({"A": adata[:20].copy(), "B": adata[20:].copy()})
-        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups")
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="ct")
 
         with pytest.raises(ValueError, match="Unknown disentangle_preset"):
             spVIPESmulti.model.spVIPESmulti(prepared, disentangle_preset="does_not_exist")
@@ -682,9 +686,10 @@ class TestDisentanglePresetEdgeCases:
         adata.var_names = [f"g{i}" for i in range(20)]
         adata.obs["group"] = ["A"] * 20 + ["B"] * 20
         adata.obs["idx"] = list(range(40))
+        adata.obs["ct"] = ["ct0"] * 20 + ["ct1"] * 20
 
         prepared = spVIPESmulti.data.prepare_adatas({"A": adata[:20].copy(), "B": adata[20:].copy()})
-        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups")
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="ct")
 
         model = spVIPESmulti.model.spVIPESmulti(
             prepared,
@@ -715,10 +720,11 @@ class TestLatentRepresentationCompleteness:
             a = ad.AnnData(X=csr_matrix(X))
             a.obs_names = [f"g{i}_c{j}" for j in range(n)]
             a.var_names = [f"gene{j}" for j in range(20)]
+            a.obs["cell_type"] = ["ct0"] * (n // 2) + ["ct1"] * (n - n // 2)
             adatas[f"g{i}"] = a
 
         prepared = spVIPESmulti.data.prepare_adatas(adatas)
-        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups")
+        spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="cell_type")
         model = spVIPESmulti.model.spVIPESmulti(prepared, n_hidden=32, n_dimensions_shared=8, n_dimensions_private=4)
 
         gi = [list(map(int, g)) for g in prepared.uns["groups_obs_indices"]]

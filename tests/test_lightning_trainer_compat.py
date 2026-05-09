@@ -21,7 +21,7 @@ def test_multigroup_training_runs(monkeypatch):
     adata2 = make_dummy_adata(18, 10, seed=2)
     from spVIPESmulti.data.prepare_adatas import prepare_adatas
     adata = prepare_adatas({"g1": adata1, "g2": adata2})
-    spVIPESmulti.setup_anndata(adata, groups_key="groups")
+    spVIPESmulti.setup_anndata(adata, groups_key="groups", label_key="celltype")
     model = spVIPESmulti(adata, n_hidden=8, n_dimensions_shared=2, n_dimensions_private=2, dropout_rate=0.1)
     group_indices_list = adata.uns["groups_obs_indices"]
     # Should not raise TypeError
@@ -45,7 +45,7 @@ def test_cosine_lr_scheduler(monkeypatch):
     adata2 = make_dummy_adata(18, 10, seed=4)
     from spVIPESmulti.data.prepare_adatas import prepare_adatas
     adata = prepare_adatas({"g1": adata1, "g2": adata2})
-    spVIPESmulti.setup_anndata(adata, groups_key="groups")
+    spVIPESmulti.setup_anndata(adata, groups_key="groups", label_key="celltype")
     model = spVIPESmulti(adata, n_hidden=8, n_dimensions_shared=2, n_dimensions_private=2, dropout_rate=0.1)
     group_indices_list = adata.uns["groups_obs_indices"]
 
@@ -84,7 +84,7 @@ def test_train_without_validation_uses_explicit_train_loader(monkeypatch):
     adata2 = make_dummy_adata(12, 6, seed=6)
     from spVIPESmulti.data.prepare_adatas import prepare_adatas
     adata = prepare_adatas({"g1": adata1, "g2": adata2})
-    spVIPESmulti.setup_anndata(adata, groups_key="groups")
+    spVIPESmulti.setup_anndata(adata, groups_key="groups", label_key="celltype")
     model = spVIPESmulti(adata, n_hidden=8, n_dimensions_shared=2, n_dimensions_private=2, dropout_rate=0.1)
 
     captured = {}

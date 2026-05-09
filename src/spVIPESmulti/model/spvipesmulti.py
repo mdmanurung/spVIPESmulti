@@ -1,7 +1,7 @@
 import logging
 import warnings
 from collections.abc import Sequence
-from typing import Optional
+from typing import Literal, Optional
 
 import numpy as np
 import pandas as pd
@@ -115,6 +115,17 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
           true dataset-level ELBO where each observation contributes equally.
 
         Default ``None`` gives equal weights (1 / n_groups per group).
+    encoder_activation : {"silu", "relu", "leakyrelu"}, default="silu"
+        Activation function for all encoder hidden layers. ``"silu"`` (Swish)
+        converges faster in deep VAEs; use ``"relu"`` to restore checkpoint
+        compatibility with models trained before the SiLU default was introduced.
+    use_low_rank_mixer : bool, default=False
+        If ``True``, use a lightweight rank-``low_rank_mixer_rank`` bottleneck
+        in the decoder mixing network instead of the full FCLayers chain.
+        Opt-in regularizer: ablation data show rank-4 gives ~4% worse
+        reconstruction than the full mixer on B-cell data.
+    low_rank_mixer_rank : int, default=4
+        Bottleneck rank when ``use_low_rank_mixer=True``.
     **model_kwargs
         Additional keyword arguments forwarded to :class:`~spVIPESmulti.module.spVIPESmultimodule`.
 
@@ -171,6 +182,9 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         use_jeffreys_integ: bool = False,
         jeffreys_integ_weight: float = 1.0,
         group_loss_weights: Optional[list] = None,
+        encoder_activation: Literal["silu", "relu", "leakyrelu"] = "silu",
+        use_low_rank_mixer: bool = False,
+        low_rank_mixer_rank: int = 4,
         **model_kwargs,
     ):
         super().__init__(adata)
@@ -276,6 +290,9 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             contrastive_temperature=contrastive_temperature,
             disentangle_warmup=disentangle_warmup,
             group_loss_weights=group_loss_weights,
+            encoder_activation=encoder_activation,
+            use_low_rank_mixer=use_low_rank_mixer,
+            low_rank_mixer_rank=low_rank_mixer_rank,
             **model_kwargs,
         )
 
@@ -302,7 +319,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         cls,
         adata: AnnData,
         groups_key: str,
-        label_key: Optional[str] = None,
+        label_key: str,
         sample_key: Optional[str] = None,
         batch_key: Optional[str] = None,
         layer: Optional[str] = None,
@@ -318,8 +335,9 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             Annotated data object containing the single-cell data to be integrated.
         groups_key : str
             Key in `adata.obs` that defines the grouping of cells.
-        label_key : str, optional
-            Key in `adata.obs` containing cell type labels for label-based PoE.
+        label_key : str
+            Key in `adata.obs` containing cell type labels for label-based PoE
+            alignment. Required — unsupervised mode has been removed.
         sample_key : str, optional
             Key in `adata.obs` containing sample identifiers used for
             sample-aware differential abundance aggregation.
@@ -343,21 +361,24 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         logger.info("=== spVIPESmulti AnnData Setup ===")
         logger.info("Setting up with groups_key: '%s'", groups_key)
 
+        if label_key is None:
+            raise ValueError(
+                "spVIPESmulti requires `label_key` for label-based PoE alignment. "
+                "Unsupervised mode has been removed. "
+                "Pass `label_key=<column in adata.obs>` (e.g. cell-type annotations)."
+            )
+
         anndata_fields.append(CategoricalObsField("indices", "indices"))
 
-        if label_key is not None:
-            logger.info("Labels: Using '%s' from adata.obs", label_key)
-            anndata_fields.append(CategoricalObsField("labels", label_key))
+        logger.info("Labels: Using '%s' from adata.obs", label_key)
+        anndata_fields.append(CategoricalObsField("labels", label_key))
 
         if sample_key is not None:
             logger.info("Samples: Using '%s' from adata.obs", sample_key)
             anndata_fields.append(CategoricalObsField("sample", sample_key))
 
         logger.info("--- Product of Experts (PoE) Configuration ---")
-        if label_key is not None:
-            logger.info("Will use: Label-based PoE")
-        else:
-            logger.info("No labels configured — provide label_key for PoE-based integration")
+        logger.info("Will use: Label-based PoE")
 
         if modality_likelihoods is not None:
             adata.uns["modality_likelihoods"] = modality_likelihoods

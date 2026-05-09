@@ -24,8 +24,7 @@ spVIPESmulti aligns groups via a label-supervised Product of Experts (PoE) frame
 
 | Method | How it's selected | Best use case |
 | --- | --- | --- |
-| **Label-based PoE** | `label_key` provided | High-quality cell type labels; supports N ≥ 2 groups |
-| **Unsupervised PoE** | `label_key` omitted | No label annotations available; integration quality depends on data overlap |
+| **Label-based PoE** | `label_key` (required) | Cell-type labels guide PoE alignment; supports N ≥ 2 groups |
 
 ## Installation
 
@@ -132,7 +131,7 @@ import pandas as pd
 spVIPESmulti.model.spVIPESmulti.setup_anndata(
     combined,
     groups_key="groups",
-    label_key="cell_type",   # optional; enables label-supervised PoE
+    label_key="cell_type",   # required; enables label-based PoE
     sample_key="sample_id",  # optional; enables sample-aware posterior/DA helpers
     batch_key="batch",       # optional; enables batch correction
 )
@@ -188,19 +187,6 @@ spVIPESmulti.model.spVIPESmulti.setup_anndata(
     groups_key="groups",
     label_key="cell_type",
     batch_key="batch",   # optional
-)
-```
-
-</details>
-
-<details>
-<summary><b>Unsupervised Integration (no labels)</b></summary>
-
-```python
-spVIPESmulti.model.spVIPESmulti.setup_anndata(
-    combined,
-    groups_key="groups",
-    # omit label_key for unsupervised PoE
 )
 ```
 

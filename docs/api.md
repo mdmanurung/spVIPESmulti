@@ -103,6 +103,9 @@ latents = model.get_latent_representation(batch_size=512)
 | `jeffreys_integ_weight` | `float` | `1.0` | Scalar multiplier on the Jeffreys integration loss. |
 | `strict_likelihood_support` | `bool` | `False` | Enable stricter likelihood-target validation before reconstruction `log_prob` calls. Always checks finite values (and NB non-negative). In strict mode, also requires integer-like NB counts when `log_variational_generative=False`. |
 | `group_loss_weights` | `list[float] or None` | `None` | Per-group scalar multipliers on the reconstruction + KL loss. Useful for balancing imbalanced groups. E.g. `[1/n**0.5 for n in group_sizes]` for sqrt weighting. Normalized internally so absolute scale does not matter. |
+| `encoder_activation` | `str` | `"silu"` | Activation function for all encoder hidden layers. `"silu"` (Swish) for faster convergence; `"relu"` for checkpoint compatibility with pre-refactor models. |
+| `use_low_rank_mixer` | `bool` | `False` | If `True`, use a low-rank bottleneck in the decoder mixing network. Opt-in regularizer: ablation data show rank-4 gives ~4% worse reconstruction than the full mixer. |
+| `low_rank_mixer_rank` | `int` | `4` | Bottleneck rank when `use_low_rank_mixer=True`. |
 | `**model_kwargs` | | | Forwarded to `spVIPESmultimodule`. Includes `validate_observations` (default `False`): when `True`, enables two full tensor scans per step to check for non-finite or negative inputs before likelihood evaluation. Useful for debugging; disable in production for speed. |
 
 > **Tip:** Individual weight overrides stack on top of a preset.
@@ -117,7 +120,7 @@ latents = model.get_latent_representation(batch_size=512)
 spVIPESmulti.model.spVIPESmulti.setup_anndata(
     adata,
     groups_key,
-    label_key=None,
+    label_key,
     sample_key=None,
     batch_key=None,
     layer=None,
@@ -131,7 +134,7 @@ Registers fields on `adata` via `AnnDataManager` and selects the PoE strategy.
 |---|---|---|---|
 | `adata` | `AnnData` | — | The concatenated AnnData produced by `prepare_adatas` or `prepare_multimodal_adatas`. |
 | `groups_key` | `str` | — | Column in `adata.obs` identifying which group each cell belongs to. |
-| `label_key` | `str or None` | `None` | Column in `adata.obs` with cell-type labels. Required for label-based PoE and for label-dependent disentanglement components. |
+| `label_key` | `str` | — | Column in `adata.obs` with cell-type labels. Required — unsupervised mode has been removed. |
 | `sample_key` | `str or None` | `None` | Optional sample identifier column used by sample-aware posterior aggregation and differential abundance helpers. |
 | `batch_key` | `str or None` | `None` | Column in `adata.obs` for technical batch. Adds a one-hot batch covariate to each encoder / decoder. |
 | `layer` | `str or None` | `None` | Key in `adata.layers` to use as the count matrix. Defaults to `adata.X`. |
@@ -141,10 +144,9 @@ Registers fields on `adata` via `AnnDataManager` and selects the PoE strategy.
 
 | Condition | Strategy | Group limit |
 |---|---|---|
-| `label_key` provided | Label-based PoE | N ≥ 2 |
-| `label_key` omitted | Unsupervised PoE | N ≥ 2 |
+| `label_key` (required) | Label-based PoE | N ≥ 2 |
 
-For multimodal data or N > 2 groups, label-based PoE is recommended.
+Label-based PoE is the only supported integration strategy.
 
 ---
 

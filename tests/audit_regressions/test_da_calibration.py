@@ -30,8 +30,10 @@ def test_da_returns_pvalue_column():
     ad_b.var_names = [f"g{i}" for i in range(n_genes)]
     ad_a.obs["sample"] = "s1"
     ad_b.obs["sample"] = "s1"
+    ad_a.obs["cell_type"] = ["A"] * (n // 2) + ["B"] * (n - n // 2)
+    ad_b.obs["cell_type"] = ["A"] * (n // 2) + ["B"] * (n - n // 2)
     adata = prepare_adatas({"A": ad_a, "B": ad_b})
-    spVIPESmulti.model.spVIPESmulti.setup_anndata(adata, groups_key="groups", sample_key="sample")
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(adata, groups_key="groups", sample_key="sample", label_key="cell_type")
     model = spVIPESmulti.model.spVIPESmulti(adata, n_dimensions_shared=4, n_dimensions_private=4)
     model.train(max_epochs=1, batch_size=120, accelerator="cpu", devices=1)
 

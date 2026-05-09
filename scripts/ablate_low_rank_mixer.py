@@ -1,9 +1,18 @@
-"""Ablation: full mixer vs low-rank mixer in LinearDecoderSPVIPE (P-PERF-2).
+"""[ARCHIVED EVIDENCE] Ablation: full mixer vs low-rank mixer in LinearDecoderSPVIPE (P-PERF-2).
 
+This script is kept as historical evidence supporting the 2026-05-09 decision
+to make ``use_low_rank_mixer`` opt-in (default=False). Key findings from
+``scripts/ablate_low_rank_mixer.json``:
+  - rank=4: 3.8% WORSE reconstruction than baseline, SLOWER (59.4s vs 57.0s)
+  - rank=8: 4.1% WORSE reconstruction than baseline, SLOWER (59.9s)
+Conclusion: low-rank mixer is a regularizer, NOT a performance optimization.
+Do not run this script to justify changing the ``use_low_rank_mixer`` default.
+
+Original script description:
 Compares three variants on the malaria B-cell dataset at 100 epochs:
 
-  baseline   — full FCLayers mixer (current default, use_low_rank_mixer=False)
-  rank4      — low-rank mixer, rank=4  (planned default)
+  baseline   — full FCLayers mixer (use_low_rank_mixer=False)
+  rank4      — low-rank mixer, rank=4
   rank8      — low-rank mixer, rank=8  (higher-capacity alternative)
 
 Reports reconstruction loss, knn_purity, leiden_ari, ilisi, kbet, and elapsed time.
