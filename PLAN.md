@@ -8,6 +8,7 @@ Status legend: `todo` | `in-progress` | `done` | `blocked`
 
 ## Current Iteration
 
+<<<<<<< HEAD
 ### AUDIT-REMEDIATION: 2026-05-08 audit findings
 Status: **done** (2026-05-09)
 - All W-001..W-056 items implemented. See PROGRESS.md §2026-05-09 for full change log.
@@ -46,6 +47,13 @@ Status: **deferred**
 - Reactivation trigger: Phase 1 vignette executes cleanly **and** there is demand for a quantitative claim of equivalence in the README/paper.
 - Blocker for activation: requires a working `nrclaudio/spVIPES` install (Python 3.9 env, scvi-tools 0.x) or a frozen pickle of its outputs on the same Splatter file.
 - Not active until DOC-LEGACY-1 is complete and the parity question is explicitly reopened.
+=======
+No active package-code item.
+→ See PROGRESS.md for L1 (keyed layers, 2026-05-07) and M2 (multimodal alignment hardening, 2026-05-07).
+
+Parallel external work (not owned in this session):
+- N5 malaria B-cell latent-retuning pilot sweep (see HANDOFF.md).
+>>>>>>> 128dc0d (notebook fixes)
 
 ## Blockers / Decisions Needed
 
@@ -61,40 +69,90 @@ Rules: every item needs deferral reason and reactivation trigger. Move to Curren
 Full implementation specs for all items live in ImplementationPlan.md.
 
 ### P-PERF-1. Vectorize `_label_based_poe` reassembly
+<<<<<<< HEAD
 Status: **done** (2026-05-08)
 → See PROGRESS.md for implementation detail.
+=======
+Status: Deferred | Priority: HIGH
+Deferral reason: needs regression coverage before touching hot-path forward code.
+Reactivation trigger: any training-speed work session.
+→ Full spec: ImplementationPlan.md §P-PERF-1.
+>>>>>>> 128dc0d (notebook fixes)
 
 ---
 
 ### P-PERF-2. Low-rank mixer in `LinearDecoderSPVIPE`
+<<<<<<< HEAD
 Status: **done** (2026-05-08) — default `use_low_rank_mixer=True`, `rank=4`. Ablation (`scripts/ablate_low_rank_mixer.json`) shows rank=4 outperforms full mixer on knn_purity (+6%), leiden_ARI (+31%), cLISI (-6.5%) at 60× fewer mixer params (45K vs 2.7M). See PROGRESS.md.
 
 ---
 
 ### P-PERF-3. `torch.compile`
 Status: **cancelled** (2026-05-08) — dropped from backlog per user decision.
+=======
+Status: Deferred | Priority: MEDIUM
+Deferral reason: architecture change; requires ablation to confirm quality is preserved.
+Reactivation trigger: after P-PERF-1 done and profiled.
+→ Full spec: ImplementationPlan.md §P-PERF-2.
+
+---
+
+### P-PERF-3. `torch.compile` (blocked on P-PERF-1)
+Status: Deferred — blocked | Priority: LOW-MEDIUM
+Deferral reason: graph-breaks on `.item()` loop until P-PERF-1 is done.
+Reactivation trigger: P-PERF-1 complete and validated.
+→ Full spec: ImplementationPlan.md §P-PERF-3.
+>>>>>>> 128dc0d (notebook fixes)
 
 ---
 
 ### P-PERF-4. SiLU activation in encoder
+<<<<<<< HEAD
 Status: **done** (2026-05-08) — `Encoder.encoder_activation` default is `"silu"`, configurable to `"relu"`/`"leakyrelu"`. See `src/spVIPESmulti/nn/networks.py` line 66.
+=======
+Status: Deferred | Priority: LOW
+Deferral reason: minor change, no urgency.
+Reactivation trigger: any encoder-touching session.
+→ Full spec: ImplementationPlan.md §P-PERF-4.
+>>>>>>> 128dc0d (notebook fixes)
 
 ---
 
 ### N5-D. Fix adversarial overreach on z_private
+<<<<<<< HEAD
 Status: **done** (2026-05-08)
 → See PROGRESS.md.
+=======
+Status: Deferred | Priority: MEDIUM
+Deferral reason: defer until pilot winner confirmed (Phase 4).
+Reactivation trigger: after Phase 3 retrain (v4 model).
+→ Full spec: ImplementationPlan.md §N5-D.
+>>>>>>> 128dc0d (notebook fixes)
 
 ---
 
 ### N5-E. Class-weighted CE for minority cell types
+<<<<<<< HEAD
 Status: **done** (pre-existing implementation confirmed 2026-05-08)
 → Weights computed at model init, registered as buffer, threaded into CE calls.
+=======
+Status: Deferred | Priority: MEDIUM
+Deferral reason: module surgery; defer until pilot results confirm direction.
+Reactivation trigger: after Phase 3 retrain (v4 model).
+→ Full spec: ImplementationPlan.md §N5-E.
+>>>>>>> 128dc0d (notebook fixes)
 
 ---
 
 ### P6. Multi-covariate generalization
+<<<<<<< HEAD
 Status: **cancelled** (2026-05-08) — dropped from backlog per user decision.
+=======
+Status: Deferred | Priority: LOW
+Deferral reason: broad metadata and architecture refactor across data/model/loss.
+Reactivation trigger: after single-covariate stability and API simplification.
+→ Full spec: ImplementationPlan.md §P6.
+>>>>>>> 128dc0d (notebook fixes)
 
 ### Reactivation Checklist
 
