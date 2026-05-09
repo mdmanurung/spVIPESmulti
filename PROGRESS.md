@@ -12,6 +12,33 @@ How to use:
 
 ## 2026-05-09 (session 7, legacy spVIPES reproduction vignette)
 
+## 2026-05-09 (session 11, CPU validation while notebook reruns are in flight)
+
+### DOC-TUTORIAL-1 / DOC-LEGACY-1: Interim validation completed
+
+**Goal.** Continue productive validation work while `Tutorial.ipynb` runs in a long CPU-only nbconvert session.
+
+**Environment decision now in use.**
+- Base Python 3.10 environment with CPU-only flags to bypass the HPC CUDA driver/PyTorch cu130 mismatch:
+  - `CUDA_VISIBLE_DEVICES=''`
+  - `SCVI_DISABLE_CUDA=true`
+
+**Completed validations.**
+- `scripts/smoke_vignettes.py --epochs 2 --cells_per_group 120 --n_hvg 300`
+  - Result: **7/7 passed** in **22.5s**.
+  - Coverage: all distinct public API combinations (2-group, 3-group, multimodal, with/without disentanglement/NF prior).
+- Focused compatibility regressions:
+  - `pytest -q tests/test_lightning_trainer_compat.py` → **3 passed**
+  - `pytest -q tests/test_utils.py -k "PlotLatentDimensionStatsCompatibility"` → **3 passed**
+
+**Runtime status observed.**
+- `Tutorial.ipynb` nbconvert process is active and long-running on CPU.
+- `legacy_spVIPES_reproduction.ipynb` remains queued to run immediately after Tutorial completion.
+
+**Status.** Code-level and smoke-level compatibility checks are fully green; only end-to-end notebook completion evidence is pending.
+
+## 2026-05-09 (session 7, legacy spVIPES reproduction vignette)
+
 ### DOC-LEGACY-1: Phase 1 vignette generated
 
 **Goal.** Show that `spVIPESmulti`, configured with all post-spVIPES additions disabled, qualitatively reproduces the integration result of the original [`nrclaudio/spVIPES` Tutorial.ipynb](https://github.com/nrclaudio/spVIPES/blob/main/docs/notebooks/Tutorial.ipynb) on the Splatter simulation ([Zenodo 10070301](https://zenodo.org/records/10070301)).
