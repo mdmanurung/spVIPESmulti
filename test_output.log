@@ -1,0 +1,3054 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.10, pytest-9.0.3, pluggy-1.6.0 -- /share/software/tools/miniconda/3.10/23.3.1/bin/python3
+cachedir: .pytest_cache
+rootdir: /exports/para-lipg-hpc/mdmanurung/spVIPESmulti
+configfile: pyproject.toml
+plugins: jaxtyping-0.3.7
+collecting ... collected 3 items
+
+tests/test_lightning_trainer_compat.py::test_multigroup_training_runs spVIPESmulti Model with the following params: 
+n_hidden: 8, n_dimensions_shared: 2, n_dimensions_private: 2, dropout_rate: 0.1,
+multimodal: No, nf_prior: No
+Training status: Not Trained
+FAILED [ 33%]
+tests/test_lightning_trainer_compat.py::test_cosine_lr_scheduler spVIPESmulti Model with the following params: 
+n_hidden: 8, n_dimensions_shared: 2, n_dimensions_private: 2, dropout_rate: 0.1,
+multimodal: No, nf_prior: No
+Training status: Not Trained
+FAILED  [ 66%]
+tests/test_api_boilerplate_reduction.py::test_get_latent_representation_auto_infers_groups_warns_once FAILED [100%]
+
+=================================== FAILURES ===================================
+________________________ test_multigroup_training_runs _________________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fee96d54a00>
+
+    def test_multigroup_training_runs(monkeypatch):
+        # Keep this compatibility test independent of local CUDA driver state.
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    
+        adata1 = make_dummy_adata(20, 10, seed=1)
+        adata2 = make_dummy_adata(18, 10, seed=2)
+        from spVIPESmulti.data.prepare_adatas import prepare_adatas
+        adata = prepare_adatas({"g1": adata1, "g2": adata2})
+        spVIPESmulti.setup_anndata(adata, groups_key="groups", label_key="celltype")
+        model = spVIPESmulti(adata, n_hidden=8, n_dimensions_shared=2, n_dimensions_private=2, dropout_rate=0.1)
+        group_indices_list = adata.uns["groups_obs_indices"]
+        # Should not raise TypeError
+>       model.train(
+            group_indices_list=group_indices_list,
+            max_epochs=1,
+            batch_size=4,
+            train_size=0.75,
+            validation_size=0.25,
+            accelerator="cpu",
+            devices=1,
+        )
+
+tests/test_lightning_trainer_compat.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = 
+group_indices_list = [[0, 1, 2, 3, 4, 5, ...], [20, 21, 22, 23, 24, 25, ...]]
+batch_size = 4, max_epochs = 1, train_size = 0.75, validation_size = 0.25
+early_stopping = False
+plan_kwargs = {'n_epochs_kl_warmup': 400, 'n_steps_kl_warmup': None}
+n_steps_kl_warmup = None, n_epochs_kl_warmup = 400, num_workers = 0
+trainer_kwargs = {'accelerator': 'cpu', 'check_val_every_n_epoch': 1, 'devices': 1, 'early_stopping': False, ...}
+inferred = False
+update_dict = {'n_epochs_kl_warmup': 400, 'n_steps_kl_warmup': None}
+data_splitter = <spVIPESmulti.data._multi_datasplitter.MultiGroupDataSplitter object at 0x7fed8e120730>
+cvene = 1
+training_plan = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+es = 'early_stopping'
+
+    def train(
+        self,
+        group_indices_list: Optional[list[list[int]]] = None,
+        batch_size: Optional[int] = 128,
+        max_epochs: Optional[int] = None,
+        train_size: float = 0.9,
+        validation_size: Optional[float] = None,
+        early_stopping: bool = False,
+        plan_kwargs: Optional[dict] = None,
+        n_steps_kl_warmup: Optional[int] = None,
+        n_epochs_kl_warmup: Optional[int] = 400,
+        num_workers: int = 0,
+        **trainer_kwargs,
+    ) -> None:
+        """
+        Train a multigroup spVIPESmulti model.
+    
+        This method trains the model using a custom data splitter that handles
+        multiple groups of cells separately while maintaining the shared-private
+        latent space learning objective.
+    
+        Parameters
+        ----------
+        group_indices_list : list[list[int]], optional
+            List of indices corresponding to each group of samples. Each inner list
+            contains the indices for cells belonging to that specific group. If
+            ``None``, values are inferred from ``adata.uns['groups_obs_indices']``.
+        max_epochs : int, optional
+            Number of passes through the dataset. If None, defaults to
+            ``np.min([round((20000 / n_cells) * 400), 400])``.
+        train_size : float, default=0.9
+            Size of training set in the range [0.0, 1.0].
+        validation_size : float, optional
+            Size of the validation set. If None, defaults to ``1 - train_size``.
+            If ``train_size + validation_size < 1``, the remaining cells belong
+            to the test set.
+        batch_size : int, default=128
+            Mini-batch size to use during training.
+        early_stopping : bool, default=False
+            Whether to perform early stopping. Additional arguments can be passed
+            in ``**trainer_kwargs``.
+        plan_kwargs : dict, optional
+            Keyword arguments for the training plan. Arguments passed to ``train()``
+            will overwrite values present in ``plan_kwargs``, when appropriate.
+        n_steps_kl_warmup : int, optional
+            Number of training steps for KL warmup. Takes precedence over n_epochs_kl_warmup.
+        n_epochs_kl_warmup : int, default=400
+            Number of epochs for KL divergence warmup.
+        **trainer_kwargs
+            Additional keyword arguments forwarded to ``pl.Trainer`` via scvi-tools'
+            ``TrainRunner``. To select an accelerator (replaces the removed ``use_gpu``
+            argument), pass e.g. ``accelerator="gpu"`` and ``devices=1``.
+        num_workers : int, default=0
+            Number of worker processes for the DataLoader. ``0`` means data is
+            loaded in the main process (safest, compatible with all platforms).
+            Set to a positive integer (e.g. ``4``) on multi-core HPC nodes with
+            a GPU to overlap data loading with forward/backward passes.
+            Requires that your dataset supports multi-process access (standard
+            AnnData on disk does).
+    
+        Returns
+        -------
+        None
+            The model is trained in-place.
+    
+        Notes
+        -----
+        This method uses a specialized MultiGroupDataSplitter that ensures proper
+        handling of multiple cell groups during training, maintaining the integrity
+        of the shared-private latent space learning.
+        """
+        group_indices_list, inferred = resolve_group_indices_list(self.adata, group_indices_list)
+        if inferred:
+            self._warn_group_indices_auto_inferred("train")
+    
+        if max_epochs is None:
+            n_cells = self.adata.n_obs
+            max_epochs = np.min([round((20000 / n_cells) * 400), 400]).item()
+    
+        plan_kwargs = plan_kwargs if isinstance(plan_kwargs, dict) else {}
+        update_dict = {
+            "n_epochs_kl_warmup": n_epochs_kl_warmup,
+            "n_steps_kl_warmup": n_steps_kl_warmup,
+        }
+        plan_kwargs.update(update_dict)
+    
+        # When using cosine annealing, default T_max to the training horizon so
+        # the LR reaches eta_min exactly at the last epoch.
+        if plan_kwargs.get("lr_scheduler_type") == "cosine":
+            plan_kwargs.setdefault("lr_cosine_T_max", max_epochs)
+    
+        data_splitter = MultiGroupDataSplitter(
+            self.adata_manager,
+            group_indices_list=group_indices_list,
+            train_size=train_size,
+            validation_size=validation_size,
+            batch_size=batch_size,
+            num_workers=num_workers,
+        )
+        cvene = trainer_kwargs.get("check_val_every_n_epoch", 1)
+        training_plan = SpVIPESmultiTrainingPlan(self.module, check_val_every_n_epoch=cvene, **plan_kwargs)
+    
+        es = "early_stopping"
+        trainer_kwargs[es] = early_stopping if es not in trainer_kwargs.keys() else trainer_kwargs[es]
+        if data_splitter.n_val > 0 and "check_val_every_n_epoch" not in trainer_kwargs:
+            trainer_kwargs["check_val_every_n_epoch"] = 1
+        # Default to clipping by global L2 norm to bound early-epoch gradient
+        # spikes (e.g. KL blowup); user can override via trainer_kwargs.
+        trainer_kwargs.setdefault("gradient_clip_val", 1.0)
+        trainer_kwargs.setdefault("gradient_clip_algorithm", "norm")
+        runner = PatchedTrainRunner(
+            self,
+            training_plan=training_plan,
+            data_splitter=data_splitter,
+            max_epochs=max_epochs,
+            **trainer_kwargs,
+        )
+>       return runner()
+
+src/spVIPESmulti/model/base/training_mixin.py:276: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <spVIPESmulti.model.base.training_mixin.PatchedTrainRunner object at 0x7fed8e121180>
+
+    def __call__(self):
+        import lightning as pl
+        from packaging import version
+        # Validate training_plan
+        if not hasattr(self, "training_plan") or self.training_plan is None:
+            raise RuntimeError("PatchedTrainRunner: training_plan is not set. Ensure TrainingPlan is constructed correctly.")
+        # Validate data_splitter
+        if not hasattr(self, "data_splitter") or self.data_splitter is None:
+            raise RuntimeError("PatchedTrainRunner: data_splitter is not set. Ensure DataSplitter is constructed correctly.")
+    
+        # Pre-fit: propagate dataset sizes to the training plan
+        if hasattr(self.data_splitter, "n_train"):
+            self.training_plan.n_obs_training = self.data_splitter.n_train
+        if hasattr(self.data_splitter, "n_val"):
+            self.training_plan.n_obs_validation = self.data_splitter.n_val
+    
+        # Lightning-version-aware trainer.fit() call
+        lightning_version = pl.__version__
+        n_val = getattr(self.data_splitter, "n_val", 0)
+    
+        # Warn if validation checking was requested but there's no validation data
+        if n_val == 0 and getattr(self.trainer, "check_val_every_n_epoch", 1) > 1:
+            warnings.warn(
+                f"check_val_every_n_epoch={self.trainer.check_val_every_n_epoch} was set, but "
+                "train_size=1.0 leaves no validation data. Validation checking will be skipped.",
+                UserWarning,
+                stacklevel=3,
+            )
+    
+        if version.parse(lightning_version) >= version.parse("2.0.0"):
+            try:
+                if n_val == 0:
+                    # Lightning 2.6.x rejects a datamodule whose val_dataloader()
+                    # returns None, so use the explicit train-dataloader path when
+                    # the requested split leaves no validation cells.
+                    self.data_splitter.setup("fit")
+                    self.trainer.fit(
+                        self.training_plan,
+                        train_dataloaders=self.data_splitter.train_dataloader(),
+                        val_dataloaders=None,  # Explicitly set to None to prevent Lightning from calling val_dataloader()
+                        ckpt_path=getattr(self, "ckpt_path", None),
+                    )
+                else:
+>                   self.trainer.fit(
+                        self.training_plan,
+                        datamodule=self.data_splitter,
+                        ckpt_path=getattr(self, "ckpt_path", None),
+                    )
+
+src/spVIPESmulti/model/base/training_mixin.py:115: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scvi.train._trainer.Trainer object at 0x7fed8e1238b0>
+args = (SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containin...)
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+),)
+kwargs = {'ckpt_path': None, 'datamodule': <spVIPESmulti.data._multi_datasplitter.MultiGroupDataSplitter object at 0x7fed8e120730>}
+
+    def fit(self, *args, **kwargs):
+        """Fit the model."""
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                action="ignore", category=UserWarning, message="The dataloader,"
+            )
+            warnings.filterwarnings(
+                action="ignore",
+                category=UserWarning,
+                message="you defined a validation_step but have no val_dataloader",
+            )
+            warnings.filterwarnings(
+                action="ignore",
+                category=UserWarning,
+                message="One of given dataloaders is None and it will be skipped",
+            )
+            # bug in pytorch lightning, assumes SequentialSampler
+            # https://github.com/PyTorchLightning/pytorch-lightning/blob/
+            # 48cb38ac5dd0159c8f7c5189c888dfd04a2ed34b/pytorch_lightning/
+            # trainer/data_loading.py#L311-L314
+            warnings.filterwarnings(
+                action="ignore",
+                category=UserWarning,
+                message="Your `val_dataloader` has `shuffle=True`",
+            )
+            if isinstance(args[0], PyroTrainingPlan):
+                warnings.filterwarnings(
+                    action="ignore",
+                    category=UserWarning,
+                    message="`LightningModule.configure_optimizers` returned `None`",
+                )
+            try:
+>               super().fit(*args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/train/_trainer.py:215: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scvi.train._trainer.Trainer object at 0x7fed8e1238b0>
+model = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+train_dataloaders = None, val_dataloaders = None
+datamodule = <spVIPESmulti.data._multi_datasplitter.MultiGroupDataSplitter object at 0x7fed8e120730>
+ckpt_path = None, weights_only = None
+
+    def fit(
+        self,
+        model: "pl.LightningModule",
+        train_dataloaders: Optional[Union[TRAIN_DATALOADERS, LightningDataModule]] = None,
+        val_dataloaders: Optional[EVAL_DATALOADERS] = None,
+        datamodule: Optional[LightningDataModule] = None,
+        ckpt_path: Optional[_PATH] = None,
+        weights_only: Optional[bool] = None,
+    ) -> None:
+        r"""Runs the full optimization routine.
+    
+        Args:
+            model: Model to fit.
+    
+            train_dataloaders: An iterable or collection of iterables specifying training samples.
+                Alternatively, a :class:`~lightning.pytorch.core.datamodule.LightningDataModule` that defines
+                the :class:`~lightning.pytorch.core.hooks.DataHooks.train_dataloader` hook.
+    
+            val_dataloaders: An iterable or collection of iterables specifying validation samples.
+    
+            datamodule: A :class:`~lightning.pytorch.core.datamodule.LightningDataModule` that defines
+                the :class:`~lightning.pytorch.core.hooks.DataHooks.train_dataloader` hook.
+    
+            ckpt_path: Path/URL of the checkpoint from which training is resumed. Could also be one of three special
+                keywords ``"last"``, ``"hpc"`` and ``"registry"``.
+                Otherwise, if there is no checkpoint file at the path, an exception is raised.
+    
+                    - best: the best model checkpoint from the previous ``trainer.fit`` call will be loaded
+                    - last: the last model checkpoint from the previous ``trainer.fit`` call will be loaded
+                    - registry: the model will be downloaded from the Lightning Model Registry with following notations:
+    
+                        - ``'registry'``: uses the latest/default version of default model set
+                          with ``Trainer(..., model_registry="my-model")``
+                        - ``'registry:model-name'``: uses the latest/default version of this model `model-name`
+                        - ``'registry:model-name:version:v2'``: uses the specific version 'v2' of the model `model-name`
+                        - ``'registry:version:v2'``: uses the default model set
+                          with ``Trainer(..., model_registry="my-model")`` and version 'v2'
+    
+            weights_only: Defaults to ``None``. If ``True``, restricts loading to ``state_dicts`` of plain
+                ``torch.Tensor`` and other primitive types. If loading a checkpoint from a trusted source that contains
+                an ``nn.Module``, use ``weights_only=False``. If loading checkpoint from an untrusted source, we
+                recommend using ``weights_only=True``. For more information, please refer to the
+                `PyTorch Developer Notes on Serialization Semantics <https://docs.pytorch.org/docs/main/notes/serialization.html#id3>`_.
+    
+        For more information about multiple dataloaders, see this :ref:`section <multiple-dataloaders>`.
+    
+        :rtype: :py:obj:`None`
+    
+        Raises:
+            TypeError:
+                If ``model`` is not :class:`~lightning.pytorch.core.LightningModule` for torch version less than
+                2.0.0 and if ``model`` is not :class:`~lightning.pytorch.core.LightningModule` or
+                :class:`torch._dynamo.OptimizedModule` for torch versions greater than or equal to 2.0.0 .
+    
+        """
+        model = _maybe_unwrap_optimized(model)
+        self.strategy._lightning_module = model
+        _verify_strategy_supports_compile(model, self.strategy)
+        self.state.fn = TrainerFn.FITTING
+        self.state.status = TrainerStatus.RUNNING
+        self.training = True
+        self.should_stop = False
+>       call._call_and_handle_interrupt(
+            self,
+            self._fit_impl,
+            model,
+            train_dataloaders,
+            val_dataloaders,
+            datamodule,
+            ckpt_path,
+            weights_only,
+        )
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/trainer/trainer.py:584: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+trainer = <scvi.train._trainer.Trainer object at 0x7fed8e1238b0>
+trainer_fn = <bound method Trainer._fit_impl of <scvi.train._trainer.Trainer object at 0x7fed8e1238b0>>
+args = (SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containin...c()
+), None, None, <spVIPESmulti.data._multi_datasplitter.MultiGroupDataSplitter object at 0x7fed8e120730>, None, None)
+kwargs = {}
+
+    def _call_and_handle_interrupt(trainer: "pl.Trainer", trainer_fn: Callable, *args: Any, **kwargs: Any) -> Any:
+        r"""Error handling, intended to be used only for main trainer function entry points (fit, validate, test, predict)
+        as all errors should funnel through them.
+    
+        Args:
+            trainer_fn: one of (fit, validate, test, predict)
+            *args: positional arguments to be passed to the `trainer_fn`
+            **kwargs: keyword arguments to be passed to `trainer_fn`
+    
+        """
+        try:
+            if trainer.strategy.launcher is not None:
+                return trainer.strategy.launcher.launch(trainer_fn, *args, trainer=trainer, **kwargs)
+>           return trainer_fn(*args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/trainer/call.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scvi.train._trainer.Trainer object at 0x7fed8e1238b0>
+model = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+train_dataloaders = None, val_dataloaders = None
+datamodule = <spVIPESmulti.data._multi_datasplitter.MultiGroupDataSplitter object at 0x7fed8e120730>
+ckpt_path = None, weights_only = None
+
+    def _fit_impl(
+        self,
+        model: "pl.LightningModule",
+        train_dataloaders: Optional[Union[TRAIN_DATALOADERS, LightningDataModule]] = None,
+        val_dataloaders: Optional[EVAL_DATALOADERS] = None,
+        datamodule: Optional[LightningDataModule] = None,
+        ckpt_path: Optional[_PATH] = None,
+        weights_only: Optional[bool] = None,
+    ) -> None:
+        log.debug(f"{self.__class__.__name__}: trainer fit stage")
+    
+        # if a datamodule comes in as the second arg, then fix it for the user
+        if isinstance(train_dataloaders, LightningDataModule):
+            datamodule = train_dataloaders
+            train_dataloaders = None
+        # If you supply a datamodule you can't supply train_dataloader or val_dataloaders
+        if (train_dataloaders is not None or val_dataloaders is not None) and datamodule is not None:
+            raise MisconfigurationException(
+                "You cannot pass `train_dataloader` or `val_dataloaders` to `trainer.fit(datamodule=...)`"
+            )
+    
+        # links data to the trainer
+        self._data_connector.attach_data(
+            model, train_dataloaders=train_dataloaders, val_dataloaders=val_dataloaders, datamodule=datamodule
+        )
+    
+        assert self.state.fn is not None
+        if _is_registry(ckpt_path) and module_available("litmodels"):
+            download_model_from_registry(ckpt_path, self)
+        ckpt_path = self._checkpoint_connector._select_ckpt_path(
+            self.state.fn,
+            ckpt_path,
+            model_provided=True,
+            model_connected=self.lightning_module is not None,
+        )
+>       self._run(model, ckpt_path=ckpt_path, weights_only=weights_only)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/trainer/trainer.py:630: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scvi.train._trainer.Trainer object at 0x7fed8e1238b0>
+model = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+ckpt_path = None, weights_only = None
+
+    def _run(
+        self,
+        model: "pl.LightningModule",
+        ckpt_path: Optional[_PATH] = None,
+        weights_only: Optional[bool] = None,
+    ) -> Optional[Union[_EVALUATE_OUTPUT, _PREDICT_OUTPUT]]:
+        if self.state.fn == TrainerFn.FITTING:
+            min_epochs, max_epochs = _parse_loop_limits(
+                self.min_steps, self.max_steps, self.min_epochs, self.max_epochs, self
+            )
+            self.fit_loop.min_epochs = min_epochs
+            self.fit_loop.max_epochs = max_epochs
+    
+        if self.barebones:
+            # no progress bar in barebones can make it look like the Trainer hung
+            rank_zero_info(
+                "`Trainer(barebones=True)` started running. The progress bar is disabled so you might want to"
+                " manually print the progress in your model."
+            )
+    
+        # clean hparams
+        if hasattr(model, "hparams"):
+            parsing.clean_namespace(model.hparams)
+    
+        # attach model to the strategy
+        self.strategy.connect(model)
+    
+        self._callback_connector._attach_model_callbacks()
+        self._callback_connector._attach_model_logging_functions()
+    
+        _verify_loop_configurations(self)
+    
+        # ----------------------------
+        # SET UP THE TRAINER
+        # ----------------------------
+        log.debug(f"{self.__class__.__name__}: setting up strategy environment")
+        self.strategy.setup_environment()
+        self.__setup_profiler()
+    
+        log.debug(f"{self.__class__.__name__}: preparing data")
+        self._data_connector.prepare_data()
+    
+        call._call_setup_hook(self)  # allow user to set up LightningModule in accelerator environment
+        log.debug(f"{self.__class__.__name__}: configuring model")
+        call._call_configure_model(self)
+    
+        # check if we should delay restoring checkpoint till later
+        if not self.strategy.restore_checkpoint_after_setup:
+            log.debug(f"{self.__class__.__name__}: restoring module and callbacks from checkpoint path: {ckpt_path}")
+            self._checkpoint_connector._restore_modules_and_callbacks(ckpt_path, weights_only)
+    
+        # reset logger connector
+        self._logger_connector.reset_results()
+        self._logger_connector.reset_metrics()
+    
+        # strategy will configure model and move it to the device
+        self.strategy.setup(self)
+    
+        # hook
+        if self.state.fn == TrainerFn.FITTING:
+            call._call_callback_hooks(self, "on_fit_start")
+            call._call_lightning_module_hook(self, "on_fit_start")
+    
+        # only log hparams if enabled
+        if self.enable_autolog_hparams:
+            _log_hyperparams(self)
+    
+        if self.strategy.restore_checkpoint_after_setup:
+            log.debug(f"{self.__class__.__name__}: restoring module and callbacks from checkpoint path: {ckpt_path}")
+            self._checkpoint_connector._restore_modules_and_callbacks(ckpt_path)
+    
+        # restore optimizers, etc.
+        log.debug(f"{self.__class__.__name__}: restoring training state")
+        self._checkpoint_connector.restore_training_state()
+    
+        self._checkpoint_connector.resume_end()
+    
+        self._signal_connector.register_signal_handlers()
+    
+        # ----------------------------
+        # RUN THE TRAINER
+        # ----------------------------
+>       results = self._run_stage()
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/trainer/trainer.py:1079: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scvi.train._trainer.Trainer object at 0x7fed8e1238b0>
+
+    def _run_stage(self) -> Optional[Union[_PREDICT_OUTPUT, _EVALUATE_OUTPUT]]:
+        # wait for all to join if on distributed
+        self.strategy.barrier("run-stage")
+        self.lightning_module.zero_grad()
+    
+        if self.evaluating:
+            return self._evaluation_loop.run()
+        if self.predicting:
+            return self.predict_loop.run()
+        if self.training:
+            with isolate_rng():
+                self._run_sanity_check()
+            with torch.autograd.set_detect_anomaly(self._detect_anomaly):
+>               self.fit_loop.run()
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/trainer/trainer.py:1123: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.fit_loop._FitLoop object at 0x7fed8e123e80>
+
+    def run(self) -> None:
+        self.setup_data()
+        if self.skip:
+            return
+        self.reset()
+        self.on_run_start()
+        while not self.done:
+            try:
+                self.on_advance_start()
+>               self.advance()
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/fit_loop.py:217: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.fit_loop._FitLoop object at 0x7fed8e123e80>
+
+    def advance(self) -> None:
+        """Runs one whole epoch."""
+        log.debug(f"{type(self).__name__}: advancing loop")
+    
+        combined_loader = self._combined_loader
+        assert combined_loader is not None
+        if combined_loader._mode == "sequential":
+            raise ValueError(
+                f'`{type(self).__name__}` does not support the `CombinedLoader(mode="sequential")` mode.'
+                f" The available modes are: {[m for m in _SUPPORTED_MODES if m != 'sequential']}"
+            )
+        with self.trainer.profiler.profile("run_training_epoch"):
+            assert self._data_fetcher is not None
+>           self.epoch_loop.run(self._data_fetcher)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/fit_loop.py:465: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.training_epoch_loop._TrainingEpochLoop object at 0x7fed8e123eb0>
+data_fetcher = <lightning.pytorch.loops.fetchers._PrefetchDataFetcher object at 0x7fed8e03d570>
+
+    def run(self, data_fetcher: _DataFetcher) -> None:
+        self.reset()
+        self.on_run_start(data_fetcher)
+        while not self.done:
+            try:
+                self.advance(data_fetcher)
+>               self.on_advance_end(data_fetcher)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/training_epoch_loop.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.training_epoch_loop._TrainingEpochLoop object at 0x7fed8e123eb0>
+data_fetcher = <lightning.pytorch.loops.fetchers._PrefetchDataFetcher object at 0x7fed8e03d570>
+
+    def on_advance_end(self, data_fetcher: _DataFetcher) -> None:
+        # -----------------------------------------
+        # VALIDATE IF NEEDED
+        # -----------------------------------------
+        should_check_val = self._should_check_val_fx(data_fetcher)
+    
+        if self._skip_next_val:
+            should_check_val = False
+            self._skip_next_val = False
+    
+        if should_check_val:
+            # this needs to be set so the correct `trainer._active_loop` is picked
+            self.trainer.validating = True
+            # save and reset this state in case validation runs inside training loop (val_check_interval<1.0)
+            first_loop_iter = self.trainer._logger_connector._first_loop_iter
+    
+            if not self._should_accumulate():
+                # clear gradients to not leave any unused memory during validation
+                call._call_lightning_module_hook(self.trainer, "on_validation_model_zero_grad")
+    
+>           self.val_loop.run()
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/training_epoch_loop.py:406: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.evaluation_loop._EvaluationLoop object at 0x7fed8e03d000>
+args = (), kwargs = {}
+context_manager = <class 'torch.autograd.grad_mode.no_grad'>
+
+    def _decorator(self: _Loop, *args: Any, **kwargs: Any) -> Any:
+        if not isinstance(self, _Loop):
+            raise TypeError(f"`{type(self).__name__}` needs to be a Loop.")
+        if not hasattr(self, "inference_mode"):
+            raise TypeError(f"`{type(self).__name__}.inference_mode` needs to be defined")
+        context_manager: type[AbstractContextManager]
+        if _distributed_is_initialized() and dist.get_backend() == "gloo":
+            # gloo backend does not work properly.
+            # https://github.com/Lightning-AI/pytorch-lightning/pull/12715/files#r854569110
+            # TODO: explore why and possibly open an issue in PyTorch repository
+            context_manager = torch.no_grad
+        elif isinstance(self.trainer.accelerator, XLAAccelerator):
+            context_manager = torch.no_grad
+        elif isinstance(self.trainer.strategy, FSDPStrategy):
+            # https://github.com/pytorch/pytorch/issues/95957
+            context_manager = torch.no_grad
+        elif self.inference_mode:
+            context_manager = torch.inference_mode
+        else:
+            context_manager = torch.no_grad
+        with context_manager():
+>           return loop_run(self, *args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/utilities.py:179: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.evaluation_loop._EvaluationLoop object at 0x7fed8e03d000>
+
+    @_no_grad_context
+    def run(self) -> list[_OUT_DICT]:
+        self.setup_data()
+        if self.skip:
+            return []
+        self.reset()
+        self.on_run_start()
+        data_fetcher = self._data_fetcher
+        assert data_fetcher is not None
+        previous_dataloader_idx = 0
+        while True:
+            try:
+                if isinstance(data_fetcher, _DataLoaderIterDataFetcher):
+                    dataloader_iter = next(data_fetcher)
+                    # hook's batch_idx and dataloader_idx arguments correctness cannot be guaranteed in this setting
+                    batch = data_fetcher._batch
+                    batch_idx = data_fetcher._batch_idx
+                    dataloader_idx = data_fetcher._dataloader_idx
+                else:
+                    dataloader_iter = None
+                    batch, batch_idx, dataloader_idx = next(data_fetcher)
+                if previous_dataloader_idx != dataloader_idx:
+                    # the dataloader has changed, notify the logger connector
+                    self._store_dataloader_outputs()
+                previous_dataloader_idx = dataloader_idx
+                self.batch_progress.is_last_batch = data_fetcher.done
+                # run step hooks
+>               self._evaluation_step(batch, batch_idx, dataloader_idx, dataloader_iter)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/evaluation_loop.py:146: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.evaluation_loop._EvaluationLoop object at 0x7fed8e03d000>
+batch = {'X': tensor([[ 2.,  4.,  8.,  5.,  5.,  4.,  2.,  8.,  2.,  4., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan,...     [1.],
+        [1.]]), 'indices': tensor([[ 3.],
+        [ 3.],
+        [11.],
+        [ 7.],
+        [10.]]), ...}
+batch_idx = 1, dataloader_idx = 0, dataloader_iter = None
+
+    def _evaluation_step(
+        self, batch: Any, batch_idx: int, dataloader_idx: int, dataloader_iter: Optional[Iterator]
+    ) -> None:
+        """Runs the actual evaluation step together with all the necessary bookkeeping and the hooks tied to it.
+    
+        Args:
+            batch: The current batch to run through the step.
+            batch_idx: The index of the current batch.
+            dataloader_idx: the index of the dataloader producing the current batch.
+            dataloader_iter: The iterator if using this step flavor.
+    
+        """
+        trainer = self.trainer
+        data_fetcher = self._data_fetcher
+        assert data_fetcher is not None
+    
+        if not (using_dataloader_iter := isinstance(data_fetcher, _DataLoaderIterDataFetcher)):
+            batch = trainer.precision_plugin.convert_input(batch)
+            batch = trainer.lightning_module._on_before_batch_transfer(batch, dataloader_idx=dataloader_idx)
+            batch = call._call_strategy_hook(trainer, "batch_to_device", batch, dataloader_idx=dataloader_idx)
+    
+        # the `_step` methods don't take a batch_idx when `dataloader_iter` is used, but all other hooks still do,
+        # so we need different kwargs
+        hook_kwargs = self._build_kwargs(
+            batch, batch_idx, dataloader_idx if self._is_sequential and self.num_dataloaders > 1 else None
+        )
+    
+        self.batch_progress.increment_ready()
+    
+        trainer._logger_connector.on_batch_start(
+            batch, dataloader_idx if self._is_sequential and self.num_dataloaders > 1 else None
+        )
+    
+        hook_name = "on_test_batch_start" if trainer.testing else "on_validation_batch_start"
+        call._call_callback_hooks(trainer, hook_name, *hook_kwargs.values())
+        call._call_lightning_module_hook(trainer, hook_name, *hook_kwargs.values())
+    
+        self.batch_progress.increment_started()
+    
+        hook_name = "test_step" if trainer.testing else "validation_step"
+        step_args = (
+            self._build_step_args_from_hook_kwargs(hook_kwargs, hook_name)
+            if not using_dataloader_iter
+            else (dataloader_iter,)
+        )
+>       output = call._call_strategy_hook(trainer, hook_name, *step_args)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/evaluation_loop.py:441: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+trainer = <scvi.train._trainer.Trainer object at 0x7fed8e1238b0>
+hook_name = 'validation_step'
+args = ({'X': tensor([[ 2.,  4.,  8.,  5.,  5.,  4.,  2.,  8.,  2.,  4., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan... [1.],
+        [1.]]), 'indices': tensor([[ 3.],
+        [ 3.],
+        [11.],
+        [ 7.],
+        [10.]]), ...}, 1)
+kwargs = {}
+pl_module = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+prev_fx_name = None
+fn = <bound method Strategy.validation_step of <lightning.pytorch.strategies.single_device.SingleDeviceStrategy object at 0x7fed8e123be0>>
+
+    def _call_strategy_hook(
+        trainer: "pl.Trainer",
+        hook_name: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        log.debug(f"{trainer.__class__.__name__}: calling strategy hook: {hook_name}")
+    
+        pl_module = trainer.lightning_module
+        prev_fx_name = pl_module._current_fx_name
+        pl_module._current_fx_name = hook_name
+    
+        fn = getattr(trainer.strategy, hook_name)
+        if not callable(fn):
+            return None
+    
+        with trainer.profiler.profile(f"[Strategy]{trainer.strategy.__class__.__name__}.{hook_name}"):
+>           output = fn(*args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/trainer/call.py:329: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.strategies.single_device.SingleDeviceStrategy object at 0x7fed8e123be0>
+args = ({'X': tensor([[ 2.,  4.,  8.,  5.,  5.,  4.,  2.,  8.,  2.,  4., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan... [1.],
+        [1.]]), 'indices': tensor([[ 3.],
+        [ 3.],
+        [11.],
+        [ 7.],
+        [10.]]), ...}, 1)
+kwargs = {}
+
+    def validation_step(self, *args: Any, **kwargs: Any) -> STEP_OUTPUT:
+        """The actual validation step.
+    
+        See :meth:`~lightning.pytorch.core.LightningModule.validation_step` for more details
+    
+        """
+        assert self.lightning_module is not None
+        assert self.model is not None
+        with self.precision_plugin.val_step_context():
+            if self.model != self.lightning_module:
+                return self._forward_redirection(self.model, self.lightning_module, "validation_step", *args, **kwargs)
+>           return self.lightning_module.validation_step(*args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/strategies/strategy.py:412: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+batch = {'X': tensor([[ 2.,  4.,  8.,  5.,  5.,  4.,  2.,  8.,  2.,  4., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan,...     [1.],
+        [1.]]), 'indices': tensor([[ 3.],
+        [ 3.],
+        [11.],
+        [ 7.],
+        [10.]]), ...}
+batch_idx = 1
+
+    def validation_step(self, batch, batch_idx):
+        """Validation step for the model."""
+        # loss kwargs here contains `n_obs` equal to n_training_obs
+        # so when relevant, the actual loss value is rescaled to number
+        # of training examples
+>       _, _, scvi_loss = self.forward(batch, loss_kwargs=self.loss_kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/train/_trainingplans.py:446: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+args = ({'X': tensor([[ 2.,  4.,  8.,  5.,  5.,  4.,  2.,  8.,  2.,  4., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan...   [1.],
+        [1.]]), 'indices': tensor([[ 3.],
+        [ 3.],
+        [11.],
+        [ 7.],
+        [10.]]), ...},)
+kwargs = {'loss_kwargs': {'kl_weight': tensor(0.)}}
+
+    def forward(self, *args, **kwargs):
+        """Passthrough to the module's forward method."""
+>       return self.module(
+            *args,
+            **kwargs,
+            get_inference_input_kwargs={"full_forward_pass": not self.update_only_decoder},
+        )
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/train/_trainingplans.py:294: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+args = ({'X': tensor([[ 2.,  4.,  8.,  5.,  5.,  4.,  2.,  8.,  2.,  4., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan...   [1.],
+        [1.]]), 'indices': tensor([[ 3.],
+        [ 3.],
+        [11.],
+        [ 7.],
+        [10.]]), ...},)
+kwargs = {'get_inference_input_kwargs': {'full_forward_pass': True}, 'loss_kwargs': {'kl_weight': tensor(0.)}}
+
+    def _wrapped_call_impl(self, *args, **kwargs):
+        if self._compiled_call_impl is not None:
+            return self._compiled_call_impl(*args, **kwargs)  # type: ignore[misc]
+        else:
+>           return self._call_impl(*args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/torch/nn/modules/module.py:1779: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+args = ({'X': tensor([[ 2.,  4.,  8.,  5.,  5.,  4.,  2.,  8.,  2.,  4., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan...   [1.],
+        [1.]]), 'indices': tensor([[ 3.],
+        [ 3.],
+        [11.],
+        [ 7.],
+        [10.]]), ...},)
+kwargs = {'get_inference_input_kwargs': {'full_forward_pass': True}, 'loss_kwargs': {'kl_weight': tensor(0.)}}
+
+    def _call_impl(self, *args, **kwargs):
+        forward_call = (self._slow_forward if torch._C._get_tracing_state() else self.forward)
+        # If we don't have any hooks, we want to skip the rest of the logic in
+        # this function, and just call forward.
+        if not (self._backward_hooks or self._backward_pre_hooks or self._forward_hooks or self._forward_pre_hooks
+                or _global_backward_pre_hooks or _global_backward_hooks
+                or _global_forward_hooks or _global_forward_pre_hooks):
+>           return forward_call(*args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/torch/nn/modules/module.py:1790: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+args = ({'X': tensor([[ 2.,  4.,  8.,  5.,  5.,  4.,  2.,  8.,  2.,  4., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan...   [1.],
+        [1.]]), 'indices': tensor([[ 3.],
+        [ 3.],
+        [11.],
+        [ 7.],
+        [10.]]), ...},)
+kwargs = {'get_inference_input_kwargs': {}, 'loss_kwargs': {'kl_weight': tensor(0.)}}
+device = device(type='cpu')
+
+    @wraps(fn)
+    def auto_transfer_args(self, *args, **kwargs):
+        if not isinstance(self, Module):
+            return fn(self, *args, **kwargs)
+    
+        # decorator only necessary after training
+        if self.training:
+            return fn(self, *args, **kwargs)
+    
+        device = list({p.device for p in self.parameters()})
+        if len(device) > 1:
+            raise RuntimeError("Module tensors on multiple devices.")
+        else:
+            device = device[0]
+        args = _move_data_to_device(args, device)
+        kwargs = _move_data_to_device(kwargs, device)
+>       return fn(self, *args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/module/base/_decorators.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+tensors = {'X': tensor([[ 2.,  4.,  8.,  5.,  5.,  4.,  2.,  8.,  2.,  4., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan,...     [1.],
+        [1.]]), 'indices': tensor([[ 3.],
+        [ 3.],
+        [11.],
+        [ 7.],
+        [10.]]), ...}
+get_inference_input_kwargs = {}, get_generative_input_kwargs = None
+inference_kwargs = None, generative_kwargs = None
+loss_kwargs = {'kl_weight': tensor(0.)}, compute_loss = True
+
+    @auto_move_data
+    def forward(
+        self,
+        tensors,
+        get_inference_input_kwargs: dict | None = None,
+        get_generative_input_kwargs: dict | None = None,
+        inference_kwargs: dict | None = None,
+        generative_kwargs: dict | None = None,
+        loss_kwargs: dict | None = None,
+        compute_loss=True,
+    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, LossOutput]:
+        """Forward pass through the network.
+    
+        Parameters
+        ----------
+        tensors
+            tensors to pass through
+        get_inference_input_kwargs
+            Keyword args for ``_get_inference_input()``
+        get_generative_input_kwargs
+            Keyword args for ``_get_generative_input()``
+        inference_kwargs
+            Keyword args for ``inference()``
+        generative_kwargs
+            Keyword args for ``generative()``
+        loss_kwargs
+            Keyword args for ``loss()``
+        compute_loss
+            Whether to compute loss on forward pass. This adds
+            another return value.
+        """
+>       return _generic_forward(
+            self,
+            tensors,
+            inference_kwargs,
+            generative_kwargs,
+            loss_kwargs,
+            get_inference_input_kwargs,
+            get_generative_input_kwargs,
+            compute_loss,
+        )
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/module/base/_base_module.py:210: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+module = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+tensors = {'X': tensor([[ 2.,  4.,  8.,  5.,  5.,  4.,  2.,  8.,  2.,  4., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan,...     [1.],
+        [1.]]), 'indices': tensor([[ 3.],
+        [ 3.],
+        [11.],
+        [ 7.],
+        [10.]]), ...}
+inference_kwargs = {}, generative_kwargs = {}
+loss_kwargs = {'kl_weight': tensor(0.)}, get_inference_input_kwargs = {}
+get_generative_input_kwargs = {}, compute_loss = True
+
+    def _generic_forward(
+        module,
+        tensors,
+        inference_kwargs,
+        generative_kwargs,
+        loss_kwargs,
+        get_inference_input_kwargs,
+        get_generative_input_kwargs,
+        compute_loss,
+    ):
+        """Core of the forward call shared by PyTorch- and Jax-based modules."""
+        inference_kwargs = _get_dict_if_none(inference_kwargs)
+        generative_kwargs = _get_dict_if_none(generative_kwargs)
+        loss_kwargs = _get_dict_if_none(loss_kwargs)
+        get_inference_input_kwargs = _get_dict_if_none(get_inference_input_kwargs)
+        get_generative_input_kwargs = _get_dict_if_none(get_generative_input_kwargs)
+        if not ("latent_qzm" in tensors.keys() and "latent_qzv" in tensors.keys()):
+            # Remove full_forward_pass if not minified model
+            get_inference_input_kwargs.pop("full_forward_pass", None)
+    
+        inference_inputs = module._get_inference_input(tensors, **get_inference_input_kwargs)
+>       inference_outputs = module.inference(**inference_inputs, **inference_kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/module/base/_base_module.py:753: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+args = ()
+kwargs = {'batch_index': [tensor([[0]]), tensor([[0],
+        [0],
+        [0],
+        [0]])], 'global_indices': [tensor([[3.]...[[0.]]), tensor([[1.],
+        [1.],
+        [1.],
+        [1.]])], 'labels': [tensor([0]), tensor([0, 1, 0, 1])], ...}
+device = device(type='cpu')
+
+    @wraps(fn)
+    def auto_transfer_args(self, *args, **kwargs):
+        if not isinstance(self, Module):
+            return fn(self, *args, **kwargs)
+    
+        # decorator only necessary after training
+        if self.training:
+            return fn(self, *args, **kwargs)
+    
+        device = list({p.device for p in self.parameters()})
+        if len(device) > 1:
+            raise RuntimeError("Module tensors on multiple devices.")
+        else:
+            device = device[0]
+        args = _move_data_to_device(args, device)
+        kwargs = _move_data_to_device(kwargs, device)
+>       return fn(self, *args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/module/base/_decorators.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+x = {0: tensor([[1.0986, 1.6094, 2.1972, 1.7918, 1.7918, 1.6094, 1.0986, 2.1972, 1.0986,
+         1.6094]]), 1: tensor([[1...
+         1.7918],
+        [1.9459, 1.9459, 2.3979, 1.0986, 2.5649, 2.1972, 1.9459, 2.0794, 1.9459,
+         1.6094]])}
+batch_index = [tensor([[0]]), tensor([[0],
+        [0],
+        [0],
+        [0]])]
+groups = [tensor([[0.]]), tensor([[1.],
+        [1.],
+        [1.],
+        [1.]])]
+global_indices = [tensor([[3.]]), tensor([[ 3.],
+        [11.],
+        [ 7.],
+        [10.]])]
+kwargs = {'labels': [tensor([0]), tensor([0, 1, 0, 1])]}
+library = {0: tensor([[3.7842]]), 1: tensor([[3.7842],
+        [3.7842],
+        [3.8067],
+        [4.2047]])}
+private_stats = {0: {'log_z': tensor([[-2.1425,  1.5270]]), 'logtheta_loc': tensor([[-0.9995,  0.9995]]), 'logtheta_logvar': tensor([[...scale': tensor([[0.6065, 1.6495],
+        [0.6065, 1.6495],
+        [0.6065, 1.6494],
+        [0.6065, 1.6495]]), ...}}
+shared_stats = {0: {'log_z': tensor([[-0.6638,  2.5694]]), 'logtheta_loc': tensor([[-0.9978,  0.9989]]), 'logtheta_logvar': tensor([[...scale': tensor([[0.6071, 1.6468],
+        [0.6072, 1.6467],
+        [0.6073, 1.6463],
+        [0.6071, 1.6470]]), ...}}
+group_code_list = [0, 1], pos = 1
+item = tensor([[1.7918, 1.6094, 1.6094, 1.3863, 1.7918, 1.9459, 1.3863, 1.7918, 2.0794,
+         1.0986],
+        [1.9459, 1....,
+         1.7918],
+        [1.9459, 1.9459, 2.3979, 1.0986, 2.5649, 2.1972, 1.9459, 2.0794, 1.9459,
+         1.6094]])
+batch = tensor([[0],
+        [0],
+        [0],
+        [0]])
+
+    @auto_move_data
+    def inference(self, x, batch_index, groups, global_indices, **kwargs):
+        """Runs the encoder model.
+    
+        In single-modality mode, runs per-group shared/private encoders then inter-group PoE.
+        In multimodal mode, runs per-(group, modality) encoders, then intra-group PoE across
+        modalities, then inter-group PoE.
+        """
+        if self.is_multimodal:
+            return self._inference_multimodal(x, batch_index, groups, global_indices, **kwargs)
+    
+        # Single-modality mode (backward compatible)
+        x = {
+            i: xs[:, self.groups_var_indices[i]] for i, xs in x.items()
+        }  # update each groups minibatch with its own gene indices
+    
+        # W-010: compute library size from raw counts BEFORE log1p transform so
+        # that log-library reflects the true sequencing depth, not log(1+x) sums.
+        library = {i: torch.log(xs.sum(1).clamp(min=1e-6)).unsqueeze(1) for i, xs in x.items()}
+    
+        if self.log_variational_inference:
+            x = {i: torch.log(1 + xs) for i, xs in x.items()}  # logvariational
+    
+        private_stats = {}
+        shared_stats = {}
+    
+        # W-003: use the actual group code from `groups` (the tensor passed in
+        # from the dataloader) rather than the loop-enumeration position. When a
+        # mini-batch is missing one group, enumerate() would select the wrong
+        # encoder for the remaining groups.
+        group_code_list = [int(g.reshape(-1)[0].item()) for g in groups]
+        for pos, (item, batch) in enumerate(zip(x.values(), batch_index)):
+            group_code = group_code_list[pos]
+            private_encoder = self.encoders[group_code]["private"]
+            shared_encoder = self.encoders[group_code]["shared"]
+    
+            private_values = private_encoder(item, group_code, batch)
+            shared_values = shared_encoder(item, group_code, batch)
+    
+            private_stats[pos] = private_values
+            shared_stats[pos] = shared_values
+    
+        labels = None
+        if self.use_labels:
+            if "labels" in kwargs:
+                labels = dict(enumerate(kwargs["labels"]))
+    
+>       poe_stats = self._supervised_poe(shared_stats, labels)
+
+src/spVIPESmulti/module/spVIPESmultimodule.py:573: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+shared_stats = {0: {'log_z': tensor([[-0.6638,  2.5694]]), 'logtheta_loc': tensor([[-0.9978,  0.9989]]), 'logtheta_logvar': tensor([[...scale': tensor([[0.6071, 1.6468],
+        [0.6072, 1.6467],
+        [0.6073, 1.6463],
+        [0.6071, 1.6470]]), ...}}
+labels = {0: tensor([0]), 1: tensor([0, 1, 0, 1])}
+
+    def _supervised_poe(
+        self,
+        shared_stats,
+        labels: Optional[dict[int, torch.Tensor]],
+    ):
+        if not (self.use_labels and labels is not None):
+            raise RuntimeError(
+                "internal: labels missing in _supervised_poe — "
+                "setup_anndata enforcement was bypassed. "
+                "This should never happen; please report as a bug."
+            )
+>       return self._label_based_poe(shared_stats, labels)
+
+src/spVIPESmulti/module/spVIPESmultimodule.py:692: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+shared_stats = {0: {'log_z': tensor([[-0.6638,  2.5694]]), 'logtheta_loc': tensor([[-0.9978,  0.9989]]), 'logtheta_logvar': tensor([[...scale': tensor([[0.6071, 1.6468],
+        [0.6072, 1.6467],
+        [0.6073, 1.6463],
+        [0.6071, 1.6470]]), ...}}
+label_group = {0: tensor([0]), 1: tensor([0, 1, 0, 1])}
+
+    def _label_based_poe(self, shared_stats: dict, label_group: dict):
+        """Label-based PoE for N >= 2 groups.
+    
+        For each cell type label, combines shared encoder statistics from all groups
+        that contain cells of that type using Product of Experts. Groups missing a label
+        contribute an uninformative prior (loc=0, logvar=log(1)=0).
+        """
+        stat_keys = ["logtheta_loc", "logtheta_logvar", "logtheta_scale"]
+        group_keys = sorted(shared_stats.keys())
+        n_groups = len(group_keys)
+    
+        # Extract per-group stats and labels
+        per_group_stats = {}
+        per_group_labels = {}
+        for g in group_keys:
+            per_group_stats[g] = {k: shared_stats[g][k] for k in stat_keys if k in shared_stats[g]}
+            per_group_labels[g] = label_group[g]
+    
+        # Collect all unique labels across all groups and determine which groups have each label
+        label_sets = {g: set(per_group_labels[g].flatten().tolist()) for g in group_keys}
+        all_labels = set()
+        for s in label_sets.values():
+            all_labels |= s
+    
+        # For each label, compute PoE across groups that have cells with that label
+        poe_stats_per_label = {}
+        for label in all_labels:
+            groups_with_label = [g for g in group_keys if label in label_sets[g]]
+            groups_without_label = [g for g in group_keys if label not in label_sets[g]]
+    
+            # Build stats dict for _poe_n: groups with label contribute real stats,
+            # groups without contribute uninformative prior
+            label_stats_for_poe = {}
+            for g in groups_with_label:
+                mask = (per_group_labels[g] == label).squeeze()
+                label_stats_for_poe[g] = {key: value[mask] for key, value in per_group_stats[g].items()}
+    
+            if len(groups_with_label) >= 2:
+                # Enough groups for PoE — absent groups contribute near-zero precision so
+                # only the global prior inside _product_of_experts (ones_like) acts as prior.
+                # Using logvar=30 gives precision ≈ exp(-30) ≈ 0, avoiding the double-prior
+                # that would result from logvar=0 (precision=1) + ones_like (precision=1).
+                for g in groups_without_label:
+                    ref_g = groups_with_label[0]
+                    n_cells = label_stats_for_poe[ref_g]["logtheta_loc"].shape[0]
+                    latent_dim = label_stats_for_poe[ref_g]["logtheta_loc"].shape[1]
+                    device = label_stats_for_poe[ref_g]["logtheta_loc"].device
+                    _large_logvar = torch.full((n_cells, latent_dim), 30.0, device=device)
+                    label_stats_for_poe[g] = {
+                        "logtheta_loc": torch.zeros(n_cells, latent_dim, device=device),
+                        "logtheta_logvar": _large_logvar,
+                        "logtheta_scale": torch.exp(0.5 * _large_logvar),
+                    }
+    
+>               poe_result = self._poe_n(label_stats_for_poe)
+
+src/spVIPESmulti/module/spVIPESmultimodule.py:842: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+shared_stats = {0: {'logtheta_loc': tensor([[[-0.9978,  0.9989]]]), 'logtheta_logvar': tensor([[[-0.9985,  0.9984]]]), 'logtheta_scal....9980,  0.9977],
+        [-0.9974,  0.9970]]), 'logtheta_scale': tensor([[0.6071, 1.6468],
+        [0.6073, 1.6463]])}}
+
+    def _poe_n(self, shared_stats: dict):
+        """Generic N-group Product of Experts.
+    
+        Combines shared statistics from N >= 2 groups using Gaussian PoE.
+        Handles unequal batch sizes by padding with standard normal prior
+        (loc=0, logvar=0 → var=1, precision=1).
+    
+        Parameters
+        ----------
+        shared_stats : dict[int, dict[str, Tensor]]
+            Per-group encoder statistics with keys "logtheta_loc", "logtheta_logvar", "logtheta_scale".
+    
+        Returns
+        -------
+        dict[int, dict[str, Tensor]]
+            Per-group PoE results with keys "logtheta_loc", "logtheta_logvar", "logtheta_scale".
+        """
+        group_keys = sorted(shared_stats.keys())
+        n_groups = len(group_keys)
+        if n_groups < 2:
+            raise ValueError(f"PoE requires at least 2 groups, got {n_groups}")
+    
+        group_sizes = {g: shared_stats[g]["logtheta_logvar"].shape[0] for g in group_keys}
+        max_batch_size = max(group_sizes.values())
+        latent_dim = shared_stats[group_keys[0]]["logtheta_logvar"].shape[1]
+        device = shared_stats[group_keys[0]]["logtheta_logvar"].device
+    
+        # Pad each group to max_batch_size and stack
+        # Padding: loc=0, logvar=0 → var=1, 1/var=1 (standard normal prior contribution)
+        padded_locs = []
+        padded_logvars = []
+        for g in group_keys:
+            loc = shared_stats[g]["logtheta_loc"]
+            logvar = shared_stats[g]["logtheta_logvar"]
+            g_size = group_sizes[g]
+            if g_size < max_batch_size:
+                pad_size = max_batch_size - g_size
+>               loc = torch.cat([loc, torch.zeros(pad_size, latent_dim, device=device)], dim=0)
+E               RuntimeError: Tensors must have same number of dimensions: got 3 and 2
+
+src/spVIPESmulti/module/spVIPESmultimodule.py:418: RuntimeError
+----------------------------- Captured stdout call -----------------------------
+[34mINFO    [0m spVIPESmulti: === spVIPESmulti AnnData Setup ===                       
+[34mINFO    [0m spVIPESmulti: Setting up with groups_key: [32m'groups'[0m                     
+[34mINFO    [0m spVIPESmulti: Labels: Using [32m'celltype'[0m from adata.obs                  
+[34mINFO    [0m spVIPESmulti: --- Product of Experts [1m([0mPoE[1m)[0m Configuration ---           
+[34mINFO    [0m spVIPESmulti: Will use: Label-based PoE                                
+[34mINFO    [0m spVIPESmulti: The model has been initialized                           
+Training:   0%|          | 0/1 [00:00<?, ?it/s]Epoch 1/1:   0%|          | 0/1 [00:00<?, ?it/s]
+----------------------------- Captured stderr call -----------------------------
+INFO: GPU available: False, used: False
+INFO: TPU available: False, using: 0 TPU cores
+INFO: 💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+------------------------------ Captured log call -------------------------------
+INFO     lightning.pytorch.utilities.rank_zero:setup.py:164 GPU available: False, used: False
+INFO     lightning.pytorch.utilities.rank_zero:setup.py:167 TPU available: False, using: 0 TPU cores
+INFO     lightning.pytorch.utilities.rank_zero:logger_connector.py:91 💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+___________________________ test_cosine_lr_scheduler ___________________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fed8c7b37f0>
+
+    def test_cosine_lr_scheduler(monkeypatch):
+        """CosineAnnealingLR decays LR and completes training without errors."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    
+        adata1 = make_dummy_adata(20, 10, seed=3)
+        adata2 = make_dummy_adata(18, 10, seed=4)
+        from spVIPESmulti.data.prepare_adatas import prepare_adatas
+        adata = prepare_adatas({"g1": adata1, "g2": adata2})
+        spVIPESmulti.setup_anndata(adata, groups_key="groups", label_key="celltype")
+        model = spVIPESmulti(adata, n_hidden=8, n_dimensions_shared=2, n_dimensions_private=2, dropout_rate=0.1)
+        group_indices_list = adata.uns["groups_obs_indices"]
+    
+        MAX_EPOCHS = 3
+        INITIAL_LR = 1e-3
+>       model.train(
+            group_indices_list=group_indices_list,
+            max_epochs=MAX_EPOCHS,
+            batch_size=4,
+            train_size=0.75,
+            validation_size=0.25,
+            accelerator="cpu",
+            devices=1,
+            plan_kwargs={
+                "lr": INITIAL_LR,
+                "lr_scheduler_type": "cosine",
+                "lr_min": 1e-5,
+            },
+        )
+
+tests/test_lightning_trainer_compat.py:54: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = 
+group_indices_list = [[0, 1, 2, 3, 4, 5, ...], [20, 21, 22, 23, 24, 25, ...]]
+batch_size = 4, max_epochs = 3, train_size = 0.75, validation_size = 0.25
+early_stopping = False
+plan_kwargs = {'lr': 0.001, 'lr_cosine_T_max': 3, 'lr_min': 1e-05, 'lr_scheduler_type': 'cosine', ...}
+n_steps_kl_warmup = None, n_epochs_kl_warmup = 400, num_workers = 0
+trainer_kwargs = {'accelerator': 'cpu', 'check_val_every_n_epoch': 1, 'devices': 1, 'early_stopping': False, ...}
+inferred = False
+update_dict = {'n_epochs_kl_warmup': 400, 'n_steps_kl_warmup': None}
+data_splitter = <spVIPESmulti.data._multi_datasplitter.MultiGroupDataSplitter object at 0x7fed8c7b2a10>
+cvene = 1
+training_plan = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+es = 'early_stopping'
+
+    def train(
+        self,
+        group_indices_list: Optional[list[list[int]]] = None,
+        batch_size: Optional[int] = 128,
+        max_epochs: Optional[int] = None,
+        train_size: float = 0.9,
+        validation_size: Optional[float] = None,
+        early_stopping: bool = False,
+        plan_kwargs: Optional[dict] = None,
+        n_steps_kl_warmup: Optional[int] = None,
+        n_epochs_kl_warmup: Optional[int] = 400,
+        num_workers: int = 0,
+        **trainer_kwargs,
+    ) -> None:
+        """
+        Train a multigroup spVIPESmulti model.
+    
+        This method trains the model using a custom data splitter that handles
+        multiple groups of cells separately while maintaining the shared-private
+        latent space learning objective.
+    
+        Parameters
+        ----------
+        group_indices_list : list[list[int]], optional
+            List of indices corresponding to each group of samples. Each inner list
+            contains the indices for cells belonging to that specific group. If
+            ``None``, values are inferred from ``adata.uns['groups_obs_indices']``.
+        max_epochs : int, optional
+            Number of passes through the dataset. If None, defaults to
+            ``np.min([round((20000 / n_cells) * 400), 400])``.
+        train_size : float, default=0.9
+            Size of training set in the range [0.0, 1.0].
+        validation_size : float, optional
+            Size of the validation set. If None, defaults to ``1 - train_size``.
+            If ``train_size + validation_size < 1``, the remaining cells belong
+            to the test set.
+        batch_size : int, default=128
+            Mini-batch size to use during training.
+        early_stopping : bool, default=False
+            Whether to perform early stopping. Additional arguments can be passed
+            in ``**trainer_kwargs``.
+        plan_kwargs : dict, optional
+            Keyword arguments for the training plan. Arguments passed to ``train()``
+            will overwrite values present in ``plan_kwargs``, when appropriate.
+        n_steps_kl_warmup : int, optional
+            Number of training steps for KL warmup. Takes precedence over n_epochs_kl_warmup.
+        n_epochs_kl_warmup : int, default=400
+            Number of epochs for KL divergence warmup.
+        **trainer_kwargs
+            Additional keyword arguments forwarded to ``pl.Trainer`` via scvi-tools'
+            ``TrainRunner``. To select an accelerator (replaces the removed ``use_gpu``
+            argument), pass e.g. ``accelerator="gpu"`` and ``devices=1``.
+        num_workers : int, default=0
+            Number of worker processes for the DataLoader. ``0`` means data is
+            loaded in the main process (safest, compatible with all platforms).
+            Set to a positive integer (e.g. ``4``) on multi-core HPC nodes with
+            a GPU to overlap data loading with forward/backward passes.
+            Requires that your dataset supports multi-process access (standard
+            AnnData on disk does).
+    
+        Returns
+        -------
+        None
+            The model is trained in-place.
+    
+        Notes
+        -----
+        This method uses a specialized MultiGroupDataSplitter that ensures proper
+        handling of multiple cell groups during training, maintaining the integrity
+        of the shared-private latent space learning.
+        """
+        group_indices_list, inferred = resolve_group_indices_list(self.adata, group_indices_list)
+        if inferred:
+            self._warn_group_indices_auto_inferred("train")
+    
+        if max_epochs is None:
+            n_cells = self.adata.n_obs
+            max_epochs = np.min([round((20000 / n_cells) * 400), 400]).item()
+    
+        plan_kwargs = plan_kwargs if isinstance(plan_kwargs, dict) else {}
+        update_dict = {
+            "n_epochs_kl_warmup": n_epochs_kl_warmup,
+            "n_steps_kl_warmup": n_steps_kl_warmup,
+        }
+        plan_kwargs.update(update_dict)
+    
+        # When using cosine annealing, default T_max to the training horizon so
+        # the LR reaches eta_min exactly at the last epoch.
+        if plan_kwargs.get("lr_scheduler_type") == "cosine":
+            plan_kwargs.setdefault("lr_cosine_T_max", max_epochs)
+    
+        data_splitter = MultiGroupDataSplitter(
+            self.adata_manager,
+            group_indices_list=group_indices_list,
+            train_size=train_size,
+            validation_size=validation_size,
+            batch_size=batch_size,
+            num_workers=num_workers,
+        )
+        cvene = trainer_kwargs.get("check_val_every_n_epoch", 1)
+        training_plan = SpVIPESmultiTrainingPlan(self.module, check_val_every_n_epoch=cvene, **plan_kwargs)
+    
+        es = "early_stopping"
+        trainer_kwargs[es] = early_stopping if es not in trainer_kwargs.keys() else trainer_kwargs[es]
+        if data_splitter.n_val > 0 and "check_val_every_n_epoch" not in trainer_kwargs:
+            trainer_kwargs["check_val_every_n_epoch"] = 1
+        # Default to clipping by global L2 norm to bound early-epoch gradient
+        # spikes (e.g. KL blowup); user can override via trainer_kwargs.
+        trainer_kwargs.setdefault("gradient_clip_val", 1.0)
+        trainer_kwargs.setdefault("gradient_clip_algorithm", "norm")
+        runner = PatchedTrainRunner(
+            self,
+            training_plan=training_plan,
+            data_splitter=data_splitter,
+            max_epochs=max_epochs,
+            **trainer_kwargs,
+        )
+>       return runner()
+
+src/spVIPESmulti/model/base/training_mixin.py:276: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <spVIPESmulti.model.base.training_mixin.PatchedTrainRunner object at 0x7fed8c7b2b90>
+
+    def __call__(self):
+        import lightning as pl
+        from packaging import version
+        # Validate training_plan
+        if not hasattr(self, "training_plan") or self.training_plan is None:
+            raise RuntimeError("PatchedTrainRunner: training_plan is not set. Ensure TrainingPlan is constructed correctly.")
+        # Validate data_splitter
+        if not hasattr(self, "data_splitter") or self.data_splitter is None:
+            raise RuntimeError("PatchedTrainRunner: data_splitter is not set. Ensure DataSplitter is constructed correctly.")
+    
+        # Pre-fit: propagate dataset sizes to the training plan
+        if hasattr(self.data_splitter, "n_train"):
+            self.training_plan.n_obs_training = self.data_splitter.n_train
+        if hasattr(self.data_splitter, "n_val"):
+            self.training_plan.n_obs_validation = self.data_splitter.n_val
+    
+        # Lightning-version-aware trainer.fit() call
+        lightning_version = pl.__version__
+        n_val = getattr(self.data_splitter, "n_val", 0)
+    
+        # Warn if validation checking was requested but there's no validation data
+        if n_val == 0 and getattr(self.trainer, "check_val_every_n_epoch", 1) > 1:
+            warnings.warn(
+                f"check_val_every_n_epoch={self.trainer.check_val_every_n_epoch} was set, but "
+                "train_size=1.0 leaves no validation data. Validation checking will be skipped.",
+                UserWarning,
+                stacklevel=3,
+            )
+    
+        if version.parse(lightning_version) >= version.parse("2.0.0"):
+            try:
+                if n_val == 0:
+                    # Lightning 2.6.x rejects a datamodule whose val_dataloader()
+                    # returns None, so use the explicit train-dataloader path when
+                    # the requested split leaves no validation cells.
+                    self.data_splitter.setup("fit")
+                    self.trainer.fit(
+                        self.training_plan,
+                        train_dataloaders=self.data_splitter.train_dataloader(),
+                        val_dataloaders=None,  # Explicitly set to None to prevent Lightning from calling val_dataloader()
+                        ckpt_path=getattr(self, "ckpt_path", None),
+                    )
+                else:
+>                   self.trainer.fit(
+                        self.training_plan,
+                        datamodule=self.data_splitter,
+                        ckpt_path=getattr(self, "ckpt_path", None),
+                    )
+
+src/spVIPESmulti/model/base/training_mixin.py:115: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scvi.train._trainer.Trainer object at 0x7fed8c817670>
+args = (SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containin...)
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+),)
+kwargs = {'ckpt_path': None, 'datamodule': <spVIPESmulti.data._multi_datasplitter.MultiGroupDataSplitter object at 0x7fed8c7b2a10>}
+
+    def fit(self, *args, **kwargs):
+        """Fit the model."""
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                action="ignore", category=UserWarning, message="The dataloader,"
+            )
+            warnings.filterwarnings(
+                action="ignore",
+                category=UserWarning,
+                message="you defined a validation_step but have no val_dataloader",
+            )
+            warnings.filterwarnings(
+                action="ignore",
+                category=UserWarning,
+                message="One of given dataloaders is None and it will be skipped",
+            )
+            # bug in pytorch lightning, assumes SequentialSampler
+            # https://github.com/PyTorchLightning/pytorch-lightning/blob/
+            # 48cb38ac5dd0159c8f7c5189c888dfd04a2ed34b/pytorch_lightning/
+            # trainer/data_loading.py#L311-L314
+            warnings.filterwarnings(
+                action="ignore",
+                category=UserWarning,
+                message="Your `val_dataloader` has `shuffle=True`",
+            )
+            if isinstance(args[0], PyroTrainingPlan):
+                warnings.filterwarnings(
+                    action="ignore",
+                    category=UserWarning,
+                    message="`LightningModule.configure_optimizers` returned `None`",
+                )
+            try:
+>               super().fit(*args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/train/_trainer.py:215: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scvi.train._trainer.Trainer object at 0x7fed8c817670>
+model = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+train_dataloaders = None, val_dataloaders = None
+datamodule = <spVIPESmulti.data._multi_datasplitter.MultiGroupDataSplitter object at 0x7fed8c7b2a10>
+ckpt_path = None, weights_only = None
+
+    def fit(
+        self,
+        model: "pl.LightningModule",
+        train_dataloaders: Optional[Union[TRAIN_DATALOADERS, LightningDataModule]] = None,
+        val_dataloaders: Optional[EVAL_DATALOADERS] = None,
+        datamodule: Optional[LightningDataModule] = None,
+        ckpt_path: Optional[_PATH] = None,
+        weights_only: Optional[bool] = None,
+    ) -> None:
+        r"""Runs the full optimization routine.
+    
+        Args:
+            model: Model to fit.
+    
+            train_dataloaders: An iterable or collection of iterables specifying training samples.
+                Alternatively, a :class:`~lightning.pytorch.core.datamodule.LightningDataModule` that defines
+                the :class:`~lightning.pytorch.core.hooks.DataHooks.train_dataloader` hook.
+    
+            val_dataloaders: An iterable or collection of iterables specifying validation samples.
+    
+            datamodule: A :class:`~lightning.pytorch.core.datamodule.LightningDataModule` that defines
+                the :class:`~lightning.pytorch.core.hooks.DataHooks.train_dataloader` hook.
+    
+            ckpt_path: Path/URL of the checkpoint from which training is resumed. Could also be one of three special
+                keywords ``"last"``, ``"hpc"`` and ``"registry"``.
+                Otherwise, if there is no checkpoint file at the path, an exception is raised.
+    
+                    - best: the best model checkpoint from the previous ``trainer.fit`` call will be loaded
+                    - last: the last model checkpoint from the previous ``trainer.fit`` call will be loaded
+                    - registry: the model will be downloaded from the Lightning Model Registry with following notations:
+    
+                        - ``'registry'``: uses the latest/default version of default model set
+                          with ``Trainer(..., model_registry="my-model")``
+                        - ``'registry:model-name'``: uses the latest/default version of this model `model-name`
+                        - ``'registry:model-name:version:v2'``: uses the specific version 'v2' of the model `model-name`
+                        - ``'registry:version:v2'``: uses the default model set
+                          with ``Trainer(..., model_registry="my-model")`` and version 'v2'
+    
+            weights_only: Defaults to ``None``. If ``True``, restricts loading to ``state_dicts`` of plain
+                ``torch.Tensor`` and other primitive types. If loading a checkpoint from a trusted source that contains
+                an ``nn.Module``, use ``weights_only=False``. If loading checkpoint from an untrusted source, we
+                recommend using ``weights_only=True``. For more information, please refer to the
+                `PyTorch Developer Notes on Serialization Semantics <https://docs.pytorch.org/docs/main/notes/serialization.html#id3>`_.
+    
+        For more information about multiple dataloaders, see this :ref:`section <multiple-dataloaders>`.
+    
+        :rtype: :py:obj:`None`
+    
+        Raises:
+            TypeError:
+                If ``model`` is not :class:`~lightning.pytorch.core.LightningModule` for torch version less than
+                2.0.0 and if ``model`` is not :class:`~lightning.pytorch.core.LightningModule` or
+                :class:`torch._dynamo.OptimizedModule` for torch versions greater than or equal to 2.0.0 .
+    
+        """
+        model = _maybe_unwrap_optimized(model)
+        self.strategy._lightning_module = model
+        _verify_strategy_supports_compile(model, self.strategy)
+        self.state.fn = TrainerFn.FITTING
+        self.state.status = TrainerStatus.RUNNING
+        self.training = True
+        self.should_stop = False
+>       call._call_and_handle_interrupt(
+            self,
+            self._fit_impl,
+            model,
+            train_dataloaders,
+            val_dataloaders,
+            datamodule,
+            ckpt_path,
+            weights_only,
+        )
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/trainer/trainer.py:584: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+trainer = <scvi.train._trainer.Trainer object at 0x7fed8c817670>
+trainer_fn = <bound method Trainer._fit_impl of <scvi.train._trainer.Trainer object at 0x7fed8c817670>>
+args = (SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containin...c()
+), None, None, <spVIPESmulti.data._multi_datasplitter.MultiGroupDataSplitter object at 0x7fed8c7b2a10>, None, None)
+kwargs = {}
+
+    def _call_and_handle_interrupt(trainer: "pl.Trainer", trainer_fn: Callable, *args: Any, **kwargs: Any) -> Any:
+        r"""Error handling, intended to be used only for main trainer function entry points (fit, validate, test, predict)
+        as all errors should funnel through them.
+    
+        Args:
+            trainer_fn: one of (fit, validate, test, predict)
+            *args: positional arguments to be passed to the `trainer_fn`
+            **kwargs: keyword arguments to be passed to `trainer_fn`
+    
+        """
+        try:
+            if trainer.strategy.launcher is not None:
+                return trainer.strategy.launcher.launch(trainer_fn, *args, trainer=trainer, **kwargs)
+>           return trainer_fn(*args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/trainer/call.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scvi.train._trainer.Trainer object at 0x7fed8c817670>
+model = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+train_dataloaders = None, val_dataloaders = None
+datamodule = <spVIPESmulti.data._multi_datasplitter.MultiGroupDataSplitter object at 0x7fed8c7b2a10>
+ckpt_path = None, weights_only = None
+
+    def _fit_impl(
+        self,
+        model: "pl.LightningModule",
+        train_dataloaders: Optional[Union[TRAIN_DATALOADERS, LightningDataModule]] = None,
+        val_dataloaders: Optional[EVAL_DATALOADERS] = None,
+        datamodule: Optional[LightningDataModule] = None,
+        ckpt_path: Optional[_PATH] = None,
+        weights_only: Optional[bool] = None,
+    ) -> None:
+        log.debug(f"{self.__class__.__name__}: trainer fit stage")
+    
+        # if a datamodule comes in as the second arg, then fix it for the user
+        if isinstance(train_dataloaders, LightningDataModule):
+            datamodule = train_dataloaders
+            train_dataloaders = None
+        # If you supply a datamodule you can't supply train_dataloader or val_dataloaders
+        if (train_dataloaders is not None or val_dataloaders is not None) and datamodule is not None:
+            raise MisconfigurationException(
+                "You cannot pass `train_dataloader` or `val_dataloaders` to `trainer.fit(datamodule=...)`"
+            )
+    
+        # links data to the trainer
+        self._data_connector.attach_data(
+            model, train_dataloaders=train_dataloaders, val_dataloaders=val_dataloaders, datamodule=datamodule
+        )
+    
+        assert self.state.fn is not None
+        if _is_registry(ckpt_path) and module_available("litmodels"):
+            download_model_from_registry(ckpt_path, self)
+        ckpt_path = self._checkpoint_connector._select_ckpt_path(
+            self.state.fn,
+            ckpt_path,
+            model_provided=True,
+            model_connected=self.lightning_module is not None,
+        )
+>       self._run(model, ckpt_path=ckpt_path, weights_only=weights_only)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/trainer/trainer.py:630: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scvi.train._trainer.Trainer object at 0x7fed8c817670>
+model = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+ckpt_path = None, weights_only = None
+
+    def _run(
+        self,
+        model: "pl.LightningModule",
+        ckpt_path: Optional[_PATH] = None,
+        weights_only: Optional[bool] = None,
+    ) -> Optional[Union[_EVALUATE_OUTPUT, _PREDICT_OUTPUT]]:
+        if self.state.fn == TrainerFn.FITTING:
+            min_epochs, max_epochs = _parse_loop_limits(
+                self.min_steps, self.max_steps, self.min_epochs, self.max_epochs, self
+            )
+            self.fit_loop.min_epochs = min_epochs
+            self.fit_loop.max_epochs = max_epochs
+    
+        if self.barebones:
+            # no progress bar in barebones can make it look like the Trainer hung
+            rank_zero_info(
+                "`Trainer(barebones=True)` started running. The progress bar is disabled so you might want to"
+                " manually print the progress in your model."
+            )
+    
+        # clean hparams
+        if hasattr(model, "hparams"):
+            parsing.clean_namespace(model.hparams)
+    
+        # attach model to the strategy
+        self.strategy.connect(model)
+    
+        self._callback_connector._attach_model_callbacks()
+        self._callback_connector._attach_model_logging_functions()
+    
+        _verify_loop_configurations(self)
+    
+        # ----------------------------
+        # SET UP THE TRAINER
+        # ----------------------------
+        log.debug(f"{self.__class__.__name__}: setting up strategy environment")
+        self.strategy.setup_environment()
+        self.__setup_profiler()
+    
+        log.debug(f"{self.__class__.__name__}: preparing data")
+        self._data_connector.prepare_data()
+    
+        call._call_setup_hook(self)  # allow user to set up LightningModule in accelerator environment
+        log.debug(f"{self.__class__.__name__}: configuring model")
+        call._call_configure_model(self)
+    
+        # check if we should delay restoring checkpoint till later
+        if not self.strategy.restore_checkpoint_after_setup:
+            log.debug(f"{self.__class__.__name__}: restoring module and callbacks from checkpoint path: {ckpt_path}")
+            self._checkpoint_connector._restore_modules_and_callbacks(ckpt_path, weights_only)
+    
+        # reset logger connector
+        self._logger_connector.reset_results()
+        self._logger_connector.reset_metrics()
+    
+        # strategy will configure model and move it to the device
+        self.strategy.setup(self)
+    
+        # hook
+        if self.state.fn == TrainerFn.FITTING:
+            call._call_callback_hooks(self, "on_fit_start")
+            call._call_lightning_module_hook(self, "on_fit_start")
+    
+        # only log hparams if enabled
+        if self.enable_autolog_hparams:
+            _log_hyperparams(self)
+    
+        if self.strategy.restore_checkpoint_after_setup:
+            log.debug(f"{self.__class__.__name__}: restoring module and callbacks from checkpoint path: {ckpt_path}")
+            self._checkpoint_connector._restore_modules_and_callbacks(ckpt_path)
+    
+        # restore optimizers, etc.
+        log.debug(f"{self.__class__.__name__}: restoring training state")
+        self._checkpoint_connector.restore_training_state()
+    
+        self._checkpoint_connector.resume_end()
+    
+        self._signal_connector.register_signal_handlers()
+    
+        # ----------------------------
+        # RUN THE TRAINER
+        # ----------------------------
+>       results = self._run_stage()
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/trainer/trainer.py:1079: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scvi.train._trainer.Trainer object at 0x7fed8c817670>
+
+    def _run_stage(self) -> Optional[Union[_PREDICT_OUTPUT, _EVALUATE_OUTPUT]]:
+        # wait for all to join if on distributed
+        self.strategy.barrier("run-stage")
+        self.lightning_module.zero_grad()
+    
+        if self.evaluating:
+            return self._evaluation_loop.run()
+        if self.predicting:
+            return self.predict_loop.run()
+        if self.training:
+            with isolate_rng():
+                self._run_sanity_check()
+            with torch.autograd.set_detect_anomaly(self._detect_anomaly):
+>               self.fit_loop.run()
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/trainer/trainer.py:1123: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.fit_loop._FitLoop object at 0x7fed8c8178e0>
+
+    def run(self) -> None:
+        self.setup_data()
+        if self.skip:
+            return
+        self.reset()
+        self.on_run_start()
+        while not self.done:
+            try:
+                self.on_advance_start()
+>               self.advance()
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/fit_loop.py:217: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.fit_loop._FitLoop object at 0x7fed8c8178e0>
+
+    def advance(self) -> None:
+        """Runs one whole epoch."""
+        log.debug(f"{type(self).__name__}: advancing loop")
+    
+        combined_loader = self._combined_loader
+        assert combined_loader is not None
+        if combined_loader._mode == "sequential":
+            raise ValueError(
+                f'`{type(self).__name__}` does not support the `CombinedLoader(mode="sequential")` mode.'
+                f" The available modes are: {[m for m in _SUPPORTED_MODES if m != 'sequential']}"
+            )
+        with self.trainer.profiler.profile("run_training_epoch"):
+            assert self._data_fetcher is not None
+>           self.epoch_loop.run(self._data_fetcher)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/fit_loop.py:465: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.training_epoch_loop._TrainingEpochLoop object at 0x7fed8c8178b0>
+data_fetcher = <lightning.pytorch.loops.fetchers._PrefetchDataFetcher object at 0x7fed8c814dc0>
+
+    def run(self, data_fetcher: _DataFetcher) -> None:
+        self.reset()
+        self.on_run_start(data_fetcher)
+        while not self.done:
+            try:
+                self.advance(data_fetcher)
+>               self.on_advance_end(data_fetcher)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/training_epoch_loop.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.training_epoch_loop._TrainingEpochLoop object at 0x7fed8c8178b0>
+data_fetcher = <lightning.pytorch.loops.fetchers._PrefetchDataFetcher object at 0x7fed8c814dc0>
+
+    def on_advance_end(self, data_fetcher: _DataFetcher) -> None:
+        # -----------------------------------------
+        # VALIDATE IF NEEDED
+        # -----------------------------------------
+        should_check_val = self._should_check_val_fx(data_fetcher)
+    
+        if self._skip_next_val:
+            should_check_val = False
+            self._skip_next_val = False
+    
+        if should_check_val:
+            # this needs to be set so the correct `trainer._active_loop` is picked
+            self.trainer.validating = True
+            # save and reset this state in case validation runs inside training loop (val_check_interval<1.0)
+            first_loop_iter = self.trainer._logger_connector._first_loop_iter
+    
+            if not self._should_accumulate():
+                # clear gradients to not leave any unused memory during validation
+                call._call_lightning_module_hook(self.trainer, "on_validation_model_zero_grad")
+    
+>           self.val_loop.run()
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/training_epoch_loop.py:406: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.evaluation_loop._EvaluationLoop object at 0x7fed8c816a70>
+args = (), kwargs = {}
+context_manager = <class 'torch.autograd.grad_mode.no_grad'>
+
+    def _decorator(self: _Loop, *args: Any, **kwargs: Any) -> Any:
+        if not isinstance(self, _Loop):
+            raise TypeError(f"`{type(self).__name__}` needs to be a Loop.")
+        if not hasattr(self, "inference_mode"):
+            raise TypeError(f"`{type(self).__name__}.inference_mode` needs to be defined")
+        context_manager: type[AbstractContextManager]
+        if _distributed_is_initialized() and dist.get_backend() == "gloo":
+            # gloo backend does not work properly.
+            # https://github.com/Lightning-AI/pytorch-lightning/pull/12715/files#r854569110
+            # TODO: explore why and possibly open an issue in PyTorch repository
+            context_manager = torch.no_grad
+        elif isinstance(self.trainer.accelerator, XLAAccelerator):
+            context_manager = torch.no_grad
+        elif isinstance(self.trainer.strategy, FSDPStrategy):
+            # https://github.com/pytorch/pytorch/issues/95957
+            context_manager = torch.no_grad
+        elif self.inference_mode:
+            context_manager = torch.inference_mode
+        else:
+            context_manager = torch.no_grad
+        with context_manager():
+>           return loop_run(self, *args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/utilities.py:179: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.evaluation_loop._EvaluationLoop object at 0x7fed8c816a70>
+
+    @_no_grad_context
+    def run(self) -> list[_OUT_DICT]:
+        self.setup_data()
+        if self.skip:
+            return []
+        self.reset()
+        self.on_run_start()
+        data_fetcher = self._data_fetcher
+        assert data_fetcher is not None
+        previous_dataloader_idx = 0
+        while True:
+            try:
+                if isinstance(data_fetcher, _DataLoaderIterDataFetcher):
+                    dataloader_iter = next(data_fetcher)
+                    # hook's batch_idx and dataloader_idx arguments correctness cannot be guaranteed in this setting
+                    batch = data_fetcher._batch
+                    batch_idx = data_fetcher._batch_idx
+                    dataloader_idx = data_fetcher._dataloader_idx
+                else:
+                    dataloader_iter = None
+                    batch, batch_idx, dataloader_idx = next(data_fetcher)
+                if previous_dataloader_idx != dataloader_idx:
+                    # the dataloader has changed, notify the logger connector
+                    self._store_dataloader_outputs()
+                previous_dataloader_idx = dataloader_idx
+                self.batch_progress.is_last_batch = data_fetcher.done
+                # run step hooks
+>               self._evaluation_step(batch, batch_idx, dataloader_idx, dataloader_iter)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/evaluation_loop.py:146: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.loops.evaluation_loop._EvaluationLoop object at 0x7fed8c816a70>
+batch = {'X': tensor([[ 6.,  6.,  5.,  7.,  4.,  1.,  4.,  7.,  5.,  9., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan,...     [1.],
+        [1.]]), 'indices': tensor([[15.],
+        [ 3.],
+        [15.],
+        [ 1.],
+        [11.]]), ...}
+batch_idx = 1, dataloader_idx = 0, dataloader_iter = None
+
+    def _evaluation_step(
+        self, batch: Any, batch_idx: int, dataloader_idx: int, dataloader_iter: Optional[Iterator]
+    ) -> None:
+        """Runs the actual evaluation step together with all the necessary bookkeeping and the hooks tied to it.
+    
+        Args:
+            batch: The current batch to run through the step.
+            batch_idx: The index of the current batch.
+            dataloader_idx: the index of the dataloader producing the current batch.
+            dataloader_iter: The iterator if using this step flavor.
+    
+        """
+        trainer = self.trainer
+        data_fetcher = self._data_fetcher
+        assert data_fetcher is not None
+    
+        if not (using_dataloader_iter := isinstance(data_fetcher, _DataLoaderIterDataFetcher)):
+            batch = trainer.precision_plugin.convert_input(batch)
+            batch = trainer.lightning_module._on_before_batch_transfer(batch, dataloader_idx=dataloader_idx)
+            batch = call._call_strategy_hook(trainer, "batch_to_device", batch, dataloader_idx=dataloader_idx)
+    
+        # the `_step` methods don't take a batch_idx when `dataloader_iter` is used, but all other hooks still do,
+        # so we need different kwargs
+        hook_kwargs = self._build_kwargs(
+            batch, batch_idx, dataloader_idx if self._is_sequential and self.num_dataloaders > 1 else None
+        )
+    
+        self.batch_progress.increment_ready()
+    
+        trainer._logger_connector.on_batch_start(
+            batch, dataloader_idx if self._is_sequential and self.num_dataloaders > 1 else None
+        )
+    
+        hook_name = "on_test_batch_start" if trainer.testing else "on_validation_batch_start"
+        call._call_callback_hooks(trainer, hook_name, *hook_kwargs.values())
+        call._call_lightning_module_hook(trainer, hook_name, *hook_kwargs.values())
+    
+        self.batch_progress.increment_started()
+    
+        hook_name = "test_step" if trainer.testing else "validation_step"
+        step_args = (
+            self._build_step_args_from_hook_kwargs(hook_kwargs, hook_name)
+            if not using_dataloader_iter
+            else (dataloader_iter,)
+        )
+Epoch 1/1:   0%|          | 0/1 [00:04<?, ?it/s]
+Epoch 1/3:   0%|          | 0/3 [00:00<?, ?it/s]
+>       output = call._call_strategy_hook(trainer, hook_name, *step_args)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/evaluation_loop.py:441: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+trainer = <scvi.train._trainer.Trainer object at 0x7fed8c817670>
+hook_name = 'validation_step'
+args = ({'X': tensor([[ 6.,  6.,  5.,  7.,  4.,  1.,  4.,  7.,  5.,  9., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan... [1.],
+        [1.]]), 'indices': tensor([[15.],
+        [ 3.],
+        [15.],
+        [ 1.],
+        [11.]]), ...}, 1)
+kwargs = {}
+pl_module = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+prev_fx_name = None
+fn = <bound method Strategy.validation_step of <lightning.pytorch.strategies.single_device.SingleDeviceStrategy object at 0x7fed8c8173d0>>
+
+    def _call_strategy_hook(
+        trainer: "pl.Trainer",
+        hook_name: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        log.debug(f"{trainer.__class__.__name__}: calling strategy hook: {hook_name}")
+    
+        pl_module = trainer.lightning_module
+        prev_fx_name = pl_module._current_fx_name
+        pl_module._current_fx_name = hook_name
+    
+        fn = getattr(trainer.strategy, hook_name)
+        if not callable(fn):
+            return None
+    
+        with trainer.profiler.profile(f"[Strategy]{trainer.strategy.__class__.__name__}.{hook_name}"):
+>           output = fn(*args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/trainer/call.py:329: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <lightning.pytorch.strategies.single_device.SingleDeviceStrategy object at 0x7fed8c8173d0>
+args = ({'X': tensor([[ 6.,  6.,  5.,  7.,  4.,  1.,  4.,  7.,  5.,  9., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan... [1.],
+        [1.]]), 'indices': tensor([[15.],
+        [ 3.],
+        [15.],
+        [ 1.],
+        [11.]]), ...}, 1)
+kwargs = {}
+
+    def validation_step(self, *args: Any, **kwargs: Any) -> STEP_OUTPUT:
+        """The actual validation step.
+    
+        See :meth:`~lightning.pytorch.core.LightningModule.validation_step` for more details
+    
+        """
+        assert self.lightning_module is not None
+        assert self.model is not None
+        with self.precision_plugin.val_step_context():
+            if self.model != self.lightning_module:
+                return self._forward_redirection(self.model, self.lightning_module, "validation_step", *args, **kwargs)
+>           return self.lightning_module.validation_step(*args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/strategies/strategy.py:412: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+batch = {'X': tensor([[ 6.,  6.,  5.,  7.,  4.,  1.,  4.,  7.,  5.,  9., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan,...     [1.],
+        [1.]]), 'indices': tensor([[15.],
+        [ 3.],
+        [15.],
+        [ 1.],
+        [11.]]), ...}
+batch_idx = 1
+
+    def validation_step(self, batch, batch_idx):
+        """Validation step for the model."""
+        # loss kwargs here contains `n_obs` equal to n_training_obs
+        # so when relevant, the actual loss value is rescaled to number
+        # of training examples
+>       _, _, scvi_loss = self.forward(batch, loss_kwargs=self.loss_kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/train/_trainingplans.py:446: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SpVIPESmultiTrainingPlan(
+  (module): spVIPESmultimodule(
+    (px_r): ParameterList(
+        (0): Parameter containing...c()
+    )
+  )
+    )
+  )
+  (rec_loss_val): ElboMetric()
+  (kl_local_val): ElboMetric()
+  (kl_global_val): ElboMetric()
+)
+args = ({'X': tensor([[ 6.,  6.,  5.,  7.,  4.,  1.,  4.,  7.,  5.,  9., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan...   [1.],
+        [1.]]), 'indices': tensor([[15.],
+        [ 3.],
+        [15.],
+        [ 1.],
+        [11.]]), ...},)
+kwargs = {'loss_kwargs': {'kl_weight': tensor(0.)}}
+
+    def forward(self, *args, **kwargs):
+        """Passthrough to the module's forward method."""
+>       return self.module(
+            *args,
+            **kwargs,
+            get_inference_input_kwargs={"full_forward_pass": not self.update_only_decoder},
+        )
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/train/_trainingplans.py:294: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+args = ({'X': tensor([[ 6.,  6.,  5.,  7.,  4.,  1.,  4.,  7.,  5.,  9., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan...   [1.],
+        [1.]]), 'indices': tensor([[15.],
+        [ 3.],
+        [15.],
+        [ 1.],
+        [11.]]), ...},)
+kwargs = {'get_inference_input_kwargs': {'full_forward_pass': True}, 'loss_kwargs': {'kl_weight': tensor(0.)}}
+
+    def _wrapped_call_impl(self, *args, **kwargs):
+        if self._compiled_call_impl is not None:
+            return self._compiled_call_impl(*args, **kwargs)  # type: ignore[misc]
+        else:
+>           return self._call_impl(*args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/torch/nn/modules/module.py:1779: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+args = ({'X': tensor([[ 6.,  6.,  5.,  7.,  4.,  1.,  4.,  7.,  5.,  9., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan...   [1.],
+        [1.]]), 'indices': tensor([[15.],
+        [ 3.],
+        [15.],
+        [ 1.],
+        [11.]]), ...},)
+kwargs = {'get_inference_input_kwargs': {'full_forward_pass': True}, 'loss_kwargs': {'kl_weight': tensor(0.)}}
+
+    def _call_impl(self, *args, **kwargs):
+        forward_call = (self._slow_forward if torch._C._get_tracing_state() else self.forward)
+        # If we don't have any hooks, we want to skip the rest of the logic in
+        # this function, and just call forward.
+        if not (self._backward_hooks or self._backward_pre_hooks or self._forward_hooks or self._forward_pre_hooks
+                or _global_backward_pre_hooks or _global_backward_hooks
+                or _global_forward_hooks or _global_forward_pre_hooks):
+>           return forward_call(*args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/torch/nn/modules/module.py:1790: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+args = ({'X': tensor([[ 6.,  6.,  5.,  7.,  4.,  1.,  4.,  7.,  5.,  9., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan...   [1.],
+        [1.]]), 'indices': tensor([[15.],
+        [ 3.],
+        [15.],
+        [ 1.],
+        [11.]]), ...},)
+kwargs = {'get_inference_input_kwargs': {}, 'loss_kwargs': {'kl_weight': tensor(0.)}}
+device = device(type='cpu')
+
+    @wraps(fn)
+    def auto_transfer_args(self, *args, **kwargs):
+        if not isinstance(self, Module):
+            return fn(self, *args, **kwargs)
+    
+        # decorator only necessary after training
+        if self.training:
+            return fn(self, *args, **kwargs)
+    
+        device = list({p.device for p in self.parameters()})
+        if len(device) > 1:
+            raise RuntimeError("Module tensors on multiple devices.")
+        else:
+            device = device[0]
+        args = _move_data_to_device(args, device)
+        kwargs = _move_data_to_device(kwargs, device)
+>       return fn(self, *args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/module/base/_decorators.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+tensors = {'X': tensor([[ 6.,  6.,  5.,  7.,  4.,  1.,  4.,  7.,  5.,  9., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan,...     [1.],
+        [1.]]), 'indices': tensor([[15.],
+        [ 3.],
+        [15.],
+        [ 1.],
+        [11.]]), ...}
+get_inference_input_kwargs = {}, get_generative_input_kwargs = None
+inference_kwargs = None, generative_kwargs = None
+loss_kwargs = {'kl_weight': tensor(0.)}, compute_loss = True
+
+    @auto_move_data
+    def forward(
+        self,
+        tensors,
+        get_inference_input_kwargs: dict | None = None,
+        get_generative_input_kwargs: dict | None = None,
+        inference_kwargs: dict | None = None,
+        generative_kwargs: dict | None = None,
+        loss_kwargs: dict | None = None,
+        compute_loss=True,
+    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, LossOutput]:
+        """Forward pass through the network.
+    
+        Parameters
+        ----------
+        tensors
+            tensors to pass through
+        get_inference_input_kwargs
+            Keyword args for ``_get_inference_input()``
+        get_generative_input_kwargs
+            Keyword args for ``_get_generative_input()``
+        inference_kwargs
+            Keyword args for ``inference()``
+        generative_kwargs
+            Keyword args for ``generative()``
+        loss_kwargs
+            Keyword args for ``loss()``
+        compute_loss
+            Whether to compute loss on forward pass. This adds
+            another return value.
+        """
+>       return _generic_forward(
+            self,
+            tensors,
+            inference_kwargs,
+            generative_kwargs,
+            loss_kwargs,
+            get_inference_input_kwargs,
+            get_generative_input_kwargs,
+            compute_loss,
+        )
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/module/base/_base_module.py:210: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+module = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+tensors = {'X': tensor([[ 6.,  6.,  5.,  7.,  4.,  1.,  4.,  7.,  5.,  9., nan, nan, nan, nan,
+         nan, nan, nan, nan, nan,...     [1.],
+        [1.]]), 'indices': tensor([[15.],
+        [ 3.],
+        [15.],
+        [ 1.],
+        [11.]]), ...}
+inference_kwargs = {}, generative_kwargs = {}
+loss_kwargs = {'kl_weight': tensor(0.)}, get_inference_input_kwargs = {}
+get_generative_input_kwargs = {}, compute_loss = True
+
+    def _generic_forward(
+        module,
+        tensors,
+        inference_kwargs,
+        generative_kwargs,
+        loss_kwargs,
+        get_inference_input_kwargs,
+        get_generative_input_kwargs,
+        compute_loss,
+    ):
+        """Core of the forward call shared by PyTorch- and Jax-based modules."""
+        inference_kwargs = _get_dict_if_none(inference_kwargs)
+        generative_kwargs = _get_dict_if_none(generative_kwargs)
+        loss_kwargs = _get_dict_if_none(loss_kwargs)
+        get_inference_input_kwargs = _get_dict_if_none(get_inference_input_kwargs)
+        get_generative_input_kwargs = _get_dict_if_none(get_generative_input_kwargs)
+        if not ("latent_qzm" in tensors.keys() and "latent_qzv" in tensors.keys()):
+            # Remove full_forward_pass if not minified model
+            get_inference_input_kwargs.pop("full_forward_pass", None)
+    
+        inference_inputs = module._get_inference_input(tensors, **get_inference_input_kwargs)
+>       inference_outputs = module.inference(**inference_inputs, **inference_kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/module/base/_base_module.py:753: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+args = ()
+kwargs = {'batch_index': [tensor([[0]]), tensor([[0],
+        [0],
+        [0],
+        [0]])], 'global_indices': [tensor([[15....[[0.]]), tensor([[1.],
+        [1.],
+        [1.],
+        [1.]])], 'labels': [tensor([1]), tensor([0, 1, 0, 1])], ...}
+device = device(type='cpu')
+
+    @wraps(fn)
+    def auto_transfer_args(self, *args, **kwargs):
+        if not isinstance(self, Module):
+            return fn(self, *args, **kwargs)
+    
+        # decorator only necessary after training
+        if self.training:
+            return fn(self, *args, **kwargs)
+    
+        device = list({p.device for p in self.parameters()})
+        if len(device) > 1:
+            raise RuntimeError("Module tensors on multiple devices.")
+        else:
+            device = device[0]
+        args = _move_data_to_device(args, device)
+        kwargs = _move_data_to_device(kwargs, device)
+>       return fn(self, *args, **kwargs)
+
+/home/mdmanurung/.local/lib/python3.10/site-packages/scvi/module/base/_decorators.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+x = {0: tensor([[1.9459, 1.9459, 1.7918, 2.0794, 1.6094, 0.6931, 1.6094, 2.0794, 1.7918,
+         2.3026]]), 1: tensor([[1...
+         1.6094],
+        [1.6094, 1.9459, 1.3863, 2.1972, 1.6094, 1.7918, 2.1972, 2.0794, 0.6931,
+         1.7918]])}
+batch_index = [tensor([[0]]), tensor([[0],
+        [0],
+        [0],
+        [0]])]
+groups = [tensor([[0.]]), tensor([[1.],
+        [1.],
+        [1.],
+        [1.]])]
+global_indices = [tensor([[15.]]), tensor([[ 3.],
+        [15.],
+        [ 1.],
+        [11.]])]
+kwargs = {'labels': [tensor([1]), tensor([0, 1, 0, 1])]}
+library = {0: tensor([[3.9890]]), 1: tensor([[4.0775],
+        [3.9120],
+        [3.9890],
+        [3.9318]])}
+private_stats = {0: {'log_z': tensor([[ 1.2441, -2.8394]]), 'logtheta_loc': tensor([[ 1.0008, -0.9976]]), 'logtheta_logvar': tensor([[...scale': tensor([[0.6064, 1.6489],
+        [0.6065, 1.6487],
+        [0.6065, 1.6487],
+        [0.6065, 1.6487]]), ...}}
+shared_stats = {0: {'log_z': tensor([[-1.0526,  3.1202]]), 'logtheta_loc': tensor([[-0.9993,  1.0003]]), 'logtheta_logvar': tensor([[...scale': tensor([[1.6448, 0.6083],
+        [1.6356, 0.6117],
+        [1.6450, 0.6082],
+        [1.6454, 0.6080]]), ...}}
+group_code_list = [0, 1], pos = 1
+item = tensor([[1.7918, 2.4849, 1.6094, 1.7918, 1.3863, 1.9459, 1.6094, 1.3863, 2.3979,
+         2.1972],
+        [1.3863, 2....,
+         1.6094],
+        [1.6094, 1.9459, 1.3863, 2.1972, 1.6094, 1.7918, 2.1972, 2.0794, 0.6931,
+         1.7918]])
+batch = tensor([[0],
+        [0],
+        [0],
+        [0]])
+
+    @auto_move_data
+    def inference(self, x, batch_index, groups, global_indices, **kwargs):
+        """Runs the encoder model.
+    
+        In single-modality mode, runs per-group shared/private encoders then inter-group PoE.
+        In multimodal mode, runs per-(group, modality) encoders, then intra-group PoE across
+        modalities, then inter-group PoE.
+        """
+        if self.is_multimodal:
+            return self._inference_multimodal(x, batch_index, groups, global_indices, **kwargs)
+    
+        # Single-modality mode (backward compatible)
+        x = {
+            i: xs[:, self.groups_var_indices[i]] for i, xs in x.items()
+        }  # update each groups minibatch with its own gene indices
+    
+        # W-010: compute library size from raw counts BEFORE log1p transform so
+        # that log-library reflects the true sequencing depth, not log(1+x) sums.
+        library = {i: torch.log(xs.sum(1).clamp(min=1e-6)).unsqueeze(1) for i, xs in x.items()}
+    
+        if self.log_variational_inference:
+            x = {i: torch.log(1 + xs) for i, xs in x.items()}  # logvariational
+    
+        private_stats = {}
+        shared_stats = {}
+    
+        # W-003: use the actual group code from `groups` (the tensor passed in
+        # from the dataloader) rather than the loop-enumeration position. When a
+        # mini-batch is missing one group, enumerate() would select the wrong
+        # encoder for the remaining groups.
+        group_code_list = [int(g.reshape(-1)[0].item()) for g in groups]
+        for pos, (item, batch) in enumerate(zip(x.values(), batch_index)):
+            group_code = group_code_list[pos]
+            private_encoder = self.encoders[group_code]["private"]
+            shared_encoder = self.encoders[group_code]["shared"]
+    
+            private_values = private_encoder(item, group_code, batch)
+            shared_values = shared_encoder(item, group_code, batch)
+    
+            private_stats[pos] = private_values
+            shared_stats[pos] = shared_values
+    
+        labels = None
+        if self.use_labels:
+            if "labels" in kwargs:
+                labels = dict(enumerate(kwargs["labels"]))
+    
+>       poe_stats = self._supervised_poe(shared_stats, labels)
+
+src/spVIPESmulti/module/spVIPESmultimodule.py:573: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+shared_stats = {0: {'log_z': tensor([[-1.0526,  3.1202]]), 'logtheta_loc': tensor([[-0.9993,  1.0003]]), 'logtheta_logvar': tensor([[...scale': tensor([[1.6448, 0.6083],
+        [1.6356, 0.6117],
+        [1.6450, 0.6082],
+        [1.6454, 0.6080]]), ...}}
+labels = {0: tensor([1]), 1: tensor([0, 1, 0, 1])}
+
+    def _supervised_poe(
+        self,
+        shared_stats,
+        labels: Optional[dict[int, torch.Tensor]],
+    ):
+        if not (self.use_labels and labels is not None):
+            raise RuntimeError(
+                "internal: labels missing in _supervised_poe — "
+                "setup_anndata enforcement was bypassed. "
+                "This should never happen; please report as a bug."
+            )
+>       return self._label_based_poe(shared_stats, labels)
+
+src/spVIPESmulti/module/spVIPESmultimodule.py:692: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+shared_stats = {0: {'log_z': tensor([[-1.0526,  3.1202]]), 'logtheta_loc': tensor([[-0.9993,  1.0003]]), 'logtheta_logvar': tensor([[...scale': tensor([[1.6448, 0.6083],
+        [1.6356, 0.6117],
+        [1.6450, 0.6082],
+        [1.6454, 0.6080]]), ...}}
+label_group = {0: tensor([1]), 1: tensor([0, 1, 0, 1])}
+
+    def _label_based_poe(self, shared_stats: dict, label_group: dict):
+        """Label-based PoE for N >= 2 groups.
+    
+        For each cell type label, combines shared encoder statistics from all groups
+        that contain cells of that type using Product of Experts. Groups missing a label
+        contribute an uninformative prior (loc=0, logvar=log(1)=0).
+        """
+        stat_keys = ["logtheta_loc", "logtheta_logvar", "logtheta_scale"]
+        group_keys = sorted(shared_stats.keys())
+        n_groups = len(group_keys)
+    
+        # Extract per-group stats and labels
+        per_group_stats = {}
+        per_group_labels = {}
+        for g in group_keys:
+            per_group_stats[g] = {k: shared_stats[g][k] for k in stat_keys if k in shared_stats[g]}
+            per_group_labels[g] = label_group[g]
+    
+        # Collect all unique labels across all groups and determine which groups have each label
+        label_sets = {g: set(per_group_labels[g].flatten().tolist()) for g in group_keys}
+        all_labels = set()
+        for s in label_sets.values():
+            all_labels |= s
+    
+        # For each label, compute PoE across groups that have cells with that label
+        poe_stats_per_label = {}
+        for label in all_labels:
+            groups_with_label = [g for g in group_keys if label in label_sets[g]]
+            groups_without_label = [g for g in group_keys if label not in label_sets[g]]
+    
+            # Build stats dict for _poe_n: groups with label contribute real stats,
+            # groups without contribute uninformative prior
+            label_stats_for_poe = {}
+            for g in groups_with_label:
+                mask = (per_group_labels[g] == label).squeeze()
+                label_stats_for_poe[g] = {key: value[mask] for key, value in per_group_stats[g].items()}
+    
+            if len(groups_with_label) >= 2:
+                # Enough groups for PoE — absent groups contribute near-zero precision so
+                # only the global prior inside _product_of_experts (ones_like) acts as prior.
+                # Using logvar=30 gives precision ≈ exp(-30) ≈ 0, avoiding the double-prior
+                # that would result from logvar=0 (precision=1) + ones_like (precision=1).
+                for g in groups_without_label:
+                    ref_g = groups_with_label[0]
+                    n_cells = label_stats_for_poe[ref_g]["logtheta_loc"].shape[0]
+                    latent_dim = label_stats_for_poe[ref_g]["logtheta_loc"].shape[1]
+                    device = label_stats_for_poe[ref_g]["logtheta_loc"].device
+                    _large_logvar = torch.full((n_cells, latent_dim), 30.0, device=device)
+                    label_stats_for_poe[g] = {
+                        "logtheta_loc": torch.zeros(n_cells, latent_dim, device=device),
+                        "logtheta_logvar": _large_logvar,
+                        "logtheta_scale": torch.exp(0.5 * _large_logvar),
+                    }
+    
+>               poe_result = self._poe_n(label_stats_for_poe)
+
+src/spVIPESmulti/module/spVIPESmultimodule.py:842: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = spVIPESmultimodule(
+  (px_r): ParameterList(
+      (0): Parameter containing: [torch.float32 of size 10]
+      (1): Pa...ias=True)
+          (1): None
+          (2): None
+          (3): None
+          (4): None
+        )
+      )
+    )
+  )
+)
+shared_stats = {0: {'logtheta_loc': tensor([[[-0.9993,  1.0003]]]), 'logtheta_logvar': tensor([[[-1.0018,  0.9995]]]), 'logtheta_scal....9840, -0.9831],
+        [ 0.9959, -0.9950]]), 'logtheta_scale': tensor([[1.6356, 0.6117],
+        [1.6454, 0.6080]])}}
+
+    def _poe_n(self, shared_stats: dict):
+        """Generic N-group Product of Experts.
+    
+        Combines shared statistics from N >= 2 groups using Gaussian PoE.
+        Handles unequal batch sizes by padding with standard normal prior
+        (loc=0, logvar=0 → var=1, precision=1).
+    
+        Parameters
+        ----------
+        shared_stats : dict[int, dict[str, Tensor]]
+            Per-group encoder statistics with keys "logtheta_loc", "logtheta_logvar", "logtheta_scale".
+    
+        Returns
+        -------
+        dict[int, dict[str, Tensor]]
+            Per-group PoE results with keys "logtheta_loc", "logtheta_logvar", "logtheta_scale".
+        """
+        group_keys = sorted(shared_stats.keys())
+        n_groups = len(group_keys)
+        if n_groups < 2:
+            raise ValueError(f"PoE requires at least 2 groups, got {n_groups}")
+    
+        group_sizes = {g: shared_stats[g]["logtheta_logvar"].shape[0] for g in group_keys}
+        max_batch_size = max(group_sizes.values())
+        latent_dim = shared_stats[group_keys[0]]["logtheta_logvar"].shape[1]
+        device = shared_stats[group_keys[0]]["logtheta_logvar"].device
+    
+        # Pad each group to max_batch_size and stack
+        # Padding: loc=0, logvar=0 → var=1, 1/var=1 (standard normal prior contribution)
+        padded_locs = []
+        padded_logvars = []
+        for g in group_keys:
+            loc = shared_stats[g]["logtheta_loc"]
+            logvar = shared_stats[g]["logtheta_logvar"]
+            g_size = group_sizes[g]
+            if g_size < max_batch_size:
+                pad_size = max_batch_size - g_size
+>               loc = torch.cat([loc, torch.zeros(pad_size, latent_dim, device=device)], dim=0)
+E               RuntimeError: Tensors must have same number of dimensions: got 3 and 2
+
+src/spVIPESmulti/module/spVIPESmultimodule.py:418: RuntimeError
+----------------------------- Captured stdout call -----------------------------
+[34mINFO    [0m spVIPESmulti: === spVIPESmulti AnnData Setup ===                       
+[34mINFO    [0m spVIPESmulti: Setting up with groups_key: [32m'groups'[0m                     
+[34mINFO    [0m spVIPESmulti: Labels: Using [32m'celltype'[0m from adata.obs                  
+[34mINFO    [0m spVIPESmulti: --- Product of Experts [1m([0mPoE[1m)[0m Configuration ---           
+[34mINFO    [0m spVIPESmulti: Will use: Label-based PoE                                
+[34mINFO    [0m spVIPESmulti: The model has been initialized                           
+Training:   0%|          | 0/3 [00:00<?, ?it/s]Epoch 1/3:   0%|          | 0/3 [00:00<?, ?it/s]
+----------------------------- Captured stderr call -----------------------------
+INFO: GPU available: False, used: False
+INFO: TPU available: False, using: 0 TPU cores
+INFO: 💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+------------------------------ Captured log call -------------------------------
+INFO     lightning.pytorch.utilities.rank_zero:setup.py:164 GPU available: False, used: False
+INFO     lightning.pytorch.utilities.rank_zero:setup.py:167 TPU available: False, using: 0 TPU cores
+INFO     lightning.pytorch.utilities.rank_zero:logger_connector.py:91 💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+_________ test_get_latent_representation_auto_infers_groups_warns_once _________
+
+    @pytest.mark.integration
+    def test_get_latent_representation_auto_infers_groups_warns_once():
+        rng = np.random.default_rng(0)
+        a1 = ad.AnnData(X=rng.poisson(5, size=(16, 10)).astype(np.float32))
+        a2 = ad.AnnData(X=rng.poisson(5, size=(14, 10)).astype(np.float32))
+        a1.var_names = [f"g{i}" for i in range(10)]
+        a2.var_names = [f"g{i}" for i in range(10)]
+    
+        combined = spVIPESmulti.data.prepare_adatas({"group-1": a1, "group 2": a2})
+>       spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups")
+E       TypeError: spVIPESmulti.setup_anndata() missing 1 required positional argument: 'label_key'
+
+tests/test_api_boilerplate_reduction.py:19: TypeError
+=============================== warnings summary ===============================
+../../../../home/mdmanurung/.local/lib/python3.10/site-packages/anndata/utils.py:434
+  /home/mdmanurung/.local/lib/python3.10/site-packages/anndata/utils.py:434: FutureWarning: Importing read_elem from `anndata.experimental` is deprecated. Import anndata.io.read_elem instead.
+    warnings.warn(msg, FutureWarning)
+
+tests/test_lightning_trainer_compat.py::test_multigroup_training_runs
+tests/test_lightning_trainer_compat.py::test_cosine_lr_scheduler
+  /home/mdmanurung/.local/lib/python3.10/site-packages/scvi/data/fields/_base_field.py:63: UserWarning: adata.X does not contain unnormalized count data. Are you sure this is what you want?
+    self.validate_field(adata)
+
+tests/test_lightning_trainer_compat.py::test_multigroup_training_runs
+tests/test_lightning_trainer_compat.py::test_cosine_lr_scheduler
+  /home/mdmanurung/.local/lib/python3.10/site-packages/scvi/data/fields/_dataframe_field.py:187: UserWarning: Category 18 in adata.obs['_scvi_indices'] has fewer than 3 cells. Models may not train properly.
+    categorical_mapping = _make_column_categorical(
+
+tests/test_lightning_trainer_compat.py::test_multigroup_training_runs
+tests/test_lightning_trainer_compat.py::test_multigroup_training_runs
+tests/test_lightning_trainer_compat.py::test_cosine_lr_scheduler
+tests/test_lightning_trainer_compat.py::test_cosine_lr_scheduler
+  /home/mdmanurung/.local/lib/python3.10/site-packages/lightning/fabric/plugins/environments/slurm.py:204: The `srun` command is available on your system but is not used. HINT: If your intention is to run Lightning on SLURM, prepend your python command with `srun` like so: srun python3 /home/mdmanurung/.local/bin/pytest tests/test_light ...
+
+tests/test_lightning_trainer_compat.py::test_multigroup_training_runs
+tests/test_lightning_trainer_compat.py::test_cosine_lr_scheduler
+  /home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/utilities/_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+
+tests/test_lightning_trainer_compat.py::test_multigroup_training_runs
+tests/test_lightning_trainer_compat.py::test_cosine_lr_scheduler
+  /home/mdmanurung/.local/lib/python3.10/site-packages/lightning/pytorch/loops/fit_loop.py:317: The number of training batches (3) is smaller than the logging interval Trainer(log_every_n_steps=10). Set a lower value for log_every_n_steps if you want to see logs for the training epoch.
+
+tests/test_lightning_trainer_compat.py::test_multigroup_training_runs
+  /home/mdmanurung/.local/lib/python3.10/site-packages/torch/autograd/graph.py:869: UserWarning: CUDA initialization: The NVIDIA driver on your system is too old (found version 12080). Please update your GPU driver by downloading and installing a new version from the URL: http://www.nvidia.com/Download/index.aspx Alternatively, go to: https://pytorch.org to install a PyTorch version that has been compiled with your version of the CUDA driver. (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:119.)
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_lightning_trainer_compat.py::test_multigroup_training_runs
+FAILED tests/test_lightning_trainer_compat.py::test_cosine_lr_scheduler - Run...
+FAILED tests/test_api_boilerplate_reduction.py::test_get_latent_representation_auto_infers_groups_warns_once
+================== 3 failed, 14 warnings in 62.68s (0:01:02) ===================

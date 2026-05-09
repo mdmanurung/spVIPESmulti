@@ -819,7 +819,10 @@ class spVIPESmultimodule(BaseModuleClass):
             # groups without contribute uninformative prior
             label_stats_for_poe = {}
             for g in groups_with_label:
-                mask = (per_group_labels[g] == label).squeeze()
+                # Use .flatten() not .squeeze(): if the group has exactly 1 cell in
+                # this batch, .squeeze() collapses the [1]-shaped mask to 0D, and
+                # value[0d_bool_True] inserts an extra batch dimension → 3D tensor.
+                mask = (per_group_labels[g] == label).flatten()
                 label_stats_for_poe[g] = {key: value[mask] for key, value in per_group_stats[g].items()}
 
             if len(groups_with_label) >= 2:

@@ -14,9 +14,11 @@ def test_get_latent_representation_auto_infers_groups_warns_once():
     a2 = ad.AnnData(X=rng.poisson(5, size=(14, 10)).astype(np.float32))
     a1.var_names = [f"g{i}" for i in range(10)]
     a2.var_names = [f"g{i}" for i in range(10)]
+    a1.obs["cell_type"] = ["A"] * 8 + ["B"] * 8
+    a2.obs["cell_type"] = ["A"] * 7 + ["B"] * 7
 
     combined = spVIPESmulti.data.prepare_adatas({"group-1": a1, "group 2": a2})
-    spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups")
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups", label_key="cell_type")
     model = spVIPESmulti.model.spVIPESmulti(
         combined,
         n_hidden=16,
@@ -42,9 +44,11 @@ def test_embed_writes_expected_keys_and_returns_payload():
     a2 = ad.AnnData(X=rng.poisson(5, size=(10, 8)).astype(np.float32))
     a1.var_names = [f"g{i}" for i in range(8)]
     a2.var_names = [f"g{i}" for i in range(8)]
+    a1.obs["cell_type"] = ["A"] * 6 + ["B"] * 6
+    a2.obs["cell_type"] = ["A"] * 5 + ["B"] * 5
 
     combined = spVIPESmulti.data.prepare_adatas({"group-1": a1, "group 2": a2})
-    spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups")
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups", label_key="cell_type")
     model = spVIPESmulti.model.spVIPESmulti(
         combined,
         n_hidden=16,
@@ -70,9 +74,11 @@ def test_embed_overwrite_guard_is_transactional():
     a2 = ad.AnnData(X=rng.poisson(5, size=(10, 8)).astype(np.float32))
     a1.var_names = [f"g{i}" for i in range(8)]
     a2.var_names = [f"g{i}" for i in range(8)]
+    a1.obs["cell_type"] = ["A"] * 5 + ["B"] * 5
+    a2.obs["cell_type"] = ["A"] * 5 + ["B"] * 5
 
     combined = spVIPESmulti.data.prepare_adatas({"g1": a1, "g2": a2})
-    spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups")
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups", label_key="cell_type")
     model = spVIPESmulti.model.spVIPESmulti(
         combined,
         n_hidden=16,
@@ -97,9 +103,11 @@ def test_train_auto_infers_group_indices(monkeypatch):
     a2 = ad.AnnData(X=rng.poisson(5, size=(12, 6)).astype(np.float32))
     a1.var_names = [f"g{i}" for i in range(6)]
     a2.var_names = [f"g{i}" for i in range(6)]
+    a1.obs["cell_type"] = ["A"] * 6 + ["B"] * 6
+    a2.obs["cell_type"] = ["A"] * 6 + ["B"] * 6
 
     combined = spVIPESmulti.data.prepare_adatas({"g1": a1, "g2": a2})
-    spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups")
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups", label_key="cell_type")
     model = spVIPESmulti.model.spVIPESmulti(
         combined,
         n_hidden=8,
@@ -120,9 +128,11 @@ def test_get_latent_representation_normalized_path_returns_expected_shapes():
     a2 = ad.AnnData(X=rng.poisson(5, size=(11, 9)).astype(np.float32))
     a1.var_names = [f"g{i}" for i in range(9)]
     a2.var_names = [f"g{i}" for i in range(9)]
+    a1.obs["cell_type"] = ["A"] * 8 + ["B"] * 7
+    a2.obs["cell_type"] = ["A"] * 6 + ["B"] * 5
 
     combined = spVIPESmulti.data.prepare_adatas({"g1": a1, "g2": a2})
-    spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups")
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups", label_key="cell_type")
     model = spVIPESmulti.model.spVIPESmulti(
         combined,
         n_hidden=16,
@@ -151,6 +161,10 @@ def test_get_loadings_multimodal_returns_group_modality_keys():
     g1_protein.var_names = [f"protein_{i}" for i in range(4)]
     g2_rna.var_names = [f"rna_{i}" for i in range(6)]
     g2_protein.var_names = [f"protein_{i}" for i in range(4)]
+    g1_rna.obs["cell_type"] = ["A"] * 5 + ["B"] * 5
+    g1_protein.obs["cell_type"] = ["A"] * 5 + ["B"] * 5
+    g2_rna.obs["cell_type"] = ["A"] * 4 + ["B"] * 4
+    g2_protein.obs["cell_type"] = ["A"] * 4 + ["B"] * 4
 
     combined = spVIPESmulti.data.prepare_multimodal_adatas(
         {
@@ -159,7 +173,10 @@ def test_get_loadings_multimodal_returns_group_modality_keys():
         },
         modality_likelihoods={"rna": "nb", "protein": "gaussian"},
     )
-    spVIPESmulti.model.spVIPESmulti.setup_anndata(combined, groups_key="groups")
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(
+        combined, groups_key="groups", label_key="cell_type",
+        modality_likelihoods={"rna": "nb", "protein": "gaussian"},
+    )
     model = spVIPESmulti.model.spVIPESmulti(
         combined,
         n_hidden=16,
