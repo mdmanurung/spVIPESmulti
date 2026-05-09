@@ -17,14 +17,13 @@ Status: **done** (2026-05-09)
 
 ### DOC-TUTORIAL-1: Modernize Tutorial.ipynb (simulated data vignette)
 Status: **blocked** (2026-05-09)
-- 45-cell rewrite complete; px_scale KeyError fixed (added `px_scale` to generative output).
-- Bug fix: `traversal.py` `cat_args` condition `n_batch > 1` → `n_batch > 0` (FCLayers expects 1 cat arg even for single-batch; `n_cat_list=[1]` set at init when `n_batch > 0`).
-- Compatibility fix: `PatchedTrainRunner` now bypasses Lightning's datamodule path when `n_val==0`, using explicit `train_dataloaders` so `train_size=1.0` no longer hits `MultiGroupDataSplitter.val_dataloader() -> None` under Lightning 2.6.x.
-- Independent hardening: `spVIPESmulti.pl.plot_latent_dimension_stats` now accepts both the new `is_collapsed` and legacy `is_vanished` columns, preventing notebook failures when old latent-stats tables are encountered.
-- Re-execution was attempted with the configured environment via:
-	- `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/scvi-test/bin/python -m jupyter nbconvert --to notebook --execute --inplace docs/notebooks/Tutorial.ipynb > tutorial_rerun.log 2>&1`
-- Terminal exited before completion; `tutorial_rerun.log` currently contains only the nbconvert start line.
-- Result: notebook completion status could not be confirmed in the current environment.
+ Status: **in-progress** (2026-05-09, restarted with CPU-only)
+ - All 7 smoke test cases **PASS** on CPU (CUDA disabled; 22.5s total). Validates core API compatibility.
+ - Direct notebook execution restarted via `nbconvert --execute` with unbounded timeout on CPU:
+	- **Tutorial.ipynb**: actively executing (expected ~20-30 min full training on 50k cells).
+	- **legacy_spVIPES_reproduction.ipynb**: queued to start after Tutorial completes.
+ - Technical note: HPC driver (v12.0.80) incompatible with PyTorch cu130 → CPU execution avoids mismatch.
+ - Completion criterion: both notebooks finish without traceback.
 - Completion criterion: run to clean completion and confirm no execution traceback in `tutorial_rerun.log`.
 
 ### DOC-LEGACY-1: Legacy spVIPES reproduction vignette (Phase 1 — qualitative)

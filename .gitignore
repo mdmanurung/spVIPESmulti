@@ -34,6 +34,7 @@ PLAN.md
 PROGRESS.md
 ImplementationPlan.md
 HANDOFF.md
+ImplementationPlan_*.md
 data/*
 docs/notebooks/data/*
 *.h5ad
