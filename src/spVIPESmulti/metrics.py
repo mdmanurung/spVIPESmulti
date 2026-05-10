@@ -9,7 +9,7 @@ Metric semantics
 Shared latent (z_shared) — you want groups to *mix* and labels to *separate*:
 - ``ilisi``:  higher → better group mixing  (range: 1 → n_groups)
 - ``clisi``:  lower  → better label separation (range: 1 → n_labels)
-- ``kbet``:   higher → better group mixing  (range: 0 → 1)
+- ``kbet``:   lower  → better group mixing  (rejection rate, range: 0 → 1)
 - ``knn_purity``:  higher → better label preservation (range: 0 → 1)
 - ``leiden_ari``:  higher → better label structure  (range: 0 → 1)
 
@@ -295,7 +295,7 @@ def integration_report(
         ``clisi``
             Label cLISI on z_shared (lower = better separation).
         ``kbet``
-            kBET proxy on z_shared (higher = better mixing).
+            kBET rejection rate on z_shared (lower = better mixing).
         ``knn_purity``
             k-NN purity on z_shared (higher = better label preservation).
         ``leiden_ari``

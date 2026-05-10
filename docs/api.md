@@ -21,14 +21,21 @@ spVIPESmulti v1.0.0 — shared-private Variational Inference with Product of Exp
 | `summarize_enrichment` | Instance method | `model.summarize_enrichment(...)` |
 | `interpretation_report` | Instance method | `model.interpretation_report(...)` |
 | `get_loadings` | Instance method | `model.get_loadings()` |
+| `traverse_latent` | Instance method | `model.traverse_latent(...)` |
 | `prepare_adatas` | Function | `spVIPESmulti.data.prepare_adatas` |
 | `prepare_multimodal_adatas` | Function | `spVIPESmulti.data.prepare_multimodal_adatas` |
+| `highly_variable_genes_union` | Function | `spVIPESmulti.utils.highly_variable_genes_union` |
 | `store_latents` | Function | `spVIPESmulti.utils.store_latents` |
 | `add_latent_dims_to_obs` | Function | `spVIPESmulti.utils.add_latent_dims_to_obs` |
 | `compute_shared_umap` | Function | `spVIPESmulti.utils.compute_shared_umap` |
 | `compute_private_umaps` | Function | `spVIPESmulti.utils.compute_private_umaps` |
 | `get_top_genes` | Function | `spVIPESmulti.utils.get_top_genes` |
 | `score_cells_on_factor` | Function | `spVIPESmulti.utils.score_cells_on_factor` |
+| `integration_report` | Function | `spVIPESmulti.metrics.integration_report` |
+| `latent_dimension_stats` | Function | `spVIPESmulti.metrics.latent_dimension_stats` |
+| `reconstruction_error` | Function | `spVIPESmulti.metrics.reconstruction_error` |
+| `traverse_latent` | Function | `spVIPESmulti.traversal.traverse_latent` |
+| `calculate_differential_vars` | Function | `spVIPESmulti.traversal.calculate_differential_vars` |
 | `heatmap_loadings` | Function | `spVIPESmulti.pl.heatmap_loadings` |
 | `umap_shared` | Function | `spVIPESmulti.pl.umap_shared` |
 | `umap_private` | Function | `spVIPESmulti.pl.umap_private` |
@@ -37,6 +44,11 @@ spVIPESmulti v1.0.0 — shared-private Variational Inference with Product of Exp
 | `loadings_dotplot` | Function | `spVIPESmulti.pl.loadings_dotplot` |
 | `enrichment_heatmap` | Function | `spVIPESmulti.pl.enrichment_heatmap` |
 | `interpretation_dashboard` | Function | `spVIPESmulti.pl.interpretation_dashboard` |
+| `plot_latent_dims_in_umap` | Function | `spVIPESmulti.pl.plot_latent_dims_in_umap` |
+| `plot_latent_dims_in_heatmap` | Function | `spVIPESmulti.pl.plot_latent_dims_in_heatmap` |
+| `plot_latent_dimension_stats` | Function | `spVIPESmulti.pl.plot_latent_dimension_stats` |
+| `show_top_differential_vars` | Function | `spVIPESmulti.pl.show_top_differential_vars` |
+| `differential_vars_heatmap` | Function | `spVIPESmulti.pl.differential_vars_heatmap` |
 | `spVIPESmultimodule` | PyTorch module | `spVIPESmulti.module.spVIPESmultimodule` |
 | `Encoder` | Neural network | `spVIPESmulti.nn.Encoder` |
 | `LinearDecoderSPVIPE` | Neural network | `spVIPESmulti.nn.LinearDecoderSPVIPE` |
@@ -69,9 +81,9 @@ latents = model.get_latent_representation(batch_size=512)
     :toctree: generated
     :template: class.rst
 
-    model.spVIPESmulti
+    model.spvipesmulti.spVIPESmulti
 
-.. autoclass:: spVIPESmulti.model.spVIPESmulti
+.. autoclass:: spVIPESmulti.model.spvipesmulti.spVIPESmulti
     :members:
     :undoc-members:
     :show-inheritance:
@@ -96,11 +108,16 @@ latents = model.get_latent_representation(batch_size=512)
 | `disentangle_label_shared_weight` | `float or None` | `None` | Override the preset's weight for the supervised label-classifier on z_shared. |
 | `disentangle_group_private_weight` | `float or None` | `None` | Override the preset's weight for the supervised group-classifier on z_private. |
 | `disentangle_label_private_weight` | `float or None` | `None` | Override the preset's weight for the adversarial label-classifier on z_private (GRL). |
+| `disentangle_batch_shared_weight` | `float or None` | `None` | Override the preset's weight for adversarial technical-batch erasure on z_shared. Requires `batch_key`. |
+| `disentangle_donor_shared_weight` | `float or None` | `None` | Override the preset's weight for adversarial donor erasure on z_shared. Requires `donor_key`. |
+| `disentangle_donor_private_weight` | `float or None` | `None` | Override the preset's weight for supervised donor retention on z_private. Requires `donor_key`. |
 | `contrastive_weight` | `float or None` | `None` | Override the preset's weight for the prototype InfoNCE loss on z_shared. |
 | `contrastive_temperature` | `float` | `0.1` | Temperature for the InfoNCE softmax. |
+| `disentangle_warmup` | `bool` | `True` | Warm up covariate GRL strength with KL warmup. |
 | `modality_loss_weights` | `dict[str, float] or None` | `None` | Per-modality scalar multipliers on the reconstruction loss. E.g. `{"rna": 1.0, "protein": 5.0}` to up-weight the protein term. Multimodal mode only. |
 | `use_jeffreys_integ` | `bool` | `False` | Add a Jeffreys (symmetric KL) integration loss between every pair of group PoE posteriors on z_shared. |
 | `jeffreys_integ_weight` | `float` | `1.0` | Scalar multiplier on the Jeffreys integration loss. |
+| `group_loss_weights` | `list[float] or None` | `None` | Per-group ELBO weights, normalized internally. Useful for imbalanced groups. |
 | `strict_likelihood_support` | `bool` | `False` | Enable stricter likelihood-target validation before reconstruction `log_prob` calls. Always checks finite values (and NB non-negative). In strict mode, also requires integer-like NB counts when `log_variational_generative=False`. |
 | `**model_kwargs` | | | Forwarded to `spVIPESmultimodule`. |
 
@@ -118,6 +135,8 @@ spVIPESmulti.model.spVIPESmulti.setup_anndata(
     groups_key,
     label_key=None,
     sample_key=None,
+    condition_key=None,
+    donor_key=None,
     batch_key=None,
     layer=None,
     modality_likelihoods=None,
@@ -132,6 +151,8 @@ Registers fields on `adata` via `AnnDataManager` and selects the PoE strategy.
 | `groups_key` | `str` | — | Column in `adata.obs` identifying which group each cell belongs to. |
 | `label_key` | `str or None` | `None` | Column in `adata.obs` with cell-type labels. Required for label-based PoE and for label-dependent disentanglement components. |
 | `sample_key` | `str or None` | `None` | Optional sample identifier column used by sample-aware posterior aggregation and differential abundance helpers. |
+| `condition_key` | `str or None` | `None` | Optional perturbation or treatment-state column registered as `condition`. |
+| `donor_key` | `str or None` | `None` | Optional donor or biological replicate column. Required for donor disentanglement components. |
 | `batch_key` | `str or None` | `None` | Column in `adata.obs` for technical batch. Adds a one-hot batch covariate to each encoder / decoder. |
 | `layer` | `str or None` | `None` | Key in `adata.layers` to use as the count matrix. Defaults to `adata.X`. |
 | `modality_likelihoods` | `dict[str, str] or None` | `None` | Overrides / sets the per-modality likelihood. Written into `adata.uns["modality_likelihoods"]`. Supported values: `"nb"`, `"gaussian"`. |
@@ -166,6 +187,8 @@ Returns a dictionary with:
 
 When validation metrics are present, `report["held_out_metrics"]["held_out_nll"]` aliases the latest `reconstruction_loss_validation` value.
 
+`kbet` is the kBET rejection rate, so lower values indicate better group mixing. Other shared-latent diagnostics follow their standard direction: iLISI higher, cLISI lower, kNN purity higher, Leiden ARI higher.
+
 ---
 
 ### `train`
@@ -179,6 +202,7 @@ model.train(
     early_stopping=False,
     n_epochs_kl_warmup=400,
     n_steps_kl_warmup=None,
+    num_workers=0,
     plan_kwargs=None,
     **trainer_kwargs,
 )
@@ -194,8 +218,11 @@ model.train(
 | `early_stopping` | `bool` | `False` | Enable early stopping via Lightning's `EarlyStopping` callback. |
 | `n_epochs_kl_warmup` | `int` | `400` | Number of epochs over which the KL weight is linearly annealed from 0 to 1. |
 | `n_steps_kl_warmup` | `int or None` | `None` | Step-based KL warmup. Takes precedence over `n_epochs_kl_warmup` if set. |
+| `num_workers` | `int` | `0` | Number of DataLoader worker processes. Use positive values on HPC/GPU nodes when AnnData access is multiprocessing-safe. |
 | `plan_kwargs` | `dict or None` | `None` | Extra keyword arguments forwarded to `scvi.train.TrainingPlan`. |
 | `**trainer_kwargs` | | | Forwarded to `pl.Trainer`. Use `accelerator="gpu", devices=1` to select a GPU (replaces the removed `use_gpu=True`). |
+
+The training method also consumes instrumentation-only kwargs before constructing the Trainer: `compute_orthogonality_metric`, `orthogonality_groupby_keys`, and `orthogonality_min_cells_per_stratum`.
 
 ---
 
@@ -264,6 +291,8 @@ latents = model.get_latent_representation(
 | `"shared_reordered"` | `{g: (n_g, n_shared)}` | Shared latent reindexed to the original `group_indices_list` order. **Use this for downstream analysis.** |
 | `"private"` | `{g: (n_g, n_private)}` | Group-level private latent, dataloader order. |
 | `"private_reordered"` | `{g: (n_g, n_private)}` | Private latent, original cell order. |
+| `"shared_posterior_loc"` / `"shared_posterior_scale"` | `{g: (n_g, n_shared)}` | Shared posterior parameters in dataloader order. |
+| `"shared_posterior_loc_reordered"` / `"shared_posterior_scale_reordered"` | `{g: (n_g, n_shared)}` | Shared posterior parameters in original cell order. |
 | `"private_multimodal"` | `{(g, mod): (n_g, n_private)}` | Per-(group, modality) private latent, dataloader order. **Multimodal only.** |
 | `"private_multimodal_reordered"` | `{(g, mod): (n_g, n_private)}` | Per-(group, modality) private latent, original cell order. **Multimodal only.** |
 
@@ -494,11 +523,11 @@ model.train(group_indices_list=group_indices_list, max_epochs=100, batch_size=51
 
 ## Disentanglement presets
 
-The disentanglement objective is controlled by five scalar weights on auxiliary
-losses. A named preset sets all five at once; individual parameters can then
+The disentanglement objective is controlled by scalar weights on auxiliary
+losses. A named preset sets the component weights at once; individual parameters can then
 override any weight.
 
-**The five loss components:**
+**Loss components:**
 
 | Weight parameter | Target | Mechanism | Goal |
 |---|---|---|---|
@@ -506,25 +535,31 @@ override any weight.
 | `disentangle_label_shared_weight` | z_shared | Supervised classifier for cell-type label | Preserve biological signal in shared latent |
 | `disentangle_group_private_weight` | z_private | Supervised classifier for group identity | Preserve group signal in private latent |
 | `disentangle_label_private_weight` | z_private | Adversarial GRL classifier for cell-type label | Erase biological signal from private latent |
+| `disentangle_batch_shared_weight` | z_shared | Adversarial GRL classifier for technical batch | Erase batch signal from shared latent |
+| `disentangle_donor_shared_weight` | z_shared | Adversarial GRL classifier for donor | Erase donor signal from shared latent |
+| `disentangle_donor_private_weight` | z_private | Supervised donor classifier | Preserve donor/private signal in private latent |
 | `contrastive_weight` | z_shared | Prototype InfoNCE (EMA) across groups | Cross-group semantic alignment |
 
 **Available presets:**
 
-| Preset | group_shared | label_shared | group_private | label_private | contrastive |
-|---|---|---|---|---|---|
-| `"off"` (default) | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
-| `"full"` | 1.0 | 1.0 | 1.0 | 1.0 | 0.5 |
-| `"shared_only"` | 1.0 | 1.0 | 0.0 | 0.0 | 0.5 |
-| `"private_only"` | 0.0 | 0.0 | 1.0 | 1.0 | 0.0 |
-| `"adversarial_only"` | 1.0 | 0.0 | 0.0 | 1.0 | 0.0 |
-| `"supervised_only"` | 0.0 | 1.0 | 1.0 | 0.0 | 0.5 |
-| `"no_contrastive"` | 1.0 | 1.0 | 1.0 | 1.0 | 0.0 |
+| Preset | group_shared | label_shared | group_private | label_private | batch_shared | donor_shared | donor_private | contrastive |
+|---|---|---|---|---|---|---|---|---|
+| `"off"` (default) | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| `"full"` | 1.0 | 1.0 | 1.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.5 |
+| `"shared_only"` | 1.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.5 |
+| `"private_only"` | 0.0 | 0.0 | 1.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| `"adversarial_only"` | 1.0 | 0.0 | 0.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| `"supervised_only"` | 0.0 | 1.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.5 |
+| `"no_contrastive"` | 1.0 | 1.0 | 1.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| `"minimal_safe_bio"` | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.5 | 0.0 |
+| `"full_bio"` | 1.0 | 1.0 | 1.0 | 1.0 | 0.5 | 0.5 | 0.5 | 0.5 |
 
 Label-dependent components (`disentangle_label_shared_weight`,
 `disentangle_label_private_weight`, `contrastive_weight`) require `label_key`
-to be passed to `setup_anndata`. All five components work in both single-modal
-and multimodal mode (components 3 & 4 loop over each modality's private latent
-in multimodal mode).
+to be passed to `setup_anndata`. Batch and donor components require `batch_key`
+and `donor_key`, respectively. All components work in both single-modal and
+multimodal mode; private-latent components loop over each modality's private
+latent in multimodal mode.
 
 **Example — full preset with InfoNCE disabled:**
 
@@ -644,6 +679,42 @@ consolidate the manual boilerplate repeated in every tutorial notebook.
 ```python
 import spVIPESmulti
 ```
+
+### `highly_variable_genes_union`
+
+```python
+spVIPESmulti.utils.highly_variable_genes_union(
+    adata,
+    group_key,
+    n_top_genes=2000,
+    flavor="seurat_v3",
+    subset=True,
+    **hvg_kwargs,
+)
+```
+
+Runs `scanpy.pp.highly_variable_genes` independently within each group and
+returns the union of selected genes. This is useful before `prepare_adatas`
+when a gene can be highly variable in one condition but not another.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `adata` | `AnnData` | — | Input AnnData before group-wise integration. |
+| `group_key` | `str` | — | Column in `adata.obs` defining groups for separate HVG selection. |
+| `n_top_genes` | `int` | `2000` | HVGs selected per group. |
+| `flavor` | `str` | `"seurat_v3"` | HVG flavor forwarded to scanpy. |
+| `subset` | `bool` | `True` | If `True`, return a subset copy. If `False`, add `adata.var["highly_variable_union"]`. |
+| `**hvg_kwargs` | | | Extra arguments forwarded to scanpy; `batch_key` is handled per group/batch. |
+
+```python
+adata_hvg = spVIPESmulti.utils.highly_variable_genes_union(
+    adata,
+    group_key="condition",
+    n_top_genes=3000,
+)
+```
+
+---
 
 ### `store_latents`
 
@@ -1035,6 +1106,102 @@ loadings are collected and passed as `var_names`.
 
 ```python
 spVIPESmulti.pl.loadings_dotplot(adata, dims=[0, 2, 4], groupby="cell_type", model=model)
+```
+
+---
+
+### Additional plotting helpers
+
+| Function | Purpose |
+|---|---|
+| `spVIPESmulti.pl.enrichment_heatmap(scores_df, group_labels=None, top_n=20, ...)` | Heatmap of per-cell or group-aggregated enrichment scores. |
+| `spVIPESmulti.pl.interpretation_dashboard(adata, scores_df, groupby, ...)` | Two-panel shared embedding plus enrichment heatmap. |
+| `spVIPESmulti.pl.plot_latent_dims_in_umap(adata, obsm_key, dims=None, ...)` | One UMAP panel per latent dimension colored by the latent value. |
+| `spVIPESmulti.pl.plot_latent_dims_in_heatmap(adata, obsm_key, groupby, ...)` | Heatmap of mean latent activity per cell type or grouping. |
+| `spVIPESmulti.pl.plot_latent_dimension_stats(dim_stats_df, ...)` | Barplot of per-dimension activity/collapse statistics. |
+| `spVIPESmulti.pl.show_top_differential_vars(diff_vars_df, dim_idx, ...)` | Barplot of top traversal genes for one shared dimension. |
+| `spVIPESmulti.pl.differential_vars_heatmap(traversal_df, ...)` | Heatmap of traversal effects across dimensions and genes. |
+
+```{eval-rst}
+.. autosummary::
+    :toctree: generated
+
+    pl.enrichment_heatmap
+    pl.interpretation_dashboard
+    pl.plot_latent_dims_in_umap
+    pl.plot_latent_dims_in_heatmap
+    pl.plot_latent_dimension_stats
+    pl.show_top_differential_vars
+    pl.differential_vars_heatmap
+```
+
+---
+
+## Metrics
+
+The `spVIPESmulti.metrics` module provides standalone NumPy/pandas diagnostics.
+`model.evaluate(...)` wraps the main integration report for fitted models.
+
+| Function | Direction / output |
+|---|---|
+| `ilisi(rep, groups, k=30)` | Group mixing. Higher is better; range is approximately `1..n_groups`. |
+| `clisi(rep, labels, k=30)` | Cell-label neighborhood diversity. Lower is better for label preservation. |
+| `kbet(rep, groups, k=20)` | kBET rejection rate. Lower is better. |
+| `knn_purity(rep, labels, k=20)` | Fraction of neighbors sharing the query label. Higher is better. |
+| `leiden_ari(rep, labels, resolution=0.8)` | Leiden clustering ARI against labels. Higher is better. |
+| `per_group_silhouette(z_private, groups)` | Group/private separation diagnostic. Higher means stronger separation. |
+| `integration_report(z_shared, group_labels, cell_labels, z_private_dict=None, ...)` | Bundles shared/private diagnostics into one DataFrame. |
+| `latent_dimension_stats(latent_array, mu_array=None, sigma_array=None, threshold=0.05)` | Per-dimension std, mean absolute value, mean KL, collapse flag, and rank. |
+| `reconstruction_error(model, adata=None, group_indices_list=None, batch_size=256)` | Per-group reconstruction RMSE and Poisson NLL. |
+
+```python
+report = spVIPESmulti.metrics.integration_report(
+    z_shared,
+    adata.obs["groups"].values,
+    adata.obs["cell_type"].values,
+)
+stats = spVIPESmulti.metrics.latent_dimension_stats(z_shared)
+recon = spVIPESmulti.metrics.reconstruction_error(model)
+```
+
+```{eval-rst}
+.. autosummary::
+    :toctree: generated
+
+    metrics.ilisi
+    metrics.clisi
+    metrics.kbet
+    metrics.knn_purity
+    metrics.leiden_ari
+    metrics.per_group_silhouette
+    metrics.integration_report
+    metrics.latent_dimension_stats
+    metrics.reconstruction_error
+```
+
+---
+
+## Latent Traversal
+
+The `spVIPESmulti.traversal` module interprets shared latent dimensions by
+varying one `z_shared` dimension at a time, decoding the result, and measuring
+the per-gene response. The model also exposes this as `model.traverse_latent(...)`.
+
+```python
+traversal = model.traverse_latent(group_idx=0, n_steps=15, n_samples=50)
+top = spVIPESmulti.traversal.calculate_differential_vars(traversal, top_n=20)
+fig = spVIPESmulti.pl.differential_vars_heatmap(traversal)
+```
+
+```{eval-rst}
+.. autosummary::
+    :toctree: generated
+
+    traversal.traverse_latent
+    traversal.calculate_differential_vars
+
+.. autofunction:: spVIPESmulti.traversal.traverse_latent
+.. autofunction:: spVIPESmulti.traversal.calculate_differential_vars
 ```
 
 ---

@@ -66,7 +66,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         Named preset activating the optional disentanglement objective.
         Available presets: ``"off"``, ``"full"``, ``"shared_only"``,
         ``"private_only"``, ``"adversarial_only"``, ``"supervised_only"``,
-        ``"no_contrastive"``.
+        ``"no_contrastive"``, ``"minimal_safe_bio"``, ``"full_bio"``.
     disentangle_group_shared_weight : float or None, default=None
         Override the preset's weight for the adversarial group classifier on
         ``z_shared`` (gradient-reversal layer). ``None`` keeps the preset value.
@@ -75,15 +75,27 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         ``z_shared`` (mutual-information lower bound). Requires ``label_key``.
     disentangle_group_private_weight : float or None, default=None
         Override the preset's weight for the supervised group classifier on
-        ``z_private``. Requires ``label_key`` for the group supervision signal.
+        ``z_private``.
     disentangle_label_private_weight : float or None, default=None
         Override the preset's weight for the adversarial label classifier on
         ``z_private`` (gradient-reversal layer). Requires ``label_key``.
+    disentangle_batch_shared_weight : float or None, default=None
+        Override the preset's weight for the adversarial technical-batch
+        classifier on ``z_shared``. Requires ``batch_key``.
+    disentangle_donor_shared_weight : float or None, default=None
+        Override the preset's weight for the adversarial donor classifier on
+        ``z_shared``. Requires ``donor_key``.
+    disentangle_donor_private_weight : float or None, default=None
+        Override the preset's weight for the supervised donor classifier on
+        ``z_private``. Requires ``donor_key``.
     contrastive_weight : float or None, default=None
         Override the preset's weight for the prototype InfoNCE loss on
         ``z_shared``. Requires ``label_key``. ``None`` keeps the preset value.
     contrastive_temperature : float, default=0.1
         Temperature for the InfoNCE softmax denominator.
+    disentangle_warmup : bool, default=True
+        Whether to warm up covariate gradient-reversal strength with the KL
+        warmup schedule.
     modality_loss_weights : dict[str, float] or None, default=None
         Per-modality scalar multipliers on the reconstruction loss.
         E.g. ``{"rna": 1.0, "protein": 5.0}`` to up-weight the protein term.
@@ -143,6 +155,8 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
     -----
     - Disentanglement components that use labels (2, 4, 5) require ``label_key``
       in :meth:`setup_anndata`.
+    - Batch and donor disentanglement components require ``batch_key`` and
+      ``donor_key`` respectively.
     - Individual weight overrides stack on top of a preset: any numeric value
       (including ``0.0``) replaces the preset; ``None`` keeps it.
     - GPU acceleration is strongly recommended for large datasets.
@@ -1201,9 +1215,8 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
 
         Returns integration-quality diagnostics on the shared (and optionally
         private) latent space without any training or loss-function changes.
-        Held-out NLL is not included in this first-pass implementation; it
-        requires eval-loss plumbing in the training path (planned for a later
-        iteration).
+        When validation metrics are present in training history, the latest
+        values are returned under ``held_out_metrics``.
 
         Parameters
         ----------
@@ -1239,12 +1252,14 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
               evaluated latent space (columns: ``latent``, ``ilisi``,
               ``clisi``, ``kbet``, ``knn_purity``, ``leiden_ari``,
               ``silhouette``).
+              ``kbet`` is a rejection rate, so lower values indicate better
+              group mixing.
             - ``metadata``: dictionary of evaluation configuration values
               (``n_cells``, ``n_groups``, ``k``, ``label_key``,
               ``leiden_resolution``, ``include_private``,
               ``used_precomputed_embedding``).
-                        - ``held_out_metrics``: latest validation metrics from training
-                            history when available on the model's registered AnnData.
+            - ``held_out_metrics``: latest validation metrics from training
+              history when available on the model's registered AnnData.
             - ``warnings``: list of informational warning strings emitted
               during evaluation.
         """

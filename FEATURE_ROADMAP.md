@@ -1055,6 +1055,12 @@ appended to `PROGRESS.md`.
 3-seed Kang probe matrix and use `audits/F4/` to decide whether any heads should
 move beyond opt-in.
 
+**Kang IFN notebook integration is in place.** `docs/notebooks/kang_ifn_commit_old.ipynb`
+now registers `condition_key="label"` and `donor_key="replicate"`, enables opt-in
+donor covariate heads, logs F1 orthogonality metrics during training, uses reordered
+latent outputs, and reports compact held-out probes for condition, donor, and cell type.
+The batch-shared head remains off until a real technical `batch_key` is confirmed.
+
 F2 starts after F4-lite has a passing probe/audit baseline and must ship as a **safe**
 counterfactual API: centroid shifts first, OOD/realism filtering on by default, arbitrary
 latent replacement treated as a diagnostic helper only.

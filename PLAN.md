@@ -39,6 +39,10 @@ Immediate next slice:
   key semantics, and external latent probes).
   - Implemented: registration, default-off heads/losses, guards, scheduled GRL
     scaling, unit/integration tests, and the F4 probe harness.
+  - Implemented in the Kang IFN notebook:
+    `docs/notebooks/kang_ifn_commit_old.ipynb` now registers condition/donor
+    covariates, enables opt-in donor heads, logs F1 orthogonality metrics, and
+    reports compact held-out covariate probes.
   - Remaining for F4 promotion: run the full roadmap 3-seed Kang probe matrix and
     decide whether any F4 heads should move beyond opt-in.
 - F2 starts after F4-lite has a passing probe/audit baseline and must ship as a safe
@@ -74,6 +78,9 @@ Execution note (2026-05-10):
 - F4-lite implementation is complete for the code/test/probe-harness slice. A smoke
   probe audit wrote `audits/F4/`; promotion remains blocked on the full 3-seed probe
   benchmark.
+- The Kang IFN notebook has been refreshed to use the implemented F1/F4-lite APIs:
+  condition/donor registration, donor covariate heads, orthogonality instrumentation,
+  reordered latent extraction, and notebook-local probe reporting.
 - Roadmap sequencing changed after scientific/architecture audit: F4-lite now precedes
   F2, F3 follows F4, and F11-F14 capture nonlinear diagnostics, conditional/MMD,
   artifact-latent, and causal/coupled-VAE extension ideas as deferred tracks.

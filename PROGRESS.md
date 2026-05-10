@@ -9,6 +9,42 @@ How to use:
 
 ---
 
+## 2026-05-10 (Kang IFN notebook F1/F4 refresh)
+
+### Notebook: `docs/notebooks/kang_ifn_commit_old.ipynb`
+Status: completed (code updated + syntax validation)
+
+What changed:
+- Updated the Kang IFN notebook to exercise the implemented F1/F4-lite feature surface
+  without adding new cells.
+- Registered F4 covariates with `condition_key="label"` and
+  `donor_key="replicate"` in `setup_anndata(...)`.
+- Enabled opt-in donor covariate heads in the model configuration:
+  `disentangle_donor_shared_weight=0.5` and
+  `disentangle_donor_private_weight=0.5`.
+- Enabled F1 orthogonality instrumentation during training with
+  `compute_orthogonality_metric=True` and strata over `("condition", "donor")`.
+- Updated latent extraction to use reordered latent outputs when present and added a
+  compact held-out probe table for `condition`, `donor`, and `cell_type` on shared
+  and private latents.
+- Kept the batch-shared F4 head off because the Kang default mapping used here has no
+  confirmed technical `batch_key`.
+
+Verification:
+- Notebook JSON parses successfully.
+- Notebook code cells pass Python syntax parsing, excluding the intentional IPython
+  help cell `?model.train`.
+- `pytest tests/test_covariate_heads.py -q` -> `12 passed`.
+
+Files:
+- `docs/notebooks/kang_ifn_commit_old.ipynb`
+- `PLAN.md`
+- `HANDOFF.md`
+- `FEATURE_ROADMAP.md`
+- `PROGRESS.md`
+
+---
+
 ## 2026-05-10 (F4-lite covariate heads implementation)
 
 ### F4-lite: Covariate registration, heads, and probe harness

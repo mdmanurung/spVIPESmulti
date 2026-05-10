@@ -61,6 +61,12 @@ a TDD plan and a quantitative go/no-go benchmark.
 - Added covariate GRL scaling from the existing scvi `kl_weight` warmup and targeted coverage in `tests/test_covariate_heads.py`.
 - Targeted validation: `pytest tests/test_covariate_heads.py tests/test_multimodal_disentangle.py tests/test_regression_fixes.py tests/test_multigroup_multimodal.py -q` -> `64 passed`.
 - Added `scripts/benchmark_f4_covariate_probes.py`; smoke audit wrote `audits/F4/`.
+- Updated `docs/notebooks/kang_ifn_commit_old.ipynb` to use the implemented F1/F4-lite
+  APIs: condition/donor registration, opt-in donor heads, orthogonality metric logging,
+  reordered latent extraction, and notebook-local held-out probe reporting.
+- Notebook validation: JSON parses, code cells syntax-parse except the intentional
+  IPython help cell `?model.train`, and `pytest tests/test_covariate_heads.py -q`
+  -> `12 passed`.
 - Kang default mapping uses `condition_key="label"` and `donor_key="replicate"`.
   No technical `batch_key` is known, so the standalone batch-shared rows are skipped
   unless a real technical-batch column is provided; the combined `full_bio` probe still

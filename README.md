@@ -26,6 +26,8 @@ spVIPESmulti aligns groups via a label-supervised Product of Experts (PoE) frame
 | **Label-based PoE** | `label_key` provided | High-quality cell type labels; supports N ≥ 2 groups |
 | **Unsupervised PoE** | `label_key` omitted | No label annotations available; integration quality depends on data overlap |
 
+Current package capabilities include single-modal and multimodal AnnData preparation, label-supervised or unsupervised PoE integration, optional normalizing-flow priors, optional shared/private disentanglement losses, donor/batch covariate controls, sample-aware posterior aggregation, differential-abundance scoring, enrichment analysis, integration diagnostics, latent traversal, and plotting utilities.
+
 ## Installation
 
 ### Requirements
@@ -95,6 +97,8 @@ spVIPESmulti.model.spVIPESmulti.setup_anndata(
     groups_key="groups",
     label_key="cell_type",   # optional; enables label-supervised PoE
     sample_key="sample_id",  # optional; enables sample-aware posterior/DA helpers
+    condition_key="stim",    # optional; registers perturbation/treatment state
+    donor_key="donor",       # optional; enables donor-aware disentanglement
     batch_key="batch",       # optional; enables batch correction
 )
 
@@ -183,8 +187,11 @@ model = spVIPESmulti.model.spVIPESmulti(
     nf_target="shared",          # "shared", "private", or "both"
     # Disentanglement (optional):
     disentangle_preset="full",   # see Disentanglement section below
-        # Optional strict likelihood checks (default False):
-        strict_likelihood_support=False,
+    disentangle_warmup=True,      # warm up covariate GRL strength with KL warmup
+    # Optional strict likelihood checks (default False):
+    strict_likelihood_support=False,
+    # Optional per-group ELBO weights (normalized internally):
+    group_loss_weights=None,
 )
 ```
 
@@ -218,7 +225,7 @@ spVIPESmulti exposes an optional disentanglement objective inspired by **CellDIS
 -   **Supervised classification losses** — acting as variational MI lower bounds to *preserve* a covariate
 -   **Prototype InfoNCE** on `z_shared` — pulls same-label cells together across groups
 
-The five loss components and what they enforce:
+The core loss components and what they enforce:
 
 | # | Component | Input | Goal | Mechanism |
 |---|---|---|---|---|
@@ -227,22 +234,27 @@ The five loss components and what they enforce:
 | 3 | `q_group_private` | `z_private` | preserve group identity | supervised CE |
 | 4 | `q_label_private` | `z_private` | erase cell-type info | adversarial CE via GRL |
 | 5 | contrastive | `z_shared` | pull same-label cells together across groups | prototype InfoNCE (EMA prototypes) |
+| 6 | `q_batch_shared` | `z_shared` | erase technical batch | adversarial CE via GRL |
+| 7 | `q_donor_shared` | `z_shared` | erase donor identity | adversarial CE via GRL |
+| 8 | `q_donor_private` | `z_private` | preserve donor identity | supervised CE |
 
-Together they enforce: **`z_shared` ↔ biology only; `z_private` ↔ group only**.
+Together they support the intended split: **`z_shared` captures cross-group biology; `z_private` captures group-specific or donor/private variation**.
 
 ### Presets
 
 Select a preset via `disentangle_preset=` on the model constructor. Individual weights can always override a preset — `None` means "use the preset's value"; any numeric value (including `0.0`) overrides.
 
-| Preset | `group_shared` | `label_shared` | `group_private` | `label_private` | `contrastive` | Description |
-|---|---|---|---|---|---|---|
-| `"off"` **(default)** | 0 | 0 | 0 | 0 | 0 | No disentanglement; fully backward-compatible |
-| `"full"` | 1.0 | 1.0 | 1.0 | 1.0 | 0.5 | All five components active at sensible defaults |
-| `"shared_only"` | 1.0 | 1.0 | 0 | 0 | 0.5 | Only `z_shared` decoupling losses |
-| `"private_only"` | 0 | 0 | 1.0 | 1.0 | 0 | Only `z_private` decoupling losses |
-| `"adversarial_only"` | 1.0 | 0 | 0 | 1.0 | 0 | Only the GRL (gradient reversal) components |
-| `"supervised_only"` | 0 | 1.0 | 1.0 | 0 | 0.5 | Only non-GRL (supervised) components |
-| `"no_contrastive"` | 1.0 | 1.0 | 1.0 | 1.0 | 0 | `"full"` without the InfoNCE term |
+| Preset | Group/label disentanglement | Batch/donor disentanglement | Contrastive | Description |
+|---|---|---|---|---|
+| `"off"` **(default)** | off | off | off | No disentanglement; fully backward-compatible |
+| `"full"` | all four group/label components at 1.0 | off | 0.5 | Original full preset |
+| `"shared_only"` | shared components only | off | 0.5 | Only `z_shared` decoupling losses |
+| `"private_only"` | private components only | off | off | Only `z_private` decoupling losses |
+| `"adversarial_only"` | GRL components only | off | off | Only adversarial group/label losses |
+| `"supervised_only"` | supervised components only | off | 0.5 | Only non-GRL group/label losses |
+| `"no_contrastive"` | all four group/label components at 1.0 | off | off | `"full"` without InfoNCE |
+| `"minimal_safe_bio"` | off | donor-private at 0.5 | off | Preserve donor/private structure without forcing shared biology |
+| `"full_bio"` | all four group/label components at 1.0 | batch-shared, donor-shared, donor-private at 0.5 | 0.5 | Full biological/covariate disentanglement preset |
 
 ```python
 # No disentanglement (default):
@@ -261,6 +273,9 @@ model = spVIPESmulti.model.spVIPESmulti(
     disentangle_label_shared_weight=1.0,
     disentangle_group_private_weight=0.5,
     disentangle_label_private_weight=0.5,
+    disentangle_batch_shared_weight=0.2,
+    disentangle_donor_shared_weight=0.2,
+    disentangle_donor_private_weight=0.5,
     contrastive_weight=0.2,
     contrastive_temperature=0.1,
 )
@@ -269,7 +284,8 @@ model = spVIPESmulti.model.spVIPESmulti(
 ### Constraints
 
 -   **Labels required for label-using components.** Components 2 (`label_shared`), 4 (`label_private`), and 5 (contrastive) require `label_key` in `setup_anndata`. Components 1 and 3 (the `group_*` classifiers) work without labels — group identity is always known.
--   **Multimodal fully supported.** Components 1, 2, and 5 act on the post-PoE shared latent (modality-agnostic). Components 3 and 4 loop over each modality's private latent, summing per-modality CE terms.
+-   **Covariate keys required for covariate components.** `disentangle_batch_shared_weight` requires `batch_key`; `disentangle_donor_shared_weight` and `disentangle_donor_private_weight` require `donor_key`.
+-   **Multimodal fully supported.** Shared components act on the post-PoE shared latent. Private components loop over each modality's private latent, summing per-modality CE terms.
 
 See [`docs/notebooks/disentangle_ablation.ipynb`](docs/notebooks/disentangle_ablation.ipynb) for a per-component ablation walkthrough, and `scripts/validate_disentanglement_multimodal.py` for a systematic multimodal preset benchmark.
 
@@ -330,6 +346,17 @@ See [`docs/notebooks/cinemaot_nf_vignette.ipynb`](docs/notebooks/cinemaot_nf_vig
 
 The `spVIPESmulti.utils` and `spVIPESmulti.pl` modules provide ready-to-use helpers that
 eliminate the boilerplate repeated in every analysis notebook.
+
+### HVG selection
+
+```python
+# Compute HVGs separately per group, then keep the union.
+adata_hvg = spVIPESmulti.utils.highly_variable_genes_union(
+    adata,
+    group_key="condition",
+    n_top_genes=3000,
+)
+```
 
 ### Storing latent representations
 
@@ -428,8 +455,25 @@ fig = spVIPESmulti.pl.training_curves(model)
 fig.savefig("training.pdf")
 ```
 
+### Model diagnostics and latent interpretation
+
+```python
+# Integration metrics from NumPy arrays or via model.evaluate(...)
+metrics = model.evaluate(label_key="cell_type", z_shared_key="X_spvm_shared", include_private=True)
+
+# Per-dimension activity/collapse diagnostics
+stats = spVIPESmulti.metrics.latent_dimension_stats(payload["shared"])
+fig = spVIPESmulti.pl.plot_latent_dimension_stats(stats)
+
+# Decoder-based traversal of z_shared dimensions
+traversal = model.traverse_latent(group_idx=0, n_steps=15)
+top_genes = spVIPESmulti.traversal.calculate_differential_vars(traversal, top_n=20)
+fig = spVIPESmulti.pl.differential_vars_heatmap(traversal)
+```
+
 | Function | Module | Description |
 |---|---|---|
+| `highly_variable_genes_union` | `spVIPESmulti.utils` | Compute per-group HVGs and keep their union |
 | `store_latents` | `spVIPESmulti.utils` | Stitch per-group latents into `adata.obsm` in original cell order |
 | `add_latent_dims_to_obs` | `spVIPESmulti.utils` | Copy latent dims into `adata.obs` for use as scanpy `color=` keys |
 | `compute_shared_umap` | `spVIPESmulti.utils` | Run neighbours + UMAP on the shared latent |
@@ -445,8 +489,19 @@ fig.savefig("training.pdf")
 | `get_enrichment_scores` | `spVIPESmulti.model.spVIPESmulti` | Run ORA/GSEA/ULM enrichment with optional decoupler backend |
 | `summarize_enrichment` | `spVIPESmulti.model.spVIPESmulti` | Aggregate enrichment scores by any `adata.obs` grouping |
 | `interpretation_report` | `spVIPESmulti.model.spVIPESmulti` | Build compact enrichment + integration summary tables |
+| `evaluate` | `spVIPESmulti.model.spVIPESmulti` | Compute iLISI, cLISI, kBET rejection rate, purity, ARI, and private-latent silhouette diagnostics |
+| `integration_report` | `spVIPESmulti.metrics` | Standalone integration metric table from arrays |
+| `latent_dimension_stats` | `spVIPESmulti.metrics` | Per-dimension std, mean absolute activity, KL, and collapsed-dimension flags |
+| `reconstruction_error` | `spVIPESmulti.metrics` | Per-group reconstruction RMSE and Poisson NLL |
+| `traverse_latent` | `spVIPESmulti.traversal` / model method | Decoder traversal for interpreting `z_shared` dimensions |
+| `calculate_differential_vars` | `spVIPESmulti.traversal` | Rank genes by traversal effect per shared dimension |
 | `enrichment_heatmap` | `spVIPESmulti.pl` | Plot per-cell or per-group enrichment heatmaps |
 | `interpretation_dashboard` | `spVIPESmulti.pl` | Two-panel shared-embedding + enrichment dashboard |
+| `plot_latent_dims_in_umap` | `spVIPESmulti.pl` | One UMAP panel per latent dimension |
+| `plot_latent_dims_in_heatmap` | `spVIPESmulti.pl` | Heatmap of mean latent activity by cell type or group |
+| `plot_latent_dimension_stats` | `spVIPESmulti.pl` | Barplot of per-dimension activity/collapse diagnostics |
+| `show_top_differential_vars` | `spVIPESmulti.pl` | Barplot of top traversal genes for one dimension |
+| `differential_vars_heatmap` | `spVIPESmulti.pl` | Traversal-effect heatmap across dimensions and genes |
 
 ## Troubleshooting & Hyperparameter Guide
 
@@ -608,7 +663,9 @@ model.train(
 -   [PBMC CITE-seq vaccination](docs/notebooks/pbmc_citeseq_tutorial.ipynb) — Three time-point integration + multimodal appendix
 -   [CINEMA-OT + NF prior](docs/notebooks/cinemaot_nf_vignette.ipynb) — Gaussian vs. NSF prior vs. disentanglement
 -   [Plasmodium liver-stage](docs/notebooks/biolord_comparison_plasmodium_tutorial.ipynb) — Comparison with biolord
--   [Malaria B-cell analysis](docs/notebooks/malaria_bcells.ipynb) — Lightweight end-to-end B-cell workflow from CSV inputs
+-   [Malaria B-cell recommended workflow](docs/notebooks/malaria_bcells_recommended.ipynb) — Lightweight end-to-end B-cell workflow from CSV inputs
+-   [Malaria B-cell ablations](docs/notebooks/malaria_bcells_nodisentangle.ipynb) and [hyperparameter exploration](docs/notebooks/malaria_bcells_hparam_explore.ipynb)
+-   [Kang IFN-beta workflow](docs/notebooks/kang_ifn_commit_old.ipynb) — IFN-beta benchmark notebook
 -   [Multimodal + NF prior](docs/notebooks/multimodal_nf_tutorial.ipynb) — RNA + protein integration with `prepare_multimodal_adatas`
 -   [API Documentation][link-api] — Comprehensive API reference
 

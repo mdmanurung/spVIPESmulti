@@ -17,7 +17,9 @@ notebooks/Tutorial
 notebooks/cinemaot_nf_vignette
 notebooks/pbmc_citeseq_tutorial
 notebooks/biolord_comparison_plasmodium_tutorial
-notebooks/malaria_bcells
+notebooks/malaria_bcells_recommended
+notebooks/malaria_bcells_recommended_time
+notebooks/malaria_bcells_hparam_explore
 notebooks/multimodal_nf_tutorial
 notebooks/disentangle_ablation
 ```

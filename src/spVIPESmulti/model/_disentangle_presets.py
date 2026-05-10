@@ -14,6 +14,9 @@ Each preset is a dict of weight overrides. Users select a preset via
 may further override individual weights by passing them explicitly. ``None``
 on a per-weight kwarg means "use the preset's value"; a numeric value
 (including ``0.0``) overrides the preset for that component.
+
+The package currently includes group/label components, optional batch and donor
+covariate components, and optional prototype InfoNCE.
 """
 
 DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {

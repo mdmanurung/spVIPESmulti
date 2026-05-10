@@ -129,43 +129,16 @@ nitpick_ignore = [
     #     ("py:class", "igraph.Graph"),
 ]
 
-# Mock imports for autodoc when dependencies can't be imported
-autodoc_mock_imports = [
-    "torch",
-    "torchmetrics",
-    "lightning",
-    "lightning.pytorch",
-    "scvi",
-    "scvi.model.base",
-    "scvi.data",
-    "scvi.data.fields",
-    "scvi.utils",
-    "scvi.module.base",
-    "scvi.dataloaders",
-    "scanpy",
-    "anndata",
-    "mudata",
-    "pandas",
-    "numpy",
-    "scipy",
-    "sklearn",
-    "matplotlib",
-    "seaborn",
-    "tqdm",
-    "jax",
-    "jaxlib",
-    "numpyro",
-    "optax",
-    "flax",
-    "rich",
-]
+# Core scientific packages must not be mocked: h5py/anndata/scvi import paths
+# expect real numpy/pandas/mudata objects, and mocked versions break autosummary
+# imports. The package imports cleanly with the declared dependencies installed.
+autodoc_mock_imports = []
 
 # Enhanced autodoc configuration for detailed API documentation
 autodoc_default_options = {
     "members": True,
     "undoc-members": True,
     "show-inheritance": True,
-    "inherited-members": True,
     "special-members": "__init__",
     "member-order": "bysource",
     "exclude-members": "__weakref__",
