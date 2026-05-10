@@ -205,6 +205,20 @@ class MultiGroupTrainingMixin:
             max_epochs = np.min([round((20000 / n_cells) * 400), 400]).item()
 
         plan_kwargs = plan_kwargs if isinstance(plan_kwargs, dict) else {}
+
+        # F1: optional orthogonality instrumentation kwargs are consumed here
+        # and applied directly to the module, not forwarded to Trainer.
+        compute_orthogonality_metric = trainer_kwargs.pop("compute_orthogonality_metric", None)
+        orthogonality_groupby_keys = trainer_kwargs.pop("orthogonality_groupby_keys", None)
+        orthogonality_min_cells_per_stratum = trainer_kwargs.pop("orthogonality_min_cells_per_stratum", None)
+
+        if compute_orthogonality_metric is not None:
+            self.module.compute_orthogonality_metric = bool(compute_orthogonality_metric)
+        if orthogonality_groupby_keys is not None:
+            self.module.orthogonality_groupby_keys = tuple(orthogonality_groupby_keys)
+        if orthogonality_min_cells_per_stratum is not None:
+            self.module.orthogonality_min_cells_per_stratum = int(orthogonality_min_cells_per_stratum)
+
         update_dict = {
             "n_epochs_kl_warmup": n_epochs_kl_warmup,
             "n_steps_kl_warmup": n_steps_kl_warmup,
