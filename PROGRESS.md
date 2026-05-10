@@ -9,6 +9,207 @@ How to use:
 
 ---
 
+## 2026-05-10 (roadmap consistency patch: F1 naming + F2/F10 sequencing)
+
+### User-directed consistency updates applied
+Status: completed (code + docs + tests alignment)
+
+What changed:
+- Standardized F1 canonical metric naming on `orthogonality_within_stratum`
+  and `orthogonality_worst_stratum` in module logging.
+- Removed legacy alias emission (`orthogonality_loss`, `orthogonality_worst`) to
+  avoid reporting ambiguity.
+- Updated multimodal orthogonality helper to return excluded-strata counts and
+  propagate them into `orthogonality_excluded_strata`.
+- Updated roadmap and plan sequencing per decision to keep F2 first and delay
+  F10 activation until after F2 baseline APIs are in place.
+- Clarified `audits/kang_ifnb/` as the general benchmark lane, with optional
+  F10-specific parity mirrors under `audits/F10/`.
+- Strengthened `tests/test_disentangle_metrics.py` to assert canonical
+  orthogonality metrics in training history when enabled and absence when
+  disabled.
+
+Files:
+- `src/spVIPESmulti/module/spVIPESmultimodule.py`
+- `tests/test_disentangle_metrics.py`
+- `FEATURE_ROADMAP.md`
+- `PLAN.md`
+- `audits/kang_ifnb/README.md`
+- `PROGRESS.md`
+
+
+## 2026-05-10 (Kang IFNB benchmark runner implementation)
+
+### Append-only benchmark script for spVIPESmulti vs external baselines
+Status: completed (implementation + syntax validation)
+
+What changed:
+- Added `scripts/benchmark_kang_ifnb.py` with a reproducible benchmark flow that:
+  - loads Kang IFNB from `pertpy` (`pt.data.kang_2018()`),
+  - removes megakaryocytes,
+  - applies batch-aware HVG selection (`batch_key="label"`),
+  - runs per-seed benchmark jobs,
+  - appends one row per `(model, seed)` into `audits/kang_ifnb/metrics.csv`.
+- Implemented model adapters for:
+  - `spvipesmulti` (full train + latent extraction + metric computation),
+  - `spvipes_original` (best-effort API-compatible adapter; logs unavailability
+    or incompatibility as a row),
+  - `contrastivevae` via `scvi.external.ContrastiveVI` (logs unavailability as a row).
+- Added robust audit behavior: missing/unsupported baselines do not silently skip;
+  they are recorded in `notes` so comparisons are traceable.
+
+Metrics populated per row:
+- integration: `iLISI`, `cLISI`, `kBET` (acceptance), `knn_purity`, `leiden_ari`
+- separation/disentanglement: `silhouette_group`, `silhouette_label`,
+  `orthogonality_within_stratum`, `orthogonality_worst_stratum`,
+  `orthogonality_excluded_strata`
+- auxiliary: `cycle_consistency_l2`, `identity_preservation`, training wall time,
+  reconstruction and KL summary fields when available.
+
+Documentation update:
+- Extended `audits/kang_ifnb/README.md` with runnable command examples and behavior
+  notes for missing baselines.
+
+Verification:
+- `python3 -m py_compile scripts/benchmark_kang_ifnb.py` -> passed.
+- Editor diagnostics: no errors in `scripts/benchmark_kang_ifnb.py`.
+- Dry-run execution attempted with `--models spvipesmulti --max-epochs 1` but
+  blocked by upstream Kang dataset download in this environment (zero-byte
+  `kang_2018.h5ad` via pertpy cache).
+
+Follow-up hardening:
+- Added `--kang-h5ad-path` fallback in `scripts/benchmark_kang_ifnb.py` to run
+  against a local Kang copy when pertpy download is unavailable.
+
+Files:
+- `scripts/benchmark_kang_ifnb.py`
+- `audits/kang_ifnb/README.md`
+- `PLAN.md`
+
+
+## 2026-05-10 (roadmap expansion: SysVI + CellDISECT)
+
+### Feature roadmap broadened with external method-informed tracks
+Status: completed (planning artifact update)
+
+What changed:
+- Extended `FEATURE_ROADMAP.md` with three new optional tracks grounded in external
+  references:
+  - `F8` optional SysVI-style shared-latent VampPrior track.
+  - `F9` optional SysVI-style latent cycle-consistency regularizer track.
+  - `F10` CellDISECT-aligned Kang benchmark and metric parity track.
+- Added explicit CellDISECT anchor references in the reproducibility defaults, so
+  Kang evaluations now include both integration and counterfactual comparisons
+  against public CellDISECT protocol/material.
+- Added a new shared-infrastructure subsection that captures the Kang parity setup
+  extracted from CellDISECT tutorial/repro scripts:
+  - standard covariates (`cell_type`, `condition`),
+  - common training hyperparameters,
+  - leave-one-cell-type-out and hard split families,
+  - per-cell-type artifact outputs (`pearson`, `delta_pearson`, `emd`).
+- Expanded the roadmap metric suite with CellDISECT-aligned measures:
+  - Pearson(mean), delta-Pearson,
+  - top-DE metrics,
+  - Wasserstein distance,
+  - CAG and MIG-style disentanglement diagnostics,
+  - optional fairness probes.
+- Added targeted validation command slots for the new tracks:
+  - `tests/test_vampprior_shared.py`
+  - `tests/test_latent_cycle_loss.py`
+  - `tests/test_celldisect_metric_parity.py`
+- Updated risk register with new risk/mitigation entries for VampPrior stability,
+  cycle-loss over-correction, and external benchmark mismatch.
+
+Planning synchronization:
+- Updated `PLAN.md` current iteration scope to include F8-F10.
+- Updated immediate sequencing: close F1 overhead gate, then activate F10 audit
+  harness before implementing F8/F9.
+
+Files:
+- `FEATURE_ROADMAP.md`
+- `PLAN.md`
+
+Evidence basis used for roadmap expansion:
+- SysVI module/docs (`scvi-tools`) for optional VampPrior and standardized latent
+  cycle-consistency loss behavior.
+- CellDISECT tutorial + reproducibility Kang scripts for counterfactual metrics,
+  split strategy, and disentanglement evaluation concepts.
+
+
+## 2026-05-10 (Kang IFNB benchmark audit scaffold)
+
+### Audit folder and metric schema
+Status: completed (tracking scaffold)
+
+What changed:
+- Added `audits/kang_ifnb/` as the append-only home for Kang IFNB benchmark runs.
+- Documented the required baseline comparisons against current `spVIPESmulti`,
+  original `spVIPES`, and `contrastiveVAE`.
+- Created `audits/kang_ifnb/metrics.csv` with a stable column schema for future
+  benchmark rows, including disentanglement-specific metrics:
+  - `orthogonality_within_stratum`
+  - `orthogonality_worst_stratum`
+  - `orthogonality_excluded_strata`
+  - `cycle_consistency_l2`
+  - `target_decoder_realism`
+  - `identity_preservation`
+
+Files:
+- `audits/kang_ifnb/README.md`
+- `audits/kang_ifnb/metrics.csv`
+- `FEATURE_ROADMAP.md`
+- `PLAN.md`
+
+
+## 2026-05-10 (F1 conditional orthogonality instrumentation)
+
+### F1: Helper implementation, train wiring, and test validation
+Status: completed (implementation + unit/integration test scope)
+
+What changed:
+- Implemented module-level orthogonality helpers in
+  `src/spVIPESmulti/module/spVIPESmultimodule.py`:
+  - `_within_stratum_corr_norm(...)`
+  - `_within_stratum_corr_norm_multimodal(...)`
+- Added optional orthogonality metric integration in `_compute_disentangle_losses(...)`
+  with logging keys:
+  - `orthogonality_loss`
+  - `orthogonality_worst`
+  - `orthogonality_excluded_strata`
+- Added orthogonality configuration to module constructor:
+  - `compute_orthogonality_metric`
+  - `orthogonality_groupby_keys`
+  - `orthogonality_min_cells_per_stratum`
+- Wired training-time kwargs handling in
+  `src/spVIPESmulti/model/base/training_mixin.py` so these arguments are consumed
+  by model train flow instead of being forwarded to Lightning Trainer.
+
+Test hardening/fixes:
+- Updated `tests/test_disentangle_metrics.py` fixture and execution path:
+  - fixed Poisson data generation (`np.random.poisson`),
+  - ensured required `indices` obs field exists,
+  - used canonical `prepare_adatas(...)` flow to populate expected uns metadata,
+  - forced CPU execution for training tests (`accelerator="cpu", devices=1`),
+  - disabled CUDA visibility in test module to avoid RNG-state CUDA init on
+    incompatible driver environments,
+  - normalized helper unpacking to match helper return shape.
+
+Verification:
+- `pytest tests/test_disentangle_metrics.py -q` -> `9 passed`.
+- Static diagnostics show no file-level errors in modified files.
+
+Files:
+- `src/spVIPESmulti/module/spVIPESmultimodule.py`
+- `src/spVIPESmulti/model/base/training_mixin.py`
+- `tests/test_disentangle_metrics.py`
+- `PLAN.md`
+
+Follow-up required to close F1 feature gate:
+- Run Kang IFN benchmark path with megakaryocyte exclusion and collect overhead
+  delta vs baseline (hard gate: <= +5% wall time).
+- Write artifacts under `audits/F1/` (`metrics.csv`, `summary.md`, `recommendation.json`).
+
+
 ## 2026-05-10 (second-pass disentanglement execution planning)
 
 ### D2: Actionable implementation playbook authored
@@ -39,10 +240,7 @@ Execution notes:
 ### A2: Actionable second-pass audit plan authored and activated
 Status: completed (planning); execution in progress
 
-What changed:
-- Authored an execution-ready audit plan focused on:
   - conditional orthogonality enforcement (shared vs private latent dependence),
-  - A -> B private-latent transfer realism,
   - donor/individual-aware condition counterfactual diagnostics.
 - Added explicit promotion/reject gates, run matrix, required artifacts, and immediate execution step.
 - Activated this workstream in `PLAN.md` as current iteration item `A2`.
@@ -52,58 +250,41 @@ Files:
 - `PLAN.md`
 
 Execution notes:
-- Plan assumes existing disentanglement and decoder wiring in module/model code.
-- First implementation step is Task A + B pilot (`pcorr_weight` 0.05 and 0.10, one seed) before full matrix expansion.
-
-### P-PERF-1: Vectorize `_label_based_poe` reassembly
 Status: completed
-
 What changed:
 - Replaced the per-cell Python loop (O(n_cells) GPU→CPU syncs via `.item()`) with a
   vectorized boolean-mask scatter: O(n_labels) on-GPU tensor ops.
 - At batch_size=2048 × 5 groups this eliminates ~10,000+ GPU–CPU syncs per training step.
 - No change to output values; semantics are identical.
 
-Files:
 - `src/spVIPESmulti/module/spVIPESmultimodule.py` (reassembly block in `_label_based_poe`)
 
 ### VAL-GATE: Gate `_validate_likelihood_observations` behind `validate_observations` flag
 Status: completed
-
 What changed:
 - Added `validate_observations: bool = False` constructor parameter to `spVIPESmultimodule`.
-- The `isfinite` and `x < 0` scans (2 full tensor scans per group per step) are now skipped
   by default.
 - `strict_likelihood_support` check is preserved as an unconditional opt-in — it only runs
   when `strict_likelihood_support=True` (already explicit) regardless of `validate_observations`.
 - Users can enable observation validation for debugging:
   `spVIPESmulti(adata, validate_observations=True)` (via `**model_kwargs` passthrough).
-
 Files:
 - `src/spVIPESmulti/module/spVIPESmultimodule.py`
 
 ### DL-WORKERS: Expose `num_workers` in `train()`
 Status: completed
-
 What changed:
 - Added `num_workers: int = 0` parameter to `MultiGroupTrainingMixin.train()`.
 - Threaded through `MultiGroupDataSplitter` → `ConcatDataLoader` → `AnnDataLoader`.
-- `pin_memory` was already set automatically from `torch.cuda.is_available()` in the splitter.
 - Default 0 is fully backward-compatible. Users on multi-core HPC nodes can set e.g.
   `model.train(..., num_workers=4)` to overlap data loading with GPU compute.
 
-Files:
-- `src/spVIPESmulti/model/base/training_mixin.py`
 
 Verification:
 - `pytest tests/ -q --ignore=tests/test_evaluate.py` → 168 passed, 1 skipped, 0 failures.
 
----
-
 ## 2026-05-07 (keyed layers support in data preparation)
-
 ### L1: Keyed per-group and per-modality layer selection
-Status: completed
 
 What changed:
 - Implemented keyed `layers` support in `src/spVIPESmulti/data/prepare_adatas.py` for both

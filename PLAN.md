@@ -17,15 +17,45 @@ Scope:
   `COUNTERFACTUAL_AUDIT.md`, and `audits/SECOND_PASS_AUDIT_PLAN.md`).
 - Features F1–F7 are ordered by architectural risk; each ships with a TDD plan
   and a quantitative go/no-go benchmark (§2 of the roadmap).
+- Optional extension tracks F8–F10 are now included in the same roadmap:
+  - F8: optional SysVI-style shared-latent VampPrior
+  - F9: optional SysVI-style latent cycle-consistency regularizer
+  - F10: CellDISECT-aligned Kang benchmark + disentanglement/counterfactual metric pack
 
 Immediate next slice:
 - F1 — conditional orthogonality instrumentation (metrics only, no arch change).
-- After F1 passes its overhead gate: F2 (counterfactual MVP) and F3+F4 (loss
-  terms + covariate heads) can proceed in parallel.
+  - Completed in code: module-level helpers, training-time kwargs wiring,
+    optional metric logging in extra_metrics, and green F1 test file.
+  - Remaining for F1 closeout: Kang IFN overhead benchmark gate (<= +5% wall time)
+    and audit artifact writeout in audits/F1/.
+- After F1 overhead gate passes: run F2 (counterfactual MVP) and F3+F4 (loss terms +
+  covariate heads) in parallel.
+- Activate F10 (external CellDISECT-aligned Kang benchmark harness) after F2 baseline
+  APIs are in place.
+- Defer F8/F9 implementation until F10 baseline artifacts exist, so SysVI-inspired
+  prior/cycle additions can be judged against external anchors and not only internal drift.
 
 Success criteria:
 - Per-feature "Pass" rules in `FEATURE_ROADMAP.md` §2.
 - Artifacts under `audits/<feature_id>/` plus a PROGRESS.md entry per feature.
+- `audits/kang_ifnb/` is the general benchmark lane with append-only
+  `metrics.csv` rows and short per-run notes for disentanglement comparisons.
+
+Benchmark tooling status:
+- Implemented `scripts/benchmark_kang_ifnb.py` to append one row per
+  `(model, seed)` to `audits/kang_ifnb/metrics.csv`.
+- Supports `spvipesmulti`, optional original `spVIPES` adapter, and optional
+  `contrastiveVAE` adapter; unavailable baselines are logged as rows with
+  explanatory `notes` so the audit trail remains complete.
+- Next execution step: run a full 3-seed benchmark for the active feature
+  (`--run-id`, `--feature-id`) and summarize aggregate deltas vs baselines.
+- Environment note: if `pertpy` download is blocked/corrupted, run with
+  `--kang-h5ad-path /absolute/path/to/kang_2018.h5ad`.
+
+Execution note (2026-05-10):
+- F1 implementation slice is functionally complete for test-driven scope.
+- Next operational step is benchmark execution on Kang IFN (with megakaryocyte
+  exclusion) to validate overhead gate and produce audit artifacts.
 
 Parallel external work (not owned in this session):
 - N5 malaria B-cell latent-retuning pilot sweep (see HANDOFF.md).

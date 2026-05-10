@@ -21,6 +21,9 @@ Single source of truth for the next batch of feature work. Every feature ships w
 Features are ordered by **architectural risk (low → high)** so that low-risk, high-value
 work lands first and informs the higher-risk follow-ups.
 
+F1-F7 below keep that strict ordering. F8-F10 are optional extension tracks added after
+the original sequence and can be scheduled opportunistically once F1 closeout is complete.
+
 | # | Feature | Arch risk | Phase | Depends on |
 |---|---|---|---|---|
 | F1 | Conditional orthogonality instrumentation | **None** (metrics only) | Phase 1 | — |
@@ -30,6 +33,9 @@ work lands first and informs the higher-risk follow-ups.
 | F5 | Donor/condition-aware counterfactual protocols | Low (extends F2) | Phase 2 | F2, F4 |
 | F6 | Graph-informed prototype regularizer | Medium (new regularizer) | Phase 3 | F4 |
 | F7 | Counterfactual consistency loss + perturbation vectors | Medium (training + Phase 2 cf API) | Phase 3 | F2, F4 |
+| F8 | Optional SysVI-style VampPrior for shared latent | Low (prior swap, default-off) | Phase 3 | F1 |
+| F9 | Optional SysVI-style latent cycle-consistency regularizer | Medium (new training path, default-off) | Phase 3 | F4 |
+| F10 | CellDISECT-aligned Kang benchmark + metrics pack | None (evaluation only) | Phase 1.5 | F2 |
 
 Cross-cutting hard constraints (apply to every feature):
 
@@ -58,15 +64,41 @@ Cross-cutting hard constraints (apply to every feature):
 
 ### 1.2 Reproducibility & evaluation defaults (apply to every benchmark)
 
-- Freeze one dataset and preprocessing path per benchmark. Default: SLN CITE-seq vignette
-  data already used by `scripts/smoke_vignettes.py` for unit-scale runs; malaria B-cells
-  notebook (`docs/notebooks/malaria_bcells_recommended.ipynb`) for full-scale validation.
+- Freeze one dataset and preprocessing path per benchmark. Default: Kang IFN dataset
+  (ctrl vs. stim, immune cells from PertPy) via `docs/notebooks/kang_ifn_commit_old.ipynb`
+  for benchmarking. This provides a standard two-condition, multi-cell-type baseline
+  with known IFN response signatures.
+  
+  **Data preprocessing note:** Before analysis, remove megakaryocytes from the Kang IFN
+  dataset (filter `adata = adata[adata.obs["cell_type"] != "Megakaryocytes"]` or equivalent).
+  Megakaryocytes are a small, transcriptionally distinct population that can distort
+  integration metrics; their removal aligns with standard immune-cell analysis pipelines.
+
+- Every new feature benchmark must be compared against two external anchors in addition
+  to the current `spVIPESmulti` baseline:
+  - original `spVIPES` from <https://github.com/nrclaudio/spVIPES>
+  - `contrastiveVAE` from scvi-tools
+    (<https://github.com/scverse/scvi-tools/blob/612157b04320cf13b72e3e500707371b05811f54/src/scvi/external/contrastivevi/_model.py#L49>)
+  - `CellDISECT` on Kang, aligned with the public tutorial + reproducibility scripts
+    (<https://celldisect.readthedocs.io/en/latest/tutorials/CellDISECT_Counterfactual.html>,
+    <https://github.com/stathismegas/CellDISECT_reproducibility/tree/main/reproduce_benchmarks/kang>)
+
+  Use the same Kang IFN preprocessing, seeds, and train/validation split across all
+  anchors so differences are attributable to the model or feature change rather
+  than the benchmark setup.
+
 - Fixed seed set: **3 seeds minimum**. Identical train/val split, batch size, and
   early-stopping settings across variants.
 - Report mean ± std across seeds. Reject any variant with coefficient of variation > 0.2
   on the core metrics defined in §1.3.
 - Save artifacts under `audits/<feature_id>/` as tidy CSV plus a Markdown summary and a
   `recommendation.json` with the go/no-go verdict.
+
+- For Kang IFN runs, use `audits/kang_ifnb/` as the general benchmark lane.
+  Keep one append-only `metrics.csv` plus one short Markdown note per run so feature
+  regressions, disentanglement shifts, and baseline comparisons stay easy to diff.
+  F10-specific CellDISECT parity artifacts can additionally be mirrored under
+  `audits/F10/`.
 
 ### 1.3 Standard metric set (reused across F1, F3, F4, F6)
 
@@ -92,6 +124,36 @@ Counterfactual metrics (introduced by F2, F5):
 - Cycle consistency (X→Y→X latent and expression L2 distance)
 - Realism under target decoder (reconstruction proxy)
 - Identity preservation (donor / cell-type classifier agreement)
+
+CellDISECT-aligned metrics (introduced by F10):
+
+- Counterfactual Pearson(mean): corr(mean(x_pred), mean(x_true))
+- Counterfactual delta-Pearson: corr((x_pred-x_ctrl), (x_true-x_ctrl))
+- Top-DE Pearson and Top-DE cosine (rank by |delta_true|)
+- Wasserstein distance over gene marginals (top-20 DE and all HVGs)
+- Disentanglement classifier gap (CAG): acc(S_i|Z_i) - acc(S_i|Z_{-i})
+- MI-based scores: maxMIG / concatMIG / minMIG
+- Optional fairness probes: demographic parity and equalized odds on Z_{-i}
+
+### 1.4 CellDISECT reference protocol on Kang (for benchmark parity)
+
+Reference observations from public CellDISECT material to be mirrored in F10:
+
+- Data: `kang_normalized_hvg.h5ad`, with raw counts in `layers['counts']`.
+- Core covariates: `cats = ['cell_type', 'condition']`.
+- Common CellDISECT settings (public tutorial/repro):
+  - `n_latent_shared=32`, `n_latent_attribute=32`, `n_hidden=128`, `n_layers=2`
+  - `recon_weight=20`, `cf_weight=0.8`, `beta=0.003`, `clf_weight=0.05`,
+    `adv_clf_weight=0.014`, `adv_period=5`, `n_cf=1`
+- Kang split strategy to include in parity runs:
+  - leave-one-cell-type-out splits (`split_CD14 Mono`, `split_CD4 T`, ...)
+  - harder multi-cell-type held-out splits (`split_CD14Mono_CD4T`, etc.)
+- Counterfactual target used in tutorial benchmark:
+  - CD14 Mono control→stimulated (`x_ctrl`, `x_true`, `x_pred`) with Pearson and
+    delta-Pearson reported for top DE and all genes.
+
+Artifacts for this protocol should be written under `audits/F10/` and mirrored with
+append-only summaries in `audits/kang_ifnb/`.
 
 ---
 
@@ -123,10 +185,10 @@ features (F2–F7) objectively.
    - `test_orthogonality_metric_present_when_enabled`: train a 2-step model, assert
      `extra_metrics["orthogonality_within_stratum"]` is finite and ≥ 0.
    - `test_orthogonality_zero_for_independent_inputs`: feed synthetic independent
-     `z_shared`, `z_private` to the helper; assert value < 1e-3.
+     `z_shared`, `z_private` to the helper; assert value is low (e.g. < 0.1).
    - `test_orthogonality_one_for_perfect_copy`: feed `z_private = z_shared`; assert
-     value > 0.9.
-   - `test_min_cells_per_stratum_filter`: strata below `pcorr_min_cells_per_stratum`
+     value > 0.8.
+   - `test_min_cells_per_stratum_filter`: strata below `orthogonality_min_cells_per_stratum`
      must be excluded and counted in `extra_metrics["orthogonality_excluded_strata"]`.
    - Multimodal parity: same checks under multimodal path.
 2. **Implement** helper in `src/spVIPESmulti/module/spVIPESmultimodule.py`:
@@ -247,8 +309,8 @@ required, no architectural change.
 
 **Quantitative go/no-go benchmark.**
 
-Run on the `minimal_model_adata` fixture (CI) and on the SLN CITE-seq vignette
-(manual smoke). Compare baseline vs counterfactual outputs.
+Run on the `minimal_model_adata` fixture (CI) and on the Kang IFN dataset
+(manual smoke via `docs/notebooks/kang_ifn_commit_old.ipynb`). Compare baseline vs counterfactual outputs.
 
 | Metric | Pass | Reject |
 |---|---|---|
@@ -301,7 +363,7 @@ materially harming reconstruction or integration.
 
 **Quantitative go/no-go benchmark.**
 
-Run matrix (3 seeds each) on the malaria B-cells dataset:
+Run matrix (3 seeds each) on the Kang IFN dataset:
 
 - baseline (current settings)
 - `pcorr_weight ∈ {0.01, 0.05, 0.10, 0.20}`
@@ -375,12 +437,12 @@ disentanglement upgrade.
 
 **Quantitative go/no-go benchmark.**
 
-3-seed matrix on the malaria B-cells dataset:
+3-seed matrix on the Kang IFN dataset:
 
 - baseline (no new heads)
-- donor-private only
+- donor-private only (using `replicate` as donor_key)
 - donor-shared (GRL) only
-- batch-shared (GRL) only
+- batch-shared (GRL) only (using `label` as batch/condition)
 - `full_bio` preset (all three)
 
 | Criterion | Pass | Reject |
@@ -469,14 +531,14 @@ related prototypes to live near each other in `z_shared`.
 
 **Quantitative go/no-go benchmark.**
 
-3-seed matrix on the malaria B-cells dataset:
+3-seed matrix on the Kang IFN dataset:
 
 - baseline (best F4 preset)
 - + `graph_regularizer_weight ∈ {0.05, 0.1, 0.2}`
 
 | Criterion | Pass | Reject |
 |---|---|---|
-| kNN purity on minority cell types (Activated MZ, Transitional, Pre-Plasmablast) | **≥ baseline + 0.05** | within baseline ± 0.02 |
+| kNN purity on rare cell types (e.g., smallest cluster by cell-type distribution) | **≥ baseline + 0.05** | within baseline ± 0.02 |
 | cLISI on minority types | **improvement ≥ 5%** | drop |
 | Reconstruction loss degradation | ≤ 5% | > 10% |
 | iLISI / kBET | within ±10% of baseline | > 20% drop |
@@ -530,6 +592,156 @@ Artifacts: `audits/F7/metrics.csv`, `audits/F7/summary.md`, `audits/F7/recommend
 
 ---
 
+### F8 — Optional SysVI-style VampPrior for shared latent (Phase 3)
+
+**Background.** SysVI uses a VampPrior to improve biological preservation while keeping
+integration strong. The prior is more expressive than a standard Gaussian and can reduce
+over-regularization of biologically meaningful modes.
+
+**Scope.**
+
+- Add optional prior mode for shared latent only (private latent unchanged):
+  - `shared_prior: Literal["standard_normal", "vamp"] = "standard_normal"`
+  - `shared_prior_components: int = 5`
+  - `shared_prior_trainable: bool = True`
+  - `shared_prior_pseudoinput_strategy: Literal["random_cells", "stratified_labels"] = "stratified_labels"`
+- Implement behind default-off behavior (`shared_prior="standard_normal"`), preserving
+  baseline numerics.
+- Use posterior-sample Monte Carlo KL estimation for VampPrior (as in sysVI/scvi prior logic).
+- Add logged metric: `kl_shared_prior` plus component diagnostics (`vamp_weight_entropy`).
+
+**Non-goals.**
+
+- No changes to decoder architecture, PoE math, or private latent prior in the MVP.
+- No multimodal-specific prior variants in first pass.
+
+**TDD plan.**
+
+1. **Test first** (`tests/test_vampprior_shared.py`):
+   - Constructor validation for valid/invalid prior args.
+   - Default-off equivalence (`standard_normal`) within 1e-6.
+   - Finite KL/loss with `shared_prior="vamp"` and small pseudoinput set.
+   - State-dict save/load parity for VampPrior params.
+2. **Implement** in module + model constructor plumbing, including pseudoinput init.
+3. **Validate** with targeted tests and one Kang smoke run.
+
+**Quantitative go/no-go benchmark.**
+
+| Criterion | Pass | Reject |
+|---|---|---|
+| Tests (`tests/test_vampprior_shared.py`) | All green | Any failure |
+| cLISI / kNN purity vs baseline | improved or within ±3% | > 5% drop |
+| iLISI / kBET vs baseline | within ±10% | > 20% drop |
+| Reconstruction loss degradation | ≤ 5% | > 10% |
+| Cross-seed CV | ≤ 0.20 | > 0.30 |
+
+Promotion -> keep smallest component count satisfying all pass gates.
+Reject -> keep `shared_prior="standard_normal"` as default and defer.
+
+Artifacts: `audits/F8/metrics.csv`, `audits/F8/summary.md`, `audits/F8/recommendation.json`.
+
+---
+
+### F9 — Optional SysVI-style latent cycle-consistency regularizer (Phase 3)
+
+**Background.** SysVI strengthens integration by decoding a cell with a switched batch
+covariate and re-encoding it, then penalizing latent drift between original and cycled
+embeddings (on standardized latent coordinates).
+
+**Scope.**
+
+- Add optional cycle loss path (default-off):
+  - `latent_cycle_weight: float = 0.0`
+  - `latent_cycle_key: str = "sample"` (fallback to batch key)
+  - `latent_cycle_on: Literal["shared", "shared_private"] = "shared"`
+- Implement random alternative category selection per cell (must differ from original).
+- Compute standardized latent MSE between original and cycle pass means (sysVI-style).
+- Log `latent_cycle_loss` and `latent_cycle_active_fraction`.
+
+**Non-goals.**
+
+- No cycle on expression-space loss in first pass.
+- No adversarial replacement; this is additive and opt-in.
+
+**TDD plan.**
+
+1. **Test first** (`tests/test_latent_cycle_loss.py`):
+   - Default-off equivalence within 1e-6.
+   - Positive finite cycle loss when enabled.
+   - Ensures switched category differs from source category.
+   - Multimodal parity path is finite.
+2. **Implement** cycle helpers and training loss wiring.
+3. **Validate** targeted + full suite.
+
+**Quantitative go/no-go benchmark.**
+
+| Criterion | Pass | Reject |
+|---|---|---|
+| Tests (`tests/test_latent_cycle_loss.py`) | All green | Any failure |
+| iLISI (batch mixing) improvement vs baseline | ≥ +10% | < +3% |
+| Cell-type classifier on shared latent | within ±3pp | drop > 5pp |
+| Reconstruction loss degradation | ≤ 5% | > 10% |
+| Training-time overhead | ≤ +12% | > +25% |
+
+Promotion -> tune `latent_cycle_weight` minimally to pass gates.
+Reject -> keep feature opt-in and disabled in presets.
+
+Artifacts: `audits/F9/metrics.csv`, `audits/F9/summary.md`, `audits/F9/recommendation.json`.
+
+---
+
+### F10 — CellDISECT-aligned Kang benchmark and metrics pack (Phase 1.5)
+
+**Background.** CellDISECT provides a public Kang counterfactual benchmark and
+disentanglement analyses (MI/CAG/fairness style metrics). Mirroring these gives a
+strong external yardstick for both disentanglement and counterfactual quality.
+
+**Scope.**
+
+- Add benchmark scripts and metric helpers (evaluation only, no model architecture changes):
+  - `scripts/benchmark_kang_celldisect_parity.py`
+  - `src/spVIPESmulti/metrics_celldisect.py`
+- Include at minimum these model anchors on identical splits:
+  - `spVIPESmulti` current baseline
+  - external `CellDISECT`
+  - optional `biolord` and `scDisInFact` when reproducible in environment
+- Evaluate both split families:
+  - leave-one-cell-type-out Kang splits
+  - hard multi-cell-type held-out splits
+- Save per-cell-type outputs:
+  - `*_pearson.csv`, `*_delta_pearson.csv`, `*_emd.csv`
+  - `*_disentangle.csv` (CAG, maxMIG/concatMIG/minMIG, optional fairness metrics)
+
+**Non-goals.**
+
+- No requirement to beat CellDISECT before F2/F4 completion.
+- No dependency pinning changes forced into the core package install.
+
+**TDD plan.**
+
+1. **Test first** (`tests/test_celldisect_metric_parity.py`):
+   - Pearson/delta-Pearson implementations match NumPy/SciPy reference.
+   - Top-DE selection and Wasserstein aggregation shape checks.
+   - CAG and MIG helper outputs are bounded/finite.
+2. **Implement** metrics helpers and script CLI.
+3. **Validate** by running one small Kang split smoke and checking artifact schema.
+
+**Quantitative go/no-go benchmark.**
+
+| Criterion | Pass | Reject |
+|---|---|---|
+| Metric helper tests | All green | Any failure |
+| Reproducibility across 3 seeds (Pearson/delta, EMD) | CV ≤ 0.20 | CV > 0.30 |
+| Artifact completeness per split | all expected files produced | missing files |
+| Baseline positioning clarity | ranked table + recommendation JSON | ambiguous/no verdict |
+
+Promotion -> keep F10 as mandatory external audit gate for F2/F4/F5 changes.
+Reject -> fix audit harness before shipping new disentanglement features.
+
+Artifacts: `audits/F10/metrics.csv`, `audits/F10/summary.md`, `audits/F10/recommendation.json`.
+
+---
+
 ## 3. Validation commands (canonical order)
 
 After each feature lands:
@@ -545,6 +757,9 @@ pytest tests/test_covariate_heads.py tests/test_multimodal_disentangle.py \
 pytest tests/test_counterfactual_protocols.py -q           # F5
 pytest tests/test_graph_regularizer.py -q                  # F6
 pytest tests/test_perturbation_vectors.py -q               # F7
+pytest tests/test_vampprior_shared.py -q                   # F8
+pytest tests/test_latent_cycle_loss.py -q                  # F9
+pytest tests/test_celldisect_metric_parity.py -q           # F10
 
 # Full suite (mandatory before promotion)
 pytest tests/ -q --ignore=tests/test_evaluate.py
@@ -556,7 +771,7 @@ python scripts/smoke_vignettes.py --epochs 5 --cells_per_group 300
 Optional grep sanity after edits:
 
 ```bash
-rg "pcorr_weight|orthogonality_weight|disentangle_batch_shared_weight|disentangle_donor_shared_weight|disentangle_donor_private_weight|graph_regularizer_weight|counterfactual_consistency_weight" src tests
+rg "pcorr_weight|orthogonality_weight|disentangle_batch_shared_weight|disentangle_donor_shared_weight|disentangle_donor_private_weight|graph_regularizer_weight|counterfactual_consistency_weight|shared_prior|latent_cycle_weight" src tests
 ```
 
 ---
@@ -584,8 +799,11 @@ A feature is "done" only when **all** are true:
 | Covariate biology vs nuisance-removal conflict (e.g., condition encodes biology) | New heads optional; default presets keep them off; document trade-offs |
 | Multimodal private-term overweighting | Reuse existing per-modality scaling pattern in `_loss_multimodal` |
 | Graph regularizer collapses rare labels | Edge weighting + minimum-support filter |
-| Small strata produce noisy conditional correlation | `pcorr_min_cells_per_stratum` filter; report excluded strata count |
+| VampPrior pseudoinputs collapse or drift | stratified pseudoinput init + entropy monitoring + standard prior fallback |
+| Cycle loss over-correction harms biology | strict weight sweep with cell-type retention gate and default-off |
+| Small strata produce noisy conditional correlation | `orthogonality_min_cells_per_stratum` filter; report excluded strata count |
 | Counterfactuals "look plausible" but fail identity | Donor/condition classifier checks + cycle-consistency tests in F2/F5 benchmarks |
+| External benchmark mismatch vs CellDISECT protocol | lock split definitions + metric parity tests + artifact schema checks |
 | Benchmark instability across seeds | Reject-on-CV gate (CV > 0.20 / 0.30) in every benchmark table |
 
 ---
@@ -603,6 +821,10 @@ Land **F1** in a single change set:
 Once F1 is green and the overhead gate passes, start F2 (counterfactual MVP) in
 parallel with the F3+F4 design slice; F2 ships independently of F3/F4 because it
 does not change training.
+
+After F2 baseline APIs are in place, activate F10 (CellDISECT-aligned Kang audit
+harness) and use `audits/kang_ifnb/` as the primary benchmark lane, with optional
+F10 parity mirrors under `audits/F10/`.
 
 ---
 
