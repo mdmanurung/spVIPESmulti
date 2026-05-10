@@ -9,7 +9,51 @@ How to use:
 
 ---
 
+## 2026-05-10 (second-pass disentanglement execution planning)
+
+### D2: Actionable implementation playbook authored
+Status: completed (planning artifact)
+
+What changed:
+- Converted the second-pass disentanglement audit into an execution-ready markdown plan with:
+  - phased scope (minimal first merge vs ambitious follow-up),
+  - exact work packages (WP1-WP7),
+  - target files/modules for each change,
+  - validation commands and acceptance criteria,
+  - risk register and immediate next coding slice.
+- Activated the plan in `PLAN.md` as current-iteration item `D2`.
+- Repaired `PLAN.md` `A2` section so scope/success criteria are explicit again.
+
+Files:
+- `DISENTANGLE_SECOND_PASS_ACTION_PLAN.md`
+- `PLAN.md`
+
+Execution notes:
+- Recommended first implementation step remains WP1 + WP2 (API/registry + presets),
+  followed by module-side losses and orthogonality.
+
 ## 2026-05-08 (training performance — Tier 1)
+
+## 2026-05-10 (second-pass audit planning)
+
+### A2: Actionable second-pass audit plan authored and activated
+Status: completed (planning); execution in progress
+
+What changed:
+- Authored an execution-ready audit plan focused on:
+  - conditional orthogonality enforcement (shared vs private latent dependence),
+  - A -> B private-latent transfer realism,
+  - donor/individual-aware condition counterfactual diagnostics.
+- Added explicit promotion/reject gates, run matrix, required artifacts, and immediate execution step.
+- Activated this workstream in `PLAN.md` as current iteration item `A2`.
+
+Files:
+- `audits/SECOND_PASS_AUDIT_PLAN.md`
+- `PLAN.md`
+
+Execution notes:
+- Plan assumes existing disentanglement and decoder wiring in module/model code.
+- First implementation step is Task A + B pilot (`pcorr_weight` 0.05 and 0.10, one seed) before full matrix expansion.
 
 ### P-PERF-1: Vectorize `_label_based_poe` reassembly
 Status: completed

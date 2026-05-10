@@ -8,14 +8,29 @@ Status legend: `todo` | `in-progress` | `done` | `blocked`
 
 ## Current Iteration
 
-No active package-code item.
-→ See PROGRESS.md for L1 (keyed layers, 2026-05-07) and M2 (multimodal alignment hardening, 2026-05-07).
+### R1. Next-phase feature roadmap (consolidated)
+Status: in-progress | Priority: HIGH
+
+Scope:
+- Single-source planning lives in `FEATURE_ROADMAP.md` (supersedes the previous
+  `DISENTANGLE_SECOND_PASS_ACTION_PLAN.md`, `COUNTERFACTUAL_DESIGN.md`,
+  `COUNTERFACTUAL_AUDIT.md`, and `audits/SECOND_PASS_AUDIT_PLAN.md`).
+- Features F1–F7 are ordered by architectural risk; each ships with a TDD plan
+  and a quantitative go/no-go benchmark (§2 of the roadmap).
+
+Immediate next slice:
+- F1 — conditional orthogonality instrumentation (metrics only, no arch change).
+- After F1 passes its overhead gate: F2 (counterfactual MVP) and F3+F4 (loss
+  terms + covariate heads) can proceed in parallel.
+
+Success criteria:
+- Per-feature "Pass" rules in `FEATURE_ROADMAP.md` §2.
+- Artifacts under `audits/<feature_id>/` plus a PROGRESS.md entry per feature.
 
 Parallel external work (not owned in this session):
 - N5 malaria B-cell latent-retuning pilot sweep (see HANDOFF.md).
 
 ## Blockers / Decisions Needed
-
 None.
 
 ---
@@ -76,6 +91,13 @@ Status: Deferred | Priority: LOW
 Deferral reason: broad metadata and architecture refactor across data/model/loss.
 Reactivation trigger: after single-covariate stability and API simplification.
 → Full spec: ImplementationPlan.md §P6.
+
+---
+
+### Roadmap items F1–F7
+All deferred backlog entries previously tracked here as A2/D2/F1 are now consolidated
+into `FEATURE_ROADMAP.md` features F1–F7. Activate by promoting the relevant
+feature into the Current Iteration block above and starting with its TDD plan.
 
 ### Reactivation Checklist
 

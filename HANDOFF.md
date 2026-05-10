@@ -43,11 +43,26 @@ Results → `scripts/pilot_results_celltype.{json,md}` when done.
 
 ## Immediate Next Action
 
-1. Wait for pilot to finish or check its output:
-   ```bash
-   tail -50 /tmp/pilot_run.log
-   cat scripts/pilot_results_celltype.md  # once it exists
-   ```
+**Master plan:** `FEATURE_ROADMAP.md` consolidates the previous disentanglement and
+counterfactual planning docs. Features are ordered by architectural risk (F1–F7),
+each with a TDD plan and a quantitative go/no-go benchmark.
+
+**Next coding slice — F1: Conditional orthogonality instrumentation.**
+
+1. Write failing tests in `tests/test_disentangle_metrics.py` (see roadmap §2.F1).
+2. Implement `_within_stratum_corr_norm` helper and wire it into both single-modal
+   and multimodal loss paths behind default-off kwargs.
+3. Run targeted suite, then full suite.
+4. Record overhead measurement under `audits/F1/summary.md` and update PROGRESS.md.
+
+Once F1’s overhead gate passes, F2 (counterfactual MVP) and the F3+F4 slice
+(orthogonality loss + covariate heads) can proceed in parallel — F2 does not
+require retraining.
+
+### Previous Context
+- Pilot sweep: See PLAN.md for status
+- Performance optimizations (P-PERF-1 done, P-PERF-2–4 deferred)
+- Disentanglement roadmap: N5-D, N5-E (Phase 4 items)
 
 2. Promote winning variant using these pre-drafted notebook cell 10 changes:
 
