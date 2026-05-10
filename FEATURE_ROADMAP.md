@@ -1046,16 +1046,12 @@ A feature is "done" only when **all** are true:
 
 ## 6. Immediate next coding step
 
-Close **F1** rather than reopening the implementation slice:
+**F1 is closed.** The Kang IFN overhead gate passed (`-1.5164%` wall-time overhead
+vs disabled), artifacts were written under `audits/F1/`, and the closeout entry was
+appended to `PROGRESS.md`.
 
-1. Run the Kang IFN overhead benchmark with megakaryocyte exclusion.
-2. Verify the F1 overhead gate (`<= +5%` wall time vs disabled).
-3. Write `audits/F1/metrics.csv`, `audits/F1/summary.md`, and
-   `audits/F1/recommendation.json`.
-4. Append the F1 closeout entry to `PROGRESS.md`.
-
-Once F1's gate passes, start **F4-lite** before F2: register `condition_key`/`donor_key`,
-add default-off covariate heads, scheduled GRL scaling, and external probe diagnostics.
+Start **F4-lite** before F2: register `condition_key`/`donor_key`, add default-off
+covariate heads, scheduled GRL scaling, and external probe diagnostics.
 
 F2 starts after F4-lite has a passing probe/audit baseline and must ship as a **safe**
 counterfactual API: centroid shifts first, OOD/realism filtering on by default, arbitrary

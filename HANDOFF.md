@@ -44,20 +44,25 @@ Results → `scripts/pilot_results_celltype.{json,md}` when done.
 ## Immediate Next Action
 
 **Master plan:** `FEATURE_ROADMAP.md` consolidates the previous disentanglement and
-counterfactual planning docs. Features are ordered by architectural risk (F1–F7),
-each with a TDD plan and a quantitative go/no-go benchmark.
+counterfactual planning docs. Features are ordered by scientific readiness, each with
+a TDD plan and a quantitative go/no-go benchmark.
 
-**Next coding slice — F1: Conditional orthogonality instrumentation.**
+**F1 status — closed.**
 
-1. Write failing tests in `tests/test_disentangle_metrics.py` (see roadmap §2.F1).
-2. Implement `_within_stratum_corr_norm` helper and wire it into both single-modal
-   and multimodal loss paths behind default-off kwargs.
-3. Run targeted suite, then full suite.
-4. Record overhead measurement under `audits/F1/summary.md` and update PROGRESS.md.
+- Code path, tests, and training kwargs are complete.
+- Targeted validation: `pytest tests/test_disentangle_metrics.py tests/test_multimodal_disentangle.py -q` -> `14 passed`.
+- Kang overhead gate passed: disabled mean `0.5078 sec`, enabled mean `0.5001 sec`,
+  overhead `-1.5164%`.
+- Artifacts are under `audits/F1/`.
 
-Once F1’s overhead gate passes, F2 (counterfactual MVP) and the F3+F4 slice
-(orthogonality loss + covariate heads) can proceed in parallel — F2 does not
-require retraining.
+**Next coding slice — F4-lite: Condition/donor/batch covariate heads + losses.**
+
+Start with covariate registration and default-off heads:
+1. Confirm Kang IFN `batch_key` semantics; use `replicate` for donor/sample and skip
+   `batch-shared` if no technical-batch column exists.
+2. Add TDD coverage for `condition_key`, `donor_key`, and `batch_key` registration.
+3. Implement default-off donor/shared, donor/private, and batch/shared loss plumbing.
+4. Add external latent probe diagnostics and write F4 audit rows under `audits/F4/`.
 
 ### Previous Context
 - Pilot sweep: See PLAN.md for status

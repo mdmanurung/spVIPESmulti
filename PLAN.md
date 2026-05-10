@@ -28,12 +28,13 @@ Scope:
   - F14: causal / coupled-VAE research track
 
 Immediate next slice:
-- F1 — conditional orthogonality instrumentation (metrics only, no arch change).
+- F1 — conditional orthogonality instrumentation is closed.
   - Completed in code: module-level helpers, training-time kwargs wiring,
-    optional metric logging in extra_metrics, and green F1 test file.
-  - Remaining for F1 closeout: Kang IFN overhead benchmark gate (<= +5% wall time)
-    and audit artifact writeout in audits/F1/.
-- After F1 overhead gate passes: run F4-lite next (condition/donor registration,
+    optional metric logging in extra_metrics, and green F1/multimodal tests.
+  - Closeout passed the Kang IFN overhead gate (`-1.5164%` wall-time overhead vs
+    disabled) and wrote `audits/F1/metrics.csv`, `audits/F1/summary.md`, and
+    `audits/F1/recommendation.json`.
+- Run F4-lite next (condition/donor registration,
   default-off donor/batch covariate heads, scheduled GRL scaling, explicit covariate
   key semantics, and external latent probes).
 - F2 starts after F4-lite has a passing probe/audit baseline and must ship as a safe
@@ -57,15 +58,16 @@ Benchmark tooling status:
 - Supports `spvipesmulti`, optional original `spVIPES` adapter, and optional
   `contrastiveVAE` adapter; unavailable baselines are logged as rows with
   explanatory `notes` so the audit trail remains complete.
-- Next execution step: run a full 3-seed benchmark for the active feature
-  (`--run-id`, `--feature-id`) and summarize aggregate deltas vs baselines.
+- Next execution step: promote F4-lite into the active implementation slice and start
+  with its TDD plan for covariate registration, default-off donor/batch heads, and
+  external latent probes.
 - Environment note: if `pertpy` download is blocked/corrupted, run with
   `--kang-h5ad-path /absolute/path/to/kang_2018.h5ad`.
 
 Execution note (2026-05-10):
-- F1 implementation slice is functionally complete for test-driven scope.
-- Next operational step is benchmark execution on Kang IFN (with megakaryocyte
-  exclusion) to validate overhead gate and produce audit artifacts.
+- F1 implementation and closeout are complete. The overhead audit used
+  `docs/notebooks/data/kang_2018.h5ad` with megakaryocyte exclusion and passed the
+  `<= +5%` gate.
 - Roadmap sequencing changed after scientific/architecture audit: F4-lite now precedes
   F2, F3 follows F4, and F11-F14 capture nonlinear diagnostics, conditional/MMD,
   artifact-latent, and causal/coupled-VAE extension ideas as deferred tracks.

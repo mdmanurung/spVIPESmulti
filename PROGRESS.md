@@ -9,6 +9,51 @@ How to use:
 
 ---
 
+## 2026-05-10 (F1 closeout: Kang overhead audit)
+
+### F1: Conditional orthogonality instrumentation closed
+Status: completed (audit gate passed + artifacts written)
+
+What changed:
+- Added `scripts/benchmark_f1_overhead.py`, a focused Kang IFNB overhead probe for
+  the F1 metric path. It uses the local notebook Kang H5AD, removes megakaryocytes,
+  selects a fixed high-variance gene subset, alternates disabled/enabled training
+  runs, and writes the required F1 audit artifacts.
+- Wrote F1 closeout artifacts under `audits/F1/`:
+  - `metrics.csv`
+  - `summary.md`
+  - `recommendation.json`
+- Updated active planning/handoff docs so the next feature slice is F4-lite.
+
+Verification:
+- `pytest tests/test_disentangle_metrics.py tests/test_multimodal_disentangle.py -q`
+  -> `14 passed`.
+- `python -m py_compile scripts/benchmark_f1_overhead.py` -> passed.
+- F1 Kang overhead run:
+  - command: `python scripts/benchmark_f1_overhead.py --run-id f1_kang_overhead_20260510 --kang-h5ad-path docs/notebooks/data/kang_2018.h5ad --seeds 0 --repeats 3 --max-epochs 2 --batch-size 128 --max-cells-per-condition 400 --n-top-genes 800 --n-shared 16 --n-private 16 --n-hidden 64 --min-cells-per-stratum 4`
+  - disabled mean wall time: `0.5078 sec`
+  - enabled mean wall time: `0.5001 sec`
+  - overhead: `-1.5164%`
+  - verdict: `pass` for the `<= +5%` overhead gate.
+
+Notes:
+- The repo-root `data/kang_2018.h5ad` was not a valid H5AD in this environment;
+  the valid local benchmark file was `docs/notebooks/data/kang_2018.h5ad`.
+- The run emitted existing training warnings about distribution support and CUDA
+  driver probing, but completed on CPU and produced audit artifacts.
+
+Files:
+- `scripts/benchmark_f1_overhead.py`
+- `audits/F1/metrics.csv`
+- `audits/F1/summary.md`
+- `audits/F1/recommendation.json`
+- `FEATURE_ROADMAP.md`
+- `PLAN.md`
+- `HANDOFF.md`
+- `PROGRESS.md`
+
+---
+
 ## 2026-05-10 (roadmap scientific-readiness reorder + architecture tracks)
 
 ### Roadmap updated from external scientific/architecture audit

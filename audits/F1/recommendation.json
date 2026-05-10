@@ -1,0 +1,26 @@
+{
+  "run_id": "f1_kang_overhead_20260510",
+  "feature_id": "F1",
+  "verdict": "pass",
+  "gate": "orthogonality metric wall-time overhead <= +5%",
+  "overhead_pct": -1.5164,
+  "disabled_mean_sec": 0.5078,
+  "enabled_mean_sec": 0.5001,
+  "n_rows": 6,
+  "config": {
+    "run_id": "f1_kang_overhead_20260510",
+    "kang_h5ad_path": "docs/notebooks/data/kang_2018.h5ad",
+    "seeds": [
+      0
+    ],
+    "repeats": 3,
+    "max_epochs": 2,
+    "batch_size": 128,
+    "max_cells_per_condition": 400,
+    "n_top_genes": 800,
+    "n_shared": 16,
+    "n_private": 16,
+    "n_hidden": 64,
+    "min_cells_per_stratum": 4
+  }
+}
