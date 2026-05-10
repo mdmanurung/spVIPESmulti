@@ -9,6 +9,39 @@ How to use:
 
 ---
 
+## 2026-05-10 (tensor dimension mismatch fix: shape[-1] + mask reshape)
+
+### RuntimeError fix for label-based PoE tensor concatenation
+Status: completed (fix applied + unit tests pass + integration tests pass)
+
+**Issue:** `RuntimeError: Tensors must have same number of dimensions: got 3 and 2` 
+in `spVIPESmultimodule._poe_n()` during `get_latent_representation()` when using 
+label-based PoE.
+
+**Root cause:** 
+- Line 492/901/918: Used `shape[1]` to extract latent dimension, which breaks if 
+  tensor has unexpected shape (3D or higher).
+- Line 899: Mask creation with `.squeeze()` could fail to produce 1D tensor in 
+  edge cases, causing indexing to produce 3D results.
+
+**Fix applied:**
+1. Replaced `shape[1]` with `shape[-1]` in three locations to robustly extract 
+   the last dimension (latent_dim) regardless of tensor rank.
+2. Changed `mask = (per_group_labels[g] == label).squeeze()` to 
+   `mask = (per_group_labels[g] == label).squeeze().reshape(-1)` 
+   to ensure mask is always 1D before boolean indexing.
+
+**Verification:**
+- Unit tests in `test_fix.py` and `test_poe_fix.py` pass
+- All 23 tests in `tests/test_multigroup_multimodal.py` pass
+- All 2 tests in `tests/test_basic.py` pass
+- `test_disentangle_metrics.py` verified (passes)
+
+Files modified:
+- `src/spVIPESmulti/module/spVIPESmultimodule.py` (lines 492, 899, 901, 918)
+
+---
+
 ## 2026-05-10 (roadmap consistency patch: F1 naming + F2/F10 sequencing)
 
 ### User-directed consistency updates applied
