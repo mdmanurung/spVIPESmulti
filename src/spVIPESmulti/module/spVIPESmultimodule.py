@@ -180,6 +180,11 @@ class spVIPESmultimodule(BaseModuleClass):
         groups_var_indices,
         use_labels: bool = False,
         n_labels: Optional[int] = None,
+        use_condition: bool = False,
+        n_conditions: Optional[int] = None,
+        use_donor: bool = False,
+        n_donors: Optional[int] = None,
+        use_batch_covariate: bool = False,
         n_batch: int = 0,
         n_hidden: int = 128,
         n_dimensions_shared: int = 25,
@@ -210,6 +215,9 @@ class spVIPESmultimodule(BaseModuleClass):
         disentangle_label_shared_weight: float = 0.0,
         disentangle_group_private_weight: float = 0.0,
         disentangle_label_private_weight: float = 0.0,
+        disentangle_batch_shared_weight: float = 0.0,
+        disentangle_donor_shared_weight: float = 0.0,
+        disentangle_donor_private_weight: float = 0.0,
         contrastive_weight: float = 0.0,
         contrastive_temperature: float = 0.1,
         disentangle_warmup: bool = True,
@@ -370,11 +378,26 @@ class spVIPESmultimodule(BaseModuleClass):
 
         self.use_labels = use_labels
         self.n_labels = n_labels
+        self.use_condition = use_condition
+        self.n_conditions = n_conditions
+        self.use_donor = use_donor
+        self.n_donors = n_donors
+        self.use_batch_covariate = use_batch_covariate
 
         if use_labels and n_labels is None:
             raise ValueError(
                 "n_labels must be provided when use_labels=True. "
                 "Ensure label_key is passed to setup_anndata() before constructing the model."
+            )
+        if use_condition and n_conditions is None:
+            raise ValueError(
+                "n_conditions must be provided when use_condition=True. "
+                "Ensure condition_key is passed to setup_anndata() before constructing the model."
+            )
+        if use_donor and n_donors is None:
+            raise ValueError(
+                "n_donors must be provided when use_donor=True. "
+                "Ensure donor_key is passed to setup_anndata() before constructing the model."
             )
 
         # Normalizing flow prior
@@ -419,11 +442,33 @@ class spVIPESmultimodule(BaseModuleClass):
                 f"remain enabled."
             )
 
+        _donor_required = (
+            ("disentangle_donor_shared_weight", disentangle_donor_shared_weight),
+            ("disentangle_donor_private_weight", disentangle_donor_private_weight),
+        )
+        _donor_violations = [name for name, w in _donor_required if w > 0]
+        if _donor_violations and not use_donor:
+            raise ValueError(
+                f"The following covariate disentanglement weights require donor_key "
+                f"in setup_anndata(): {_donor_violations}. Either provide donor_key "
+                f"or set those weights to 0.0."
+            )
+
+        if disentangle_batch_shared_weight > 0 and not use_batch_covariate:
+            raise ValueError(
+                "disentangle_batch_shared_weight requires batch_key in setup_anndata() "
+                "with at least two batch categories. Either provide batch_key or set "
+                "disentangle_batch_shared_weight=0.0."
+            )
+
         n_groups = len(groups_lengths)
         self.disentangle_group_shared_weight = disentangle_group_shared_weight
         self.disentangle_label_shared_weight = disentangle_label_shared_weight
         self.disentangle_group_private_weight = disentangle_group_private_weight
         self.disentangle_label_private_weight = disentangle_label_private_weight
+        self.disentangle_batch_shared_weight = disentangle_batch_shared_weight
+        self.disentangle_donor_shared_weight = disentangle_donor_shared_weight
+        self.disentangle_donor_private_weight = disentangle_donor_private_weight
         self.contrastive_weight = contrastive_weight
         self.contrastive_temperature = contrastive_temperature
         self.disentangle_warmup = disentangle_warmup
@@ -455,6 +500,18 @@ class spVIPESmultimodule(BaseModuleClass):
             FCLayers(n_in=n_dimensions_private, n_out=n_labels, **_clf_kwargs)
             if disentangle_label_private_weight > 0 and use_labels else None
         )
+        self.q_batch_shared = (
+            FCLayers(n_in=n_dimensions_shared, n_out=n_batch, **_clf_kwargs)
+            if disentangle_batch_shared_weight > 0 and use_batch_covariate else None
+        )
+        self.q_donor_shared = (
+            FCLayers(n_in=n_dimensions_shared, n_out=n_donors, **_clf_kwargs)
+            if disentangle_donor_shared_weight > 0 and use_donor else None
+        )
+        self.q_donor_private = (
+            FCLayers(n_in=n_dimensions_private, n_out=n_donors, **_clf_kwargs)
+            if disentangle_donor_private_weight > 0 and use_donor else None
+        )
 
         # Optional prototype buffer for contrastive InfoNCE on z_shared.
         # Use register_buffer either way so the attribute is owned by nn.Module's
@@ -466,6 +523,12 @@ class spVIPESmultimodule(BaseModuleClass):
             self.prototype_momentum = 0.99
         else:
             self.register_buffer("prototypes", None)
+
+    def _covariate_grl_lambda(self, kl_weight: float = 1.0) -> float:
+        """Effective GRL scale for F4 donor/batch adversarial heads."""
+        if self.q_batch_shared is None and self.q_donor_shared is None:
+            return 0.0
+        return float(np.clip(float(kl_weight), 0.0, 1.0))
 
 
     def _cluster_based_poe(self, *args, **kwargs):
@@ -1136,7 +1199,14 @@ class spVIPESmultimodule(BaseModuleClass):
 
         return loadings
 
-    def _compute_disentangle_losses(self, inference_outputs, tensors_by_group, n_groups, extra_metrics):
+    def _compute_disentangle_losses(
+        self,
+        inference_outputs,
+        tensors_by_group,
+        n_groups,
+        extra_metrics,
+        covariate_grl_lambda: float = 1.0,
+    ):
         """Compute disentanglement and contrastive losses (sum of all enabled, weighted terms).
 
         Each component is independently controlled by its weight at construction
@@ -1155,7 +1225,9 @@ class spVIPESmultimodule(BaseModuleClass):
         # Quick exit when no disentanglement component is enabled
         enabled = (
             self.q_group_shared, self.q_label_shared,
-            self.q_group_private, self.q_label_private, self.prototypes,
+            self.q_group_private, self.q_label_private,
+            self.q_batch_shared, self.q_donor_shared, self.q_donor_private,
+            self.prototypes,
         )
         if all(x is None for x in enabled) and not self.compute_orthogonality_metric:
             return 0.0
@@ -1173,6 +1245,17 @@ class spVIPESmultimodule(BaseModuleClass):
             # are not contiguous starting at 0 (e.g. after subsetting an adata).
             labels_by_group = {
                 gi: grp["labels"].flatten()
+                for gi, grp in enumerate(tensors_by_group)
+            }
+
+        needs_donor = (
+            self.q_donor_shared is not None
+            or self.q_donor_private is not None
+        )
+        donors_by_group = None
+        if needs_donor:
+            donors_by_group = {
+                gi: grp["donor"].flatten()
                 for gi, grp in enumerate(tensors_by_group)
             }
 
@@ -1260,6 +1343,65 @@ class spVIPESmultimodule(BaseModuleClass):
             loss_val = sum(pair_losses) * (n_groups / n_pairs) if n_pairs else 0.0
             disentangle_total = disentangle_total + self.disentangle_label_private_weight * loss_val
             extra_metrics["disentangle_label_private_loss"] = (
+                loss_val / n_groups if n_pairs else loss_val
+            )
+
+        # F4-lite: adversarial technical-batch erasure on z_shared.
+        if self.q_batch_shared is not None:
+            loss_val = sum(
+                F.cross_entropy(
+                    self.q_batch_shared(
+                        gradient_reversal(
+                            inference_outputs["poe_stats"][g]["logtheta_log_z"],
+                            alpha=covariate_grl_lambda,
+                        )
+                    ),
+                    tensors_by_group[g][REGISTRY_KEYS.BATCH_KEY].flatten().long(),
+                )
+                for g in range(n_groups)
+            )
+            disentangle_total = disentangle_total + self.disentangle_batch_shared_weight * loss_val
+            extra_metrics["disentangle_batch_shared_loss"] = loss_val / n_groups
+            extra_metrics["covariate_grl_lambda"] = torch.tensor(
+                float(covariate_grl_lambda),
+                device=inference_outputs["poe_stats"][0]["logtheta_log_z"].device,
+            )
+
+        # F4-lite: adversarial donor erasure on z_shared.
+        if self.q_donor_shared is not None:
+            loss_val = sum(
+                F.cross_entropy(
+                    self.q_donor_shared(
+                        gradient_reversal(
+                            inference_outputs["poe_stats"][g]["logtheta_log_z"],
+                            alpha=covariate_grl_lambda,
+                        )
+                    ),
+                    donors_by_group[g].long(),
+                )
+                for g in range(n_groups)
+            )
+            disentangle_total = disentangle_total + self.disentangle_donor_shared_weight * loss_val
+            extra_metrics["disentangle_donor_shared_loss"] = loss_val / n_groups
+            extra_metrics["covariate_grl_lambda"] = torch.tensor(
+                float(covariate_grl_lambda),
+                device=inference_outputs["poe_stats"][0]["logtheta_log_z"].device,
+            )
+
+        # F4-lite: supervised donor retention on every private latent.
+        if self.q_donor_private is not None:
+            pair_losses = [
+                F.cross_entropy(
+                    self.q_donor_private(z),
+                    donors_by_group[g].long(),
+                )
+                for g in range(n_groups)
+                for z in _private_zs(g)
+            ]
+            n_pairs = len(pair_losses)
+            loss_val = sum(pair_losses) * (n_groups / n_pairs) if n_pairs else 0.0
+            disentangle_total = disentangle_total + self.disentangle_donor_private_weight * loss_val
+            extra_metrics["disentangle_donor_private_loss"] = (
                 loss_val / n_groups if n_pairs else loss_val
             )
 
@@ -1468,8 +1610,9 @@ class spVIPESmultimodule(BaseModuleClass):
             total_loss = group_loss * w if total_loss is None else total_loss + group_loss * w
 
         disentangle_scale = kl_weight if self.disentangle_warmup else 1.0
+        covariate_grl_lambda = self._covariate_grl_lambda(kl_weight)
         total_loss = total_loss + (disentangle_scale / n_groups) * self._compute_disentangle_losses(
-            inference_outputs, per_group, n_groups, extra_metrics
+            inference_outputs, per_group, n_groups, extra_metrics, covariate_grl_lambda
         )
 
         if self.use_jeffreys_integ:
@@ -1585,8 +1728,9 @@ class spVIPESmultimodule(BaseModuleClass):
         # internally, so divide by n_groups to keep disentangle_*_weight in
         # per-group units (same relative scale as before the sum→mean change).
         disentangle_scale = kl_weight if self.disentangle_warmup else 1.0
+        covariate_grl_lambda = self._covariate_grl_lambda(kl_weight)
         total_loss = total_loss + (disentangle_scale / n_groups) * self._compute_disentangle_losses(
-            inference_outputs, per_group, n_groups, extra_metrics
+            inference_outputs, per_group, n_groups, extra_metrics, covariate_grl_lambda
         )
 
         if self.use_jeffreys_integ:

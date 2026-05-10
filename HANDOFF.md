@@ -55,14 +55,28 @@ a TDD plan and a quantitative go/no-go benchmark.
   overhead `-1.5164%`.
 - Artifacts are under `audits/F1/`.
 
-**Next coding slice — F4-lite: Condition/donor/batch covariate heads + losses.**
+**F4-lite status — implementation/probe harness landed.**
 
-Start with covariate registration and default-off heads:
-1. Confirm Kang IFN `batch_key` semantics; use `replicate` for donor/sample and skip
-   `batch-shared` if no technical-batch column exists.
-2. Add TDD coverage for `condition_key`, `donor_key`, and `batch_key` registration.
-3. Implement default-off donor/shared, donor/private, and batch/shared loss plumbing.
-4. Add external latent probe diagnostics and write F4 audit rows under `audits/F4/`.
+- Added `condition_key`/`donor_key` registration and default-off donor/batch heads.
+- Added covariate GRL scaling from the existing scvi `kl_weight` warmup and targeted coverage in `tests/test_covariate_heads.py`.
+- Targeted validation: `pytest tests/test_covariate_heads.py tests/test_multimodal_disentangle.py tests/test_regression_fixes.py tests/test_multigroup_multimodal.py -q` -> `64 passed`.
+- Added `scripts/benchmark_f4_covariate_probes.py`; smoke audit wrote `audits/F4/`.
+- Kang default mapping uses `condition_key="label"` and `donor_key="replicate"`.
+  No technical `batch_key` is known, so the standalone batch-shared rows are skipped
+  unless a real technical-batch column is provided; the combined `full_bio` probe still
+  runs the available donor heads.
+
+**Next action — F4 promotion audit.**
+
+Run the full 3-seed F4 probe matrix on Kang and summarize baseline deltas:
+
+```bash
+python scripts/benchmark_f4_covariate_probes.py \
+  --run-id f4_kang_probes_<date> \
+  --kang-h5ad-path docs/notebooks/data/kang_2018.h5ad \
+  --seeds 0,1,2 \
+  --max-epochs 40
+```
 
 ### Previous Context
 - Pilot sweep: See PLAN.md for status

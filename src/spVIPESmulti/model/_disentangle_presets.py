@@ -22,6 +22,9 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_label_shared_weight": 0.0,
         "disentangle_group_private_weight": 0.0,
         "disentangle_label_private_weight": 0.0,
+        "disentangle_batch_shared_weight": 0.0,
+        "disentangle_donor_shared_weight": 0.0,
+        "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.0,
     },
     "full": {
@@ -30,6 +33,9 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_label_shared_weight": 1.0,
         "disentangle_group_private_weight": 1.0,
         "disentangle_label_private_weight": 1.0,
+        "disentangle_batch_shared_weight": 0.0,
+        "disentangle_donor_shared_weight": 0.0,
+        "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.5,
     },
     "shared_only": {
@@ -38,6 +44,9 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_label_shared_weight": 1.0,
         "disentangle_group_private_weight": 0.0,
         "disentangle_label_private_weight": 0.0,
+        "disentangle_batch_shared_weight": 0.0,
+        "disentangle_donor_shared_weight": 0.0,
+        "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.5,
     },
     "private_only": {
@@ -46,6 +55,9 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_label_shared_weight": 0.0,
         "disentangle_group_private_weight": 1.0,
         "disentangle_label_private_weight": 1.0,
+        "disentangle_batch_shared_weight": 0.0,
+        "disentangle_donor_shared_weight": 0.0,
+        "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.0,
     },
     "adversarial_only": {
@@ -54,6 +66,9 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_label_shared_weight": 0.0,
         "disentangle_group_private_weight": 0.0,
         "disentangle_label_private_weight": 1.0,
+        "disentangle_batch_shared_weight": 0.0,
+        "disentangle_donor_shared_weight": 0.0,
+        "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.0,
     },
     "supervised_only": {
@@ -62,6 +77,9 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_label_shared_weight": 1.0,
         "disentangle_group_private_weight": 1.0,
         "disentangle_label_private_weight": 0.0,
+        "disentangle_batch_shared_weight": 0.0,
+        "disentangle_donor_shared_weight": 0.0,
+        "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.5,
     },
     "no_contrastive": {
@@ -70,7 +88,30 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_label_shared_weight": 1.0,
         "disentangle_group_private_weight": 1.0,
         "disentangle_label_private_weight": 1.0,
+        "disentangle_batch_shared_weight": 0.0,
+        "disentangle_donor_shared_weight": 0.0,
+        "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.0,
+    },
+    "minimal_safe_bio": {
+        "disentangle_group_shared_weight": 0.0,
+        "disentangle_label_shared_weight": 0.0,
+        "disentangle_group_private_weight": 0.0,
+        "disentangle_label_private_weight": 0.0,
+        "disentangle_batch_shared_weight": 0.0,
+        "disentangle_donor_shared_weight": 0.0,
+        "disentangle_donor_private_weight": 0.5,
+        "contrastive_weight": 0.0,
+    },
+    "full_bio": {
+        "disentangle_group_shared_weight": 1.0,
+        "disentangle_label_shared_weight": 1.0,
+        "disentangle_group_private_weight": 1.0,
+        "disentangle_label_private_weight": 1.0,
+        "disentangle_batch_shared_weight": 0.5,
+        "disentangle_donor_shared_weight": 0.5,
+        "disentangle_donor_private_weight": 0.5,
+        "contrastive_weight": 0.5,
     },
 }
 
@@ -79,6 +120,9 @@ _REQUIRED_PRESET_KEYS = frozenset({
     "disentangle_label_shared_weight",
     "disentangle_group_private_weight",
     "disentangle_label_private_weight",
+    "disentangle_batch_shared_weight",
+    "disentangle_donor_shared_weight",
+    "disentangle_donor_private_weight",
     "contrastive_weight",
 })
 

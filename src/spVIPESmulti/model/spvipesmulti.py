@@ -164,6 +164,9 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         disentangle_label_shared_weight: Optional[float] = None,
         disentangle_group_private_weight: Optional[float] = None,
         disentangle_label_private_weight: Optional[float] = None,
+        disentangle_batch_shared_weight: Optional[float] = None,
+        disentangle_donor_shared_weight: Optional[float] = None,
+        disentangle_donor_private_weight: Optional[float] = None,
         contrastive_weight: Optional[float] = None,
         contrastive_temperature: float = 0.1,
         disentangle_warmup: bool = True,
@@ -188,6 +191,18 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
 
         use_labels = "labels" in self.adata_manager.data_registry
         n_labels = self.summary_stats.n_labels if use_labels else None
+        use_condition = "condition" in self.adata_manager.data_registry
+        use_donor = "donor" in self.adata_manager.data_registry
+        n_conditions = (
+            len(self.adata_manager.get_state_registry("condition").categorical_mapping)
+            if use_condition else None
+        )
+        n_donors = (
+            len(self.adata_manager.get_state_registry("donor").categorical_mapping)
+            if use_donor else None
+        )
+        setup_args = self.adata_manager.registry.get("setup_args", {})
+        use_batch_covariate = setup_args.get("batch_key") is not None and n_batch > 1
 
         # Per-class inverse-frequency weights for label-CE components (N5-E).
         # Computed once at init from the full dataset label distribution so that
@@ -222,6 +237,9 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             ("disentangle_label_shared_weight", disentangle_label_shared_weight),
             ("disentangle_group_private_weight", disentangle_group_private_weight),
             ("disentangle_label_private_weight", disentangle_label_private_weight),
+            ("disentangle_batch_shared_weight", disentangle_batch_shared_weight),
+            ("disentangle_donor_shared_weight", disentangle_donor_shared_weight),
+            ("disentangle_donor_private_weight", disentangle_donor_private_weight),
             ("contrastive_weight", contrastive_weight),
         ):
             if _override is not None:
@@ -243,6 +261,11 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             groups_obs_indices=groups_obs_indices,
             use_labels=use_labels,
             n_labels=n_labels,
+            use_condition=use_condition,
+            n_conditions=n_conditions,
+            use_donor=use_donor,
+            n_donors=n_donors,
+            use_batch_covariate=use_batch_covariate,
             n_batch=n_batch,
             n_hidden=n_hidden,
             n_dimensions_shared=n_dimensions_shared,
@@ -293,6 +316,8 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         groups_key: str,
         label_key: Optional[str] = None,
         sample_key: Optional[str] = None,
+        condition_key: Optional[str] = None,
+        donor_key: Optional[str] = None,
         batch_key: Optional[str] = None,
         layer: Optional[str] = None,
         modality_likelihoods: Optional[dict[str, str]] = None,
@@ -312,6 +337,10 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         sample_key : str, optional
             Key in `adata.obs` containing sample identifiers used for
             sample-aware differential abundance aggregation.
+        condition_key : str, optional
+            Key in `adata.obs` containing perturbation or treatment state.
+        donor_key : str, optional
+            Key in `adata.obs` containing donor or biological replicate identity.
         batch_key : str, optional
             Key in `adata.obs` for batch information.
         layer : str, optional
@@ -341,6 +370,14 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         if sample_key is not None:
             logger.info("Samples: Using '%s' from adata.obs", sample_key)
             anndata_fields.append(CategoricalObsField("sample", sample_key))
+
+        if condition_key is not None:
+            logger.info("Conditions: Using '%s' from adata.obs", condition_key)
+            anndata_fields.append(CategoricalObsField("condition", condition_key))
+
+        if donor_key is not None:
+            logger.info("Donors: Using '%s' from adata.obs", donor_key)
+            anndata_fields.append(CategoricalObsField("donor", donor_key))
 
         logger.info("--- Product of Experts (PoE) Configuration ---")
         if label_key is not None:

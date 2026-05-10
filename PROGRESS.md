@@ -9,6 +9,64 @@ How to use:
 
 ---
 
+## 2026-05-10 (F4-lite covariate heads implementation)
+
+### F4-lite: Covariate registration, heads, and probe harness
+Status: completed (implementation + targeted tests + smoke probe audit)
+
+What changed:
+- Extended `setup_anndata(...)` with optional `condition_key` and `donor_key`
+  categorical registrations while preserving existing `batch_key` behavior.
+- Added default-off F4-lite loss weights:
+  - `disentangle_batch_shared_weight`
+  - `disentangle_donor_shared_weight`
+  - `disentangle_donor_private_weight`
+- Added module validation guards so donor losses require `donor_key`, and batch-shared
+  loss requires an explicit `batch_key` with at least two categories.
+- Added auxiliary heads:
+  - `q_batch_shared` and `q_donor_shared` with gradient reversal on `z_shared`
+  - `q_donor_private` with supervised donor retention on `z_private`
+- Added covariate GRL scaling from the existing scvi `kl_weight` warmup and
+  `covariate_grl_lambda` logging for donor/batch adversarial heads.
+- Extended disentanglement presets with the new keys, plus `minimal_safe_bio` and
+  `full_bio`.
+- Added `scripts/benchmark_f4_covariate_probes.py` to train F4 variants and write
+  held-out donor/batch/condition/cell-type probe metrics under `audits/F4/`.
+- Added `tests/test_covariate_heads.py`.
+
+Verification:
+- `python -m py_compile src/spVIPESmulti/model/spvipesmulti.py src/spVIPESmulti/module/spVIPESmultimodule.py src/spVIPESmulti/model/_disentangle_presets.py` -> passed.
+- `python -m py_compile scripts/benchmark_f4_covariate_probes.py` -> passed.
+- `pytest tests/test_covariate_heads.py -q` -> `12 passed`.
+- `pytest tests/test_regression_fixes.py::TestDisentanglePresetEdgeCases tests/test_multimodal_disentangle.py -q` -> `7 passed`.
+- `pytest tests/test_covariate_heads.py tests/test_multimodal_disentangle.py tests/test_regression_fixes.py tests/test_multigroup_multimodal.py -q` -> `64 passed`.
+- F4 probe smoke audit:
+  - command: `python scripts/benchmark_f4_covariate_probes.py --run-id f4_probe_smoke_20260510 --kang-h5ad-path docs/notebooks/data/kang_2018.h5ad --seeds 0 --max-epochs 1 --batch-size 64 --max-cells-per-condition 80 --n-top-genes 200 --n-shared 8 --n-private 8 --n-hidden 32`
+  - wrote `audits/F4/metrics.csv`, `audits/F4/summary.md`, and
+    `audits/F4/recommendation.json`.
+  - verdict is `informational`; promotion still requires the roadmap 3-seed matrix.
+
+Notes:
+- Kang lacks an explicit technical-batch column in the default mapping used here, so
+  standalone `batch_shared` smoke rows are recorded as skipped rather than substituting
+  condition or donor metadata. The combined `full_bio` probe runs the available donor
+  heads and adds batch-shared only when a real `batch_key` is provided.
+
+Files:
+- `src/spVIPESmulti/model/_disentangle_presets.py`
+- `src/spVIPESmulti/model/spvipesmulti.py`
+- `src/spVIPESmulti/module/spVIPESmultimodule.py`
+- `tests/test_covariate_heads.py`
+- `scripts/benchmark_f4_covariate_probes.py`
+- `audits/F4/metrics.csv`
+- `audits/F4/summary.md`
+- `audits/F4/recommendation.json`
+- `PLAN.md`
+- `HANDOFF.md`
+- `PROGRESS.md`
+
+---
+
 ## 2026-05-10 (F1 closeout: Kang overhead audit)
 
 ### F1: Conditional orthogonality instrumentation closed

@@ -37,6 +37,10 @@ Immediate next slice:
 - Run F4-lite next (condition/donor registration,
   default-off donor/batch covariate heads, scheduled GRL scaling, explicit covariate
   key semantics, and external latent probes).
+  - Implemented: registration, default-off heads/losses, guards, scheduled GRL
+    scaling, unit/integration tests, and the F4 probe harness.
+  - Remaining for F4 promotion: run the full roadmap 3-seed Kang probe matrix and
+    decide whether any F4 heads should move beyond opt-in.
 - F2 starts after F4-lite has a passing probe/audit baseline and must ship as a safe
   counterfactual API: centroid shifts first, OOD/realism filtering on by default, and
   arbitrary latent replacement treated as a diagnostic helper only.
@@ -58,9 +62,8 @@ Benchmark tooling status:
 - Supports `spvipesmulti`, optional original `spVIPES` adapter, and optional
   `contrastiveVAE` adapter; unavailable baselines are logged as rows with
   explanatory `notes` so the audit trail remains complete.
-- Next execution step: promote F4-lite into the active implementation slice and start
-  with its TDD plan for covariate registration, default-off donor/batch heads, and
-  external latent probes.
+- Next execution step: run the full F4 3-seed Kang probe matrix with
+  `scripts/benchmark_f4_covariate_probes.py` and summarize deltas vs baseline.
 - Environment note: if `pertpy` download is blocked/corrupted, run with
   `--kang-h5ad-path /absolute/path/to/kang_2018.h5ad`.
 
@@ -68,6 +71,9 @@ Execution note (2026-05-10):
 - F1 implementation and closeout are complete. The overhead audit used
   `docs/notebooks/data/kang_2018.h5ad` with megakaryocyte exclusion and passed the
   `<= +5%` gate.
+- F4-lite implementation is complete for the code/test/probe-harness slice. A smoke
+  probe audit wrote `audits/F4/`; promotion remains blocked on the full 3-seed probe
+  benchmark.
 - Roadmap sequencing changed after scientific/architecture audit: F4-lite now precedes
   F2, F3 follows F4, and F11-F14 capture nonlinear diagnostics, conditional/MMD,
   artifact-latent, and causal/coupled-VAE extension ideas as deferred tracks.

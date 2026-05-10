@@ -512,11 +512,11 @@ precondition for credible counterfactual edits.
 - Head architecture starts with the local `FCLayers`/classifier convention for minimal
   blast radius. A small `MLP → LayerNorm → GELU → dropout → classifier` variant can be
   added behind an opt-in `covariate_head_arch="mlp_ln_gelu"` if linear heads are unstable.
-- GRL strength is scheduled, not fixed: start near zero, follow a sigmoid/linear warmup
-  over early epochs, and log the effective `lambda_grl` for reproducibility.
+- GRL strength is scheduled, not fixed: use the existing scvi KL warmup signal
+  (`kl_weight`) and log the effective `lambda_grl` for reproducibility.
 - Preset extensions: `_disentangle_presets.py` gains the three new keys; existing
   presets set them to 0.0. `minimal_safe_bio` enables donor-private only;
-  `full_bio` enables all three at moderate defaults (start 0.5).
+  `full_bio` enables all three at moderate defaults (0.5).
 - Logged metrics: `disentangle_batch_shared_loss`, `disentangle_donor_shared_loss`,
   `disentangle_donor_private_loss`.
 - External probe diagnostics train simple held-out classifiers for donor, batch,
@@ -542,7 +542,7 @@ precondition for credible counterfactual edits.
    - Negative-weight validation parity with existing weights.
    - Finite loss when each head is enabled in isolation; metric appears in
      `extra_metrics` only when its weight is > 0.
-   - Scheduled GRL produces monotonic early-epoch scaling and defaults to a no-op when
+  - Scheduled GRL follows `kl_weight` scaling and defaults to a no-op when
      all covariate weights are zero.
    - Default-off equivalence (numerical match to baseline within 1e-6 when all new
      weights are 0).
@@ -563,7 +563,8 @@ precondition for credible counterfactual edits.
 - donor-shared (GRL) only
 - batch-shared (GRL) only (using the existing registered `batch_key`; if Kang lacks a
   separate technical batch, mark this row skipped rather than substituting `label`)
-- `full_bio` preset (all three)
+- combined `full_bio` probe: donor-shared plus donor-private, and batch-shared when a
+  real `batch_key` is registered
 
 | Criterion | Pass | Reject |
 |---|---|---|
@@ -1050,8 +1051,9 @@ A feature is "done" only when **all** are true:
 vs disabled), artifacts were written under `audits/F1/`, and the closeout entry was
 appended to `PROGRESS.md`.
 
-Start **F4-lite** before F2: register `condition_key`/`donor_key`, add default-off
-covariate heads, scheduled GRL scaling, and external probe diagnostics.
+**F4-lite implementation/probe harness is in place.** Next, run the full F4
+3-seed Kang probe matrix and use `audits/F4/` to decide whether any heads should
+move beyond opt-in.
 
 F2 starts after F4-lite has a passing probe/audit baseline and must ship as a **safe**
 counterfactual API: centroid shifts first, OOD/realism filtering on by default, arbitrary

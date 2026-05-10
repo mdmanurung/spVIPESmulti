@@ -1,0 +1,24 @@
+{
+  "run_id": "f4_probe_smoke_20260510",
+  "feature_id": "F4",
+  "verdict": "informational",
+  "reason": "Probe harness produced metrics; promotion still requires the roadmap 3-seed matrix.",
+  "config": {
+    "run_id": "f4_probe_smoke_20260510",
+    "kang_h5ad_path": "docs/notebooks/data/kang_2018.h5ad",
+    "seeds": [
+      0
+    ],
+    "max_epochs": 1,
+    "batch_size": 64,
+    "max_cells_per_condition": 80,
+    "n_top_genes": 200,
+    "n_shared": 8,
+    "n_private": 8,
+    "n_hidden": 32,
+    "condition_key": "label",
+    "donor_key": "replicate",
+    "label_key": "cell_type",
+    "batch_key": null
+  }
+}
