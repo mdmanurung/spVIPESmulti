@@ -15,12 +15,17 @@ Scope:
 - Single-source planning lives in `FEATURE_ROADMAP.md` (supersedes the previous
   `DISENTANGLE_SECOND_PASS_ACTION_PLAN.md`, `COUNTERFACTUAL_DESIGN.md`,
   `COUNTERFACTUAL_AUDIT.md`, and `audits/SECOND_PASS_AUDIT_PLAN.md`).
-- Features F1–F7 are ordered by architectural risk; each ships with a TDD plan
-  and a quantitative go/no-go benchmark (§2 of the roadmap).
-- Optional extension tracks F8–F10 are now included in the same roadmap:
+- Features F1–F7 are now ordered by scientific readiness: measure leakage, strengthen
+  covariate disentanglement, then promote safe counterfactuals. Each feature ships with
+  a TDD plan and a quantitative go/no-go benchmark (§2 of the roadmap).
+- Optional extension tracks F8–F14 are now included in the same roadmap:
   - F8: optional SysVI-style shared-latent VampPrior
   - F9: optional SysVI-style latent cycle-consistency regularizer
   - F10: CellDISECT-aligned Kang benchmark + disentanglement/counterfactual metric pack
+  - F11: nonlinear dependence diagnostics (HSIC / MI / partial correlation)
+  - F12: conditional decoder / MMD alignment track
+  - F13: artifact/QC latent track
+  - F14: causal / coupled-VAE research track
 
 Immediate next slice:
 - F1 — conditional orthogonality instrumentation (metrics only, no arch change).
@@ -28,12 +33,17 @@ Immediate next slice:
     optional metric logging in extra_metrics, and green F1 test file.
   - Remaining for F1 closeout: Kang IFN overhead benchmark gate (<= +5% wall time)
     and audit artifact writeout in audits/F1/.
-- After F1 overhead gate passes: run F2 (counterfactual MVP) and F3+F4 (loss terms +
-  covariate heads) in parallel.
-- Activate F10 (external CellDISECT-aligned Kang benchmark harness) after F2 baseline
-  APIs are in place.
-- Defer F8/F9 implementation until F10 baseline artifacts exist, so SysVI-inspired
-  prior/cycle additions can be judged against external anchors and not only internal drift.
+- After F1 overhead gate passes: run F4-lite next (condition/donor registration,
+  default-off donor/batch covariate heads, scheduled GRL scaling, explicit covariate
+  key semantics, and external latent probes).
+- F2 starts after F4-lite has a passing probe/audit baseline and must ship as a safe
+  counterfactual API: centroid shifts first, OOD/realism filtering on by default, and
+  arbitrary latent replacement treated as a diagnostic helper only.
+- Activate/harden F10a (internal CellDISECT-style metric helpers and artifact schema)
+  alongside F4/F2; add F10b external CellDISECT runner only after F10a is green.
+- Defer F8-F14 implementation until F10 baseline artifacts exist. F11-F14 are concept
+  tracks with first slices only; architecture changes in F12-F14 require separate design
+  docs before implementation.
 
 Success criteria:
 - Per-feature "Pass" rules in `FEATURE_ROADMAP.md` §2.
@@ -56,12 +66,16 @@ Execution note (2026-05-10):
 - F1 implementation slice is functionally complete for test-driven scope.
 - Next operational step is benchmark execution on Kang IFN (with megakaryocyte
   exclusion) to validate overhead gate and produce audit artifacts.
+- Roadmap sequencing changed after scientific/architecture audit: F4-lite now precedes
+  F2, F3 follows F4, and F11-F14 capture nonlinear diagnostics, conditional/MMD,
+  artifact-latent, and causal/coupled-VAE extension ideas as deferred tracks.
 
 Parallel external work (not owned in this session):
 - N5 malaria B-cell latent-retuning pilot sweep (see HANDOFF.md).
 
 ## Blockers / Decisions Needed
-None.
+- Confirm the Kang IFN technical-batch column for F4 `batch_key`; if absent, F4 benchmark
+  must skip `batch-shared` rather than substituting a biological label.
 
 ---
 
@@ -124,9 +138,9 @@ Reactivation trigger: after single-covariate stability and API simplification.
 
 ---
 
-### Roadmap items F1–F7
+### Roadmap items F1–F14
 All deferred backlog entries previously tracked here as A2/D2/F1 are now consolidated
-into `FEATURE_ROADMAP.md` features F1–F7. Activate by promoting the relevant
+into `FEATURE_ROADMAP.md` features F1–F14. Activate by promoting the relevant
 feature into the Current Iteration block above and starting with its TDD plan.
 
 ### Reactivation Checklist

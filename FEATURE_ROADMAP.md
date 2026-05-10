@@ -18,31 +18,43 @@ Single source of truth for the next batch of feature work. Every feature ships w
 4. **Quantitative go/no-go benchmark** — concrete numerical gates that decide whether
    to keep, iterate, or revert the feature. Decisions are data-driven, not subjective.
 
-Features are ordered by **architectural risk (low → high)** so that low-risk, high-value
-work lands first and informs the higher-risk follow-ups.
+Features are ordered by **scientific readiness** rather than only architectural risk:
+measure leakage first, strengthen identifiability second, and only then promote
+counterfactual generation. This avoids shipping plausible-looking interventions before
+donor/batch/condition leakage has been measured and actively controlled.
 
-F1-F7 below keep that strict ordering. F8-F10 are optional extension tracks added after
-the original sequence and can be scheduled opportunistically once F1 closeout is complete.
+F1-F7 below keep that scientific-readiness ordering. F8-F14 are optional extension
+tracks inspired by recent scRNA-seq VAE architectures and should be scheduled only when
+their prerequisite benchmark gates exist.
 
 | # | Feature | Arch risk | Phase | Depends on |
 |---|---|---|---|---|
 | F1 | Conditional orthogonality instrumentation | **None** (metrics only) | Phase 1 | — |
-| F2 | Counterfactual latent editing module (MVP) | **None** (new external module) | Phase 1 | F1 |
-| F3 | Optional shared–private orthogonality loss | Low (default-off loss term) | Phase 2 | F1 |
-| F4 | Condition/donor/batch covariate heads + losses | Low (default-off losses) | Phase 2 | F1 |
+| F4 | Condition/donor/batch covariate heads + losses | Low (default-off losses) | Phase 1.5 | F1 |
+| F2 | Safe counterfactual latent editing module (MVP) | **None** (new external module) | Phase 2 | F1, F4-lite |
+| F3 | Optional shared–private orthogonality loss | Low (default-off loss term) | Phase 2 | F1, F4 |
 | F5 | Donor/condition-aware counterfactual protocols | Low (extends F2) | Phase 2 | F2, F4 |
 | F6 | Graph-informed prototype regularizer | Medium (new regularizer) | Phase 3 | F4 |
 | F7 | Counterfactual consistency loss + perturbation vectors | Medium (training + Phase 2 cf API) | Phase 3 | F2, F4 |
-| F8 | Optional SysVI-style VampPrior for shared latent | Low (prior swap, default-off) | Phase 3 | F1 |
-| F9 | Optional SysVI-style latent cycle-consistency regularizer | Medium (new training path, default-off) | Phase 3 | F4 |
-| F10 | CellDISECT-aligned Kang benchmark + metrics pack | None (evaluation only) | Phase 1.5 | F2 |
+| F8 | Optional SysVI-style VampPrior for shared latent | Low (prior swap, default-off) | Phase 3 | F1, F10 |
+| F9 | Optional SysVI-style latent cycle-consistency regularizer | Medium (new training path, default-off) | Phase 3 | F4, F10 |
+| F10 | CellDISECT-aligned Kang benchmark + metrics pack | None (evaluation only) | Phase 1.5 | F1 |
+| F11 | Nonlinear dependence diagnostics (HSIC / MI / partial corr) | None-to-low (metrics first) | Phase 2 | F1 |
+| F12 | Conditional decoder / MMD alignment track | Medium (CVAE-style branch) | Phase 3 | F4, F10 |
+| F13 | Artifact/QC latent track | Medium (new latent block) | Phase 4 | QC labels, F10 |
+| F14 | Causal / coupled-VAE research track | High (new generative assumptions) | Research | F2, F5, F10 |
 
 Cross-cutting hard constraints (apply to every feature):
 
-- No rewrites to encoders, decoders, PoE strategy, or latent dimensionality flow.
+- No rewrites to encoders, decoders, PoE strategy, or latent dimensionality flow for
+  F1-F11. Explicit architecture tracks F12-F14 are exempt only inside isolated,
+  default-off experimental branches.
 - All new losses must be **opt-in** (default weights = 0.0); defaults must be backward compatible.
 - Single-modal and multimodal paths must remain feature-parity.
 - Existing presets and tests must keep passing unchanged.
+- Counterfactual outputs are **associative predictions**, not causal claims, unless a
+  benchmark uses interventional or held-out perturbation ground truth and passes the
+  corresponding audit gates.
 
 ---
 
@@ -74,8 +86,8 @@ Cross-cutting hard constraints (apply to every feature):
   Megakaryocytes are a small, transcriptionally distinct population that can distort
   integration metrics; their removal aligns with standard immune-cell analysis pipelines.
 
-- Every new feature benchmark must be compared against two external anchors in addition
-  to the current `spVIPESmulti` baseline:
+- Model-quality benchmarks on Kang should compare against external anchors in addition
+  to the current `spVIPESmulti` baseline. Required anchors depend on the feature:
   - original `spVIPES` from <https://github.com/nrclaudio/spVIPES>
   - `contrastiveVAE` from scvi-tools
     (<https://github.com/scverse/scvi-tools/blob/612157b04320cf13b72e3e500707371b05811f54/src/scvi/external/contrastivevi/_model.py#L49>)
@@ -83,9 +95,14 @@ Cross-cutting hard constraints (apply to every feature):
     (<https://celldisect.readthedocs.io/en/latest/tutorials/CellDISECT_Counterfactual.html>,
     <https://github.com/stathismegas/CellDISECT_reproducibility/tree/main/reproduce_benchmarks/kang>)
 
+  F1/F11 metric-only features require baseline-vs-enabled comparisons only. F4/F6/F8/F9
+  require `spVIPES` and `contrastiveVAE` when available. F2/F5/F10 require CellDISECT
+  parity when the external runner is reproducible. Missing external anchors must be
+  recorded as explicit skip rows in audit artifacts, never silently omitted.
+
   Use the same Kang IFN preprocessing, seeds, and train/validation split across all
-  anchors so differences are attributable to the model or feature change rather
-  than the benchmark setup.
+  available anchors so differences are attributable to the model or feature change
+  rather than the benchmark setup.
 
 - Fixed seed set: **3 seeds minimum**. Identical train/val split, batch size, and
   early-stopping settings across variants.
@@ -105,7 +122,8 @@ Cross-cutting hard constraints (apply to every feature):
 Core integration metrics on `z_shared`:
 
 - `iLISI` (group mixing, higher better)
-- `cLISI` (label purity, higher better)
+- `cLISI` (label/condition mixing, lower/near 1 is usually better when preserving
+  biology; report direction explicitly in each table)
 - `kBET` (acceptance rate)
 - `kNN purity` per cell type
 - `Leiden ARI` against label
@@ -115,6 +133,8 @@ Latent-quality metrics:
 
 - Reconstruction loss (per cell)
 - KL shared / KL private
+- Active latent dimensions and KL utilization (posterior-collapse monitor)
+- Mutual-information proxy estimates where feasible (informational until F11)
 - **Orthogonality**: mean Frobenius norm of within-stratum `corr(z_shared, z_private)`
   (introduced by F1)
 - **Worst-stratum orthogonality**: max per-stratum norm
@@ -124,6 +144,8 @@ Counterfactual metrics (introduced by F2, F5):
 - Cycle consistency (X→Y→X latent and expression L2 distance)
 - Realism under target decoder (reconstruction proxy)
 - Identity preservation (donor / cell-type classifier agreement)
+- OOD rejection: Mahalanobis latent distance, low-likelihood flag, abnormal library-size flag
+- Biological fidelity: DE recovery, pathway/TF enrichment consistency, pseudobulk similarity
 
 CellDISECT-aligned metrics (introduced by F10):
 
@@ -154,6 +176,39 @@ Reference observations from public CellDISECT material to be mirrored in F10:
 
 Artifacts for this protocol should be written under `audits/F10/` and mirrored with
 append-only summaries in `audits/kang_ifnb/`.
+
+### 1.5 Architecture inspiration tracks (non-blocking)
+
+Recent scRNA-seq VAE work informs the roadmap, but these ideas are **not** all
+implementation commitments. They are scheduled as staged tracks so spVIPESmulti keeps
+its identity: shared/private multi-group disentanglement with auditable counterfactuals.
+
+Near-term influences:
+
+- **scGen** → F2 uses condition centroid shifts as the first-class perturbation mode.
+- **scDisInFact / biolord** → F4 prioritizes explicit condition/donor/batch factor
+  control and external latent probes before counterfactual claims.
+- **CellDISECT** → F10 provides external counterfactual/disentanglement audit metrics.
+
+Mid-term influences:
+
+- **trVAE / MMD-VAE** → F12 may add MMD alignment or conditional-decoder behavior once
+  F4 and F10 establish disentanglement and benchmark baselines.
+- **scDRP / scOTM** → F5 may add matched-neighborhood or OT-style local transport after
+  the safe F2 API exists.
+- **FactorVAE / HSIC-style independence** → F11 explores nonlinear dependence metrics
+  and, only after metric validation, optional loss terms.
+
+Research-only influences:
+
+- **CRADLE-VAE** → F13 artifact/QC latent only activates when reliable artifact labels
+  or QC strata are available.
+- **scCausalVI / CoupledVAE** → F14 causal or dual-branch architectures require explicit
+  assumptions and benchmark justification; they must not block F1-F5.
+
+Representative external anchors to cite in future docs/benchmarks: scGen, trVAE,
+scDisInFact, biolord, multiGroupVI, CRADLE-VAE, scDRP/scOTM-style transport methods,
+CellDISECT, and scCausalVI.
 
 ---
 
@@ -208,18 +263,20 @@ features (F2–F7) objectively.
 | Overhead per training step (CPU smoke run) | `scripts/smoke_vignettes.py --epochs 5` | ≤ +5% wall time vs disabled | > +15% |
 | Numerical agreement vs NumPy reference on synthetic data | unit test | abs error < 1e-4 | ≥ 1e-4 |
 
-If pass → unlock F2, F3, F4. If reject → fix the helper before any downstream work.
+If pass → unlock F4-lite and F10 audit hardening. If reject → fix the helper before
+any downstream disentanglement or counterfactual work.
 
 ---
 
-### F2 — Counterfactual latent editing module (MVP, single-modality)
+### F2 — Safe counterfactual latent editing module (MVP, single-modality)
 
 **Background.** Shared–private + label-based PoE create a structured latent space where
 biologically meaningful interventions (condition translation, batch removal, donor
 transfer) are well-defined. Today users have no high-level API to perform these edits
 or quantify their reliability. The MVP exposes deterministic latent operators, an
 encode→edit→decode pipeline, and disentanglement diagnostics — no model retraining
-required, no architectural change.
+required, no architectural change. F2 now follows F4-lite because counterfactual APIs
+should not be promoted before donor/batch/condition leakage is measured and controlled.
 
 **Architecture rationale (auditable).**
 
@@ -239,7 +296,7 @@ required, no architectural change.
   ```text
   src/spVIPESmulti/interventions/
     __init__.py              # re-exports public API
-    latent_operators.py      # arithmetic, interpolation, replacement (pure functions)
+    latent_operators.py      # centroid shifts + low-level arithmetic helpers
     counterfactual.py        # encode_cells, decode_counterfactual, predict_counterfactual,
                              # transfer_condition, edit_latent, CounterfactualResult
     diagnostics.py           # leakage_score, condition_separability,
@@ -251,38 +308,64 @@ required, no architectural change.
 
   ```python
   encode_cells(model, adata, group_idx=None, include_variance=True)
-  latent_arithmetic(z, direction, weight=1.0)
+  condition_centroid_shift(z, direction, alpha=1.0)
+  latent_arithmetic(z, direction, weight=1.0)  # low-level helper; not tutorial default
   latent_interpolation(z_src, z_tgt, alpha)
   latent_replacement(z, dimension, value)
   decode_counterfactual(model, z_shared, z_private, group_idx, adata,
-                        include_uncertainty=True, return_components=False, batch_size=512)
+                        cells=None, library=None, include_uncertainty=True,
+                        n_uncertainty_samples=8, seed=0,
+                        return_components=False, batch_size=512)
   predict_counterfactual(model, adata, cells=None, group_idx=0,
-                         intervention="arithmetic", direction=None,
+                         intervention="centroid_shift", direction=None,
                          target_cells=None, alpha=1.0, dimension=None, value=None,
-                         return_uncertainty=True)
+                         return_uncertainty=True, reject_ood=True)
   transfer_condition(model, adata, cells, condition_from, condition_to,
                      group_src, group_dst, latent_type="shared")
-  leakage_score(model, adata, group_key, label_key=None)
+  leakage_score(model, adata, group_key, label_key=None, latent_type="shared")
   condition_separability(model, adata, label_key)
   integration_report(model, adata, group_key, label_key=None)
   ```
 
 - Returns `CounterfactualResult` dataclass with `.X`, `.uncertainty`, `.info`.
+- First-class perturbation mode: scGen-style condition centroid delta
+  `mean(z_shared | condition_to) - mean(z_shared | condition_from)`.
+- OOD/realism filters report low decoder likelihood proxy, abnormal library-size ratio,
+  and Mahalanobis latent distance. In F2, rejection means `CounterfactualResult.info`
+  includes `ood_flags`, `rejected_mask`, and threshold values; `.X` is still returned
+  unless the caller passes `reject_ood="raise"`.
 
 **Non-goals (deferred to F5/F7).**
 
 - Per-modality editing (multimodal MVP marked `xfail`).
 - Perturbation vector learning via gradient ascent / classifier gradients.
-- Donor/condition-conditional counterfactuals (needs F4 covariate registration).
+- Arbitrary dimension replacement as a biological claim; it remains a low-level
+  diagnostic helper only.
+- Donor/condition-conditional counterfactual protocols beyond centroid shift (F5).
+- Conditional decoder/CVAE generation (F12).
 
 **Resolved design questions** (from the prior counterfactual audit):
 
-- **Q1 — replacement mode.** `predict_counterfactual` accepts `intervention="replacement"`
-  with `dimension=`/`value=` kwargs. Single entry point, signature documented.
+- **Q1 — replacement mode.** `predict_counterfactual` may accept
+  `intervention="replacement"` with `dimension=`/`value=` kwargs, but tutorials and
+  benchmarks must not present this as a primary biological perturbation mode.
 - **Q2 — disentanglement warning.** Always emit a runtime warning when
-  `leakage_score(..., shared) > 0.4`. Threshold is documented; no verbosity flag.
+  `leakage_score(..., latent_type="shared") > 0.4`. Threshold is documented; no
+  verbosity flag.
 - **Q3 — uncertainty calibration.** Documented in tutorial only; no CI assertion.
 - **Q4 — performance benchmarking.** Log timings in tests; do not assert. Hardware-dependent.
+- **Q5 — cell selection.** `cells` are global `adata.obs_names` or integer obs indices;
+  implementation maps them to group-local positions after resolving
+  `adata.uns["groups_obs_indices"]`.
+- **Q6 — library sizes.** `decode_counterfactual` accepts explicit `library` and
+  otherwise derives source-cell libraries from `cells`; fallback is `log(1e4)`.
+- **Q7 — condition source.** `transfer_condition` reads the F4-registered
+  `condition_key`; if absent, it raises `ValueError("condition_key is required...")`
+  with the setup call needed to fix it.
+- **Q8 — OOD thresholds.** Initial defaults are data-derived: Mahalanobis threshold is
+  the 95th percentile of training/source latents for the target group; library ratio
+  threshold is outside `[0.5, 2.0]`; low-likelihood proxy threshold is the 5th percentile
+  of identity reconstructions on the source group.
 
 **TDD plan.**
 
@@ -299,7 +382,8 @@ required, no architectural change.
      leakage with `disentangle_preset="off"` on a tiny model,
      `silhouette(z_private)` > silhouette of random labels.
 2. **Fixture:** `tests/conftest.py` adds `minimal_model_adata` (2 groups × 2 labels ×
-   50 genes × 200 cells, 5 epochs, marked `@pytest.mark.integration`).
+   50 genes × 200 cells) only behind `@pytest.mark.integration`; default unit tests must
+   not train models unless explicitly marked.
 3. **Implement** in the order: `latent_operators` → `utils` → `counterfactual`
    (`encode_cells`, `decode_counterfactual`, `predict_counterfactual`,
    `transfer_condition`) → `diagnostics`.
@@ -320,20 +404,23 @@ Run on the `minimal_model_adata` fixture (CI) and on the Kang IFN dataset
 | `transfer_condition` recovers mean direction (cosine sim) | ≥ 0.85 | < 0.7 |
 | `leakage_score(shared)` on tutorial data | < 0.40 | ≥ 0.60 |
 | `silhouette(z_private)` by group | ≥ 0.30 | < 0.10 |
+| OOD / realism filters | flags present and finite | missing / all nan |
+| DE / pathway preservation on Kang smoke | reported | missing |
 | Encoding 10K cells (informational, no assertion) | logged | — |
 | Decoding 10K counterfactuals (informational) | logged | — |
 | Test suite delta | ≤ +60 s | > +180 s |
 
-If pass → ship MVP. If reject → first inspect F1 metrics; if shared/private leakage
-is itself the cause, F3 + F4 must land before re-running F2's benchmark.
+If pass → ship safe MVP. If reject → first inspect F1/F4 metrics; if leakage or
+covariate confounding is the cause, tune F4 and defer F2 promotion.
 
 ---
 
 ### F3 — Optional shared–private orthogonality loss
 
-**Background.** F1 measures conditional dependence; F3 lets us **penalize** it.
-Hypothesis: a within-stratum partial-correlation penalty reduces leakage without
-materially harming reconstruction or integration.
+**Background.** F1 measures conditional dependence and F4 establishes explicit
+covariate controls; F3 then lets us **penalize** residual shared/private dependence.
+It intentionally follows F4 because decorrelated representations can still be
+biologically entangled when nuisance and biology co-vary.
 
 **Scope.**
 
@@ -349,6 +436,8 @@ materially harming reconstruction or integration.
   `_loss_multimodal`, scaled like existing multimodal private terms.
 - Warmup schedule: penalty off for first 30% of epochs, linear ramp to target by 60%.
 - Logged metric name: `orthogonality_loss`.
+- F11 may later replace or augment this with HSIC / MI-style penalties if the
+  metric-only extension proves more informative than linear correlation.
 
 **TDD plan.**
 
@@ -392,16 +481,26 @@ Artifacts: `audits/F3/metrics.csv`, `audits/F3/summary.md`, `audits/F3/recommend
 optionally `sample_key` (registered but unused as a signal). For population-scale
 biology we need explicit nuisance removal (batch, donor) on `z_shared` and explicit
 retention of donor identity on `z_private`. This is the canonical second-pass
-disentanglement upgrade.
+disentanglement upgrade and now precedes F2 because latent identifiability is a
+precondition for credible counterfactual edits.
 
 **Scope.**
 
 - `setup_anndata(...)` gains optional `condition_key` and `donor_key`, registered with
-  `CategoricalObsField` exactly like `label_key`/`sample_key`. Existing call sites
-  unaffected.
+  `CategoricalObsField` exactly like `label_key`/`sample_key`. It must continue to
+  support existing `batch_key`; do not introduce a second batch field.
+- Covariate semantics are fixed:
+  - `label_key`: biological cell identity to preserve in `z_shared`.
+  - `condition_key`: perturbation/treatment state; used by F2/F5 counterfactuals and
+    reported by probes. Do not adversarially remove it from `z_shared` by default.
+  - `donor_key`: donor/replicate identity; remove from `z_shared`, retain in `z_private`.
+  - `batch_key`: technical batch from existing scvi registry; remove from `z_shared`.
+  - `sample_key`: biological replicate/aggregation key; do not treat as technical batch
+    unless the user explicitly passes the same obs column as `batch_key`.
 - Model `__init__` exposes flags (`use_condition`, `n_conditions`, `use_donor`,
-  `n_donors`) to the module. Validation: each requested loss must have its key
-  registered, otherwise raise `ValueError` with an actionable message.
+  `n_donors`) plus existing batch registry usage to the module. Validation: each
+  requested loss must have its key registered, otherwise raise `ValueError` with an
+  actionable message naming the missing setup argument.
 - New constructor weights (all default 0.0):
   - `disentangle_batch_shared_weight` (GRL CE on `z_shared`)
   - `disentangle_donor_shared_weight` (GRL CE on `z_shared`)
@@ -410,11 +509,29 @@ disentanglement upgrade.
   - `q_batch_shared`, `q_donor_shared` (adversarial via GRL)
   - `q_donor_private` (supervised); reuse multimodal private-loop helper to apply
     across all per-modality private latents.
+- Head architecture starts with the local `FCLayers`/classifier convention for minimal
+  blast radius. A small `MLP → LayerNorm → GELU → dropout → classifier` variant can be
+  added behind an opt-in `covariate_head_arch="mlp_ln_gelu"` if linear heads are unstable.
+- GRL strength is scheduled, not fixed: start near zero, follow a sigmoid/linear warmup
+  over early epochs, and log the effective `lambda_grl` for reproducibility.
 - Preset extensions: `_disentangle_presets.py` gains the three new keys; existing
   presets set them to 0.0. `minimal_safe_bio` enables donor-private only;
   `full_bio` enables all three at moderate defaults (start 0.5).
 - Logged metrics: `disentangle_batch_shared_loss`, `disentangle_donor_shared_loss`,
   `disentangle_donor_private_loss`.
+- External probe diagnostics train simple held-out classifiers for donor, batch,
+  condition, and cell type on both `z_shared` and `z_private`; these probes are the
+  primary promotion evidence, not training-head loss alone.
+
+**F4-lite release contract (required before F2).**
+
+- Register `condition_key` and `donor_key`; reuse existing `batch_key`.
+- Implement `disentangle_donor_shared_weight`, `disentangle_donor_private_weight`, and
+  `disentangle_batch_shared_weight` as default-off losses.
+- Implement scheduled GRL scaling for the adversarial donor/batch heads.
+- Implement external probe diagnostics and write probe metrics to `audits/F4/`.
+- Defer `covariate_head_arch="mlp_ln_gelu"` and preset promotion until F4-lite probe
+  results justify them.
 
 **TDD plan.**
 
@@ -425,6 +542,8 @@ disentanglement upgrade.
    - Negative-weight validation parity with existing weights.
    - Finite loss when each head is enabled in isolation; metric appears in
      `extra_metrics` only when its weight is > 0.
+   - Scheduled GRL produces monotonic early-epoch scaling and defaults to a no-op when
+     all covariate weights are zero.
    - Default-off equivalence (numerical match to baseline within 1e-6 when all new
      weights are 0).
    - Multimodal parity (loop scaling matches existing multimodal private terms).
@@ -442,7 +561,8 @@ disentanglement upgrade.
 - baseline (no new heads)
 - donor-private only (using `replicate` as donor_key)
 - donor-shared (GRL) only
-- batch-shared (GRL) only (using `label` as batch/condition)
+- batch-shared (GRL) only (using the existing registered `batch_key`; if Kang lacks a
+  separate technical batch, mark this row skipped rather than substituting `label`)
 - `full_bio` preset (all three)
 
 | Criterion | Pass | Reject |
@@ -450,6 +570,7 @@ disentanglement upgrade.
 | Donor classifier accuracy on `z_private` (held-out) | **≥ baseline + 10pp** | < baseline + 2pp |
 | Donor classifier accuracy on `z_shared` (held-out) | **≤ baseline − 10pp** | ≥ baseline |
 | Batch (sample) classifier accuracy on `z_shared` | **≤ baseline − 10pp** | ≥ baseline |
+| Condition classifier accuracy on `z_shared` | documented trade-off vs biology | unreported |
 | Cell-type classifier accuracy on `z_shared` | within ±3pp of baseline | drop > 5pp |
 | Reconstruction loss degradation | ≤ 5% | > 10% |
 | iLISI / kBET | within ±10% of baseline | > 20% drop |
@@ -476,9 +597,9 @@ biological questions (individual A under X "as if" under Y).
 - **Protocol P2 — label-matched private swap.** Same as P1 but match on `label_key`.
 - **Protocol P3 — label + donor/timepoint matched.** Match on `label_key` plus a
   user-supplied stratum list; report fallback counts when matches are missing.
-- **Condition-shift protocol.** For donor *i* under condition X, replace the
-  condition-associated direction (mean(X) − mean(Y) on `z_shared` within donor *i*
-  when available) and decode. If `condition_key` not registered, raise an actionable
+- **Condition-shift protocol.** For donor *i* under condition X and target condition Y,
+  apply `delta = mean(z_shared | Y) - mean(z_shared | X)` within donor *i* when
+  available, then decode. If `condition_key` is not registered, raise an actionable
   error (no diagnostic-only fallback in MVP).
 
 **TDD plan.**
@@ -698,13 +819,18 @@ strong external yardstick for both disentanglement and counterfactual quality.
 
 **Scope.**
 
-- Add benchmark scripts and metric helpers (evaluation only, no model architecture changes):
-  - `scripts/benchmark_kang_celldisect_parity.py`
+- F10a internal metric harness (required first; no optional external deps):
   - `src/spVIPESmulti/metrics_celldisect.py`
-- Include at minimum these model anchors on identical splits:
+  - tests for Pearson/delta-Pearson, Wasserstein, CAG, MIG helper bounds
+  - artifact schema writer for split-level CSV/JSON summaries
+- F10b external benchmark runner (after F10a passes):
+  - `scripts/benchmark_kang_celldisect_parity.py`
+  - external `CellDISECT` adapter when installed/reproducible
+  - optional `biolord` and `scDisInFact` adapters only when reproducible in environment
+- Include at minimum these model rows in F10 artifacts:
   - `spVIPESmulti` current baseline
-  - external `CellDISECT`
-  - optional `biolord` and `scDisInFact` when reproducible in environment
+  - `CellDISECT` row as `status="skipped"` if external install/data is unavailable
+  - optional rows for `biolord` and `scDisInFact` with explicit `status`
 - Evaluate both split families:
   - leave-one-cell-type-out Kang splits
   - hard multi-cell-type held-out splits
@@ -723,8 +849,9 @@ strong external yardstick for both disentanglement and counterfactual quality.
    - Pearson/delta-Pearson implementations match NumPy/SciPy reference.
    - Top-DE selection and Wasserstein aggregation shape checks.
    - CAG and MIG helper outputs are bounded/finite.
-2. **Implement** metrics helpers and script CLI.
-3. **Validate** by running one small Kang split smoke and checking artifact schema.
+2. **Implement** F10a metric helpers and artifact schema.
+3. **Implement** F10b script CLI and external adapters after F10a is green.
+4. **Validate** by running one small Kang split smoke and checking artifact schema.
 
 **Quantitative go/no-go benchmark.**
 
@@ -742,6 +869,107 @@ Artifacts: `audits/F10/metrics.csv`, `audits/F10/summary.md`, `audits/F10/recomm
 
 ---
 
+### F11 — Nonlinear dependence diagnostics (HSIC / MI / partial correlation)
+
+**Background.** F1's correlation norm is fast and auditable but only captures linear
+dependence. HSIC, total-correlation proxies, and conditional/partial-correlation
+diagnostics can reveal nonlinear leakage missed by Pearson-style measures.
+
+**Scope.**
+
+- Add metric-only helpers first; no training loss in the initial slice.
+- Backends:
+  - `corr` (existing F1 reference)
+  - `hsic_rbf` with median-distance bandwidth heuristic
+  - optional MI proxy / total-correlation estimate when sample size is sufficient
+  - partial-correlation residualization against registered covariates
+- Emit metrics under explicit names such as `orthogonality_hsic_shared_private` and
+  `orthogonality_partial_corr`.
+- Do not promote HSIC/MI as a loss until the metric is stable across seeds and batch
+  sizes on Kang.
+
+**First actionable slice.** Implement `hsic_rbf(z_shared, z_private, bandwidth="median")`
+and `partial_corr_residualized(...)` as standalone metric helpers with synthetic tests;
+defer MI/total-correlation estimators until sample-size and dependency choices are
+explicitly benchmarked.
+
+**Benchmark gate.** F11 promotes only if metrics are finite, reproducible across 3
+seeds (CV <= 0.30), and explain failures not visible in F1 on at least one audit run.
+
+---
+
+### F12 — Conditional decoder / MMD alignment track
+
+**Background.** trVAE-style CVAE/MMD designs and MMD-VAEs provide a principled
+alternative to pure latent arithmetic: condition the decoder on target state and/or
+align latent distributions across conditions.
+
+**Scope.**
+
+- Prototype default-off MMD alignment on `z_shared` across condition/donor strata.
+- Evaluate a conditional-decoder branch only after F4 proves covariate registration and
+  probes are stable.
+- Keep the current encoder/PoE path intact; no default architecture rewrite.
+- Compare against safe F2 centroid shifts on held-out Kang and perturbation datasets.
+
+**First actionable slice.** Implement MMD metric/loss helper only, gated by
+`mmd_alignment_weight=0.0`; conditional decoder changes require a separate design doc
+because they alter decoder inputs and saved-model compatibility.
+
+**Benchmark gate.** Promote only if conditional/MMD variants improve counterfactual
+Pearson/delta-Pearson or DE recovery without degrading reconstruction, iLISI/kBET, or
+cell-type retention beyond the existing F2/F4 gates.
+
+---
+
+### F13 — Artifact/QC latent track
+
+**Background.** CRADLE-VAE-style artifact separation is useful for noisy perturbation
+screens, but it requires reliable QC/artifact labels. Without such labels, an artifact
+latent is likely to become an unidentifiable catch-all factor.
+
+**Scope.**
+
+- Activate only when datasets expose QC-passed/QC-failed labels, doublet/dead-cell
+  annotations, or comparable artifact strata.
+- Add an optional artifact latent block and artifact classifier/probe diagnostics.
+- Report QC realism metrics: predicted cells passing QC filters, artifact leakage into
+  `z_shared`, and perturbation DE recovery after artifact removal.
+
+**First actionable slice.** Add artifact/QC probe metrics and audit schema only. Do not
+add a new latent block until at least one benchmark dataset with explicit artifact labels
+is checked into the audit workflow.
+
+**Benchmark gate.** Promote only on perturbation datasets with known artifact labels
+and only if artifact removal improves QC realism without erasing perturbation signal.
+
+---
+
+### F14 — Causal / coupled-VAE research track
+
+**Background.** scCausalVI- and CoupledVAE-style models introduce explicit causal or
+dual-branch generative assumptions. These may improve individualized treatment-effect
+modeling but are high-risk relative to spVIPESmulti's current architecture.
+
+**Scope.**
+
+- Research-only until F2/F5/F10 establish reliable counterfactual benchmarks.
+- Candidate prototypes:
+  - coupled control/perturbed latent maps
+  - structural baseline/effect latent split
+  - local linear or OT treatment-effect maps
+- Every causal claim must state assumptions and be benchmarked on held-out
+  perturbation/interventional data.
+
+**First actionable slice.** Maintain this as a research note plus benchmark comparison
+target. No core API or architecture changes are allowed under F14 until a separate
+design document defines assumptions, data requirements, and failure modes.
+
+**Benchmark gate.** No promotion into core API without beating the safe F2/F5 baselines
+on counterfactual fidelity, OOD rejection, and biological DE/pathway recovery.
+
+---
+
 ## 3. Validation commands (canonical order)
 
 After each feature lands:
@@ -749,17 +977,21 @@ After each feature lands:
 ```bash
 # Targeted (per feature)
 pytest tests/test_disentangle_metrics.py -q                # F1
+pytest tests/test_covariate_heads.py tests/test_multimodal_disentangle.py \
+       tests/test_regression_fixes.py -q                   # F4
 pytest tests/test_counterfactual_basics.py tests/test_counterfactual_integration.py \
        tests/test_counterfactual_diagnostics.py -q         # F2
 pytest tests/test_orthogonality_loss.py -q                 # F3
-pytest tests/test_covariate_heads.py tests/test_multimodal_disentangle.py \
-       tests/test_regression_fixes.py -q                   # F4
 pytest tests/test_counterfactual_protocols.py -q           # F5
 pytest tests/test_graph_regularizer.py -q                  # F6
 pytest tests/test_perturbation_vectors.py -q               # F7
 pytest tests/test_vampprior_shared.py -q                   # F8
 pytest tests/test_latent_cycle_loss.py -q                  # F9
 pytest tests/test_celldisect_metric_parity.py -q           # F10
+pytest tests/test_nonlinear_dependence_metrics.py -q       # F11
+pytest tests/test_conditional_decoder_mmd.py -q            # F12
+pytest tests/test_artifact_latent.py -q                    # F13
+pytest tests/test_causal_counterfactual_research.py -q     # F14
 
 # Full suite (mandatory before promotion)
 pytest tests/ -q --ignore=tests/test_evaluate.py
@@ -771,7 +1003,7 @@ python scripts/smoke_vignettes.py --epochs 5 --cells_per_group 300
 Optional grep sanity after edits:
 
 ```bash
-rg "pcorr_weight|orthogonality_weight|disentangle_batch_shared_weight|disentangle_donor_shared_weight|disentangle_donor_private_weight|graph_regularizer_weight|counterfactual_consistency_weight|shared_prior|latent_cycle_weight" src tests
+rg "pcorr_weight|orthogonality_weight|disentangle_batch_shared_weight|disentangle_donor_shared_weight|disentangle_donor_private_weight|graph_regularizer_weight|counterfactual_consistency_weight|shared_prior|latent_cycle_weight|hsic|mmd|artifact_latent" src tests
 ```
 
 ---
@@ -805,26 +1037,34 @@ A feature is "done" only when **all** are true:
 | Counterfactuals "look plausible" but fail identity | Donor/condition classifier checks + cycle-consistency tests in F2/F5 benchmarks |
 | External benchmark mismatch vs CellDISECT protocol | lock split definitions + metric parity tests + artifact schema checks |
 | Benchmark instability across seeds | Reject-on-CV gate (CV > 0.20 / 0.30) in every benchmark table |
+| Nonlinear metrics overfit small batches | metric-only F11 first; require finite/reproducible values before loss use |
+| Conditional decoder erases group biology | keep F12 default-off; compare against F2/F4 baselines and cell-type retention gates |
+| Artifact latent becomes unidentifiable | activate F13 only with explicit QC/artifact labels and artifact-specific benchmarks |
+| Causal/coupled models overclaim causality | keep F14 research-only; require stated assumptions and interventional/held-out perturbation validation |
 
 ---
 
 ## 6. Immediate next coding step
 
-Land **F1** in a single change set:
+Close **F1** rather than reopening the implementation slice:
 
-1. Write failing tests in `tests/test_disentangle_metrics.py`.
-2. Add `_within_stratum_corr_norm` helper + wire into single-modal and multimodal
-   loss paths behind the three new kwargs (default-off).
-3. Run targeted suite, then full suite.
-4. Write `audits/F1/summary.md` with the overhead measurement on the smoke run.
+1. Run the Kang IFN overhead benchmark with megakaryocyte exclusion.
+2. Verify the F1 overhead gate (`<= +5%` wall time vs disabled).
+3. Write `audits/F1/metrics.csv`, `audits/F1/summary.md`, and
+   `audits/F1/recommendation.json`.
+4. Append the F1 closeout entry to `PROGRESS.md`.
 
-Once F1 is green and the overhead gate passes, start F2 (counterfactual MVP) in
-parallel with the F3+F4 design slice; F2 ships independently of F3/F4 because it
-does not change training.
+Once F1's gate passes, start **F4-lite** before F2: register `condition_key`/`donor_key`,
+add default-off covariate heads, scheduled GRL scaling, and external probe diagnostics.
 
-After F2 baseline APIs are in place, activate F10 (CellDISECT-aligned Kang audit
-harness) and use `audits/kang_ifnb/` as the primary benchmark lane, with optional
-F10 parity mirrors under `audits/F10/`.
+F2 starts after F4-lite has a passing probe/audit baseline and must ship as a **safe**
+counterfactual API: centroid shifts first, OOD/realism filtering on by default, arbitrary
+latent replacement treated as a diagnostic helper only.
+
+F10a remains an early audit harness and should be hardened alongside F4/F2 so Kang
+counterfactual and disentanglement metrics are available before promotion decisions.
+F10b external CellDISECT execution starts only after F10a metric helpers and artifact
+schemas are green.
 
 ---
 

@@ -9,6 +9,64 @@ How to use:
 
 ---
 
+## 2026-05-10 (roadmap scientific-readiness reorder + architecture tracks)
+
+### Roadmap updated from external scientific/architecture audit
+Status: completed (planning artifact update)
+
+What changed:
+- Reordered the feature roadmap by scientific readiness rather than only architectural
+  risk: F1 closeout -> F4-lite covariate disentanglement -> F2 safe counterfactual API
+  -> F3 orthogonality penalty -> F5-F7 advanced counterfactual/regularization tracks.
+- Updated F2 to prioritize constrained, auditable counterfactuals: centroid shifts first,
+  OOD/realism filtering on by default, explicit cell/library handling, and arbitrary
+  latent replacement treated as a diagnostic helper rather than a biological claim.
+- Expanded F4 with scheduled GRL scaling, optional stronger covariate-head architecture,
+  and external probe diagnostics for donor/batch/condition/cell-type information in
+  `z_shared` and `z_private`.
+- Added non-blocking architecture extension tracks:
+  - F11 nonlinear dependence diagnostics (HSIC / MI / partial correlation)
+  - F12 conditional decoder / MMD alignment
+  - F13 artifact/QC latent
+  - F14 causal / coupled-VAE research track
+- Added posterior-collapse, OOD, DE/pathway, and biological-fidelity metrics to the
+  shared evaluation language.
+
+Files:
+- `FEATURE_ROADMAP.md`
+- `PLAN.md`
+- `PROGRESS.md`
+
+---
+
+## 2026-05-10 (roadmap second-pass audit hardening)
+
+### Planning docs made implementation-safe
+Status: completed (planning artifact update)
+
+What changed:
+- Corrected metric-direction language for `cLISI`; benchmark tables must report metric
+  direction explicitly.
+- Replaced the blanket external-anchor requirement with per-feature benchmark-anchor
+  rules and explicit skip-row behavior for unavailable external baselines.
+- Defined the F4-lite release contract and clarified covariate semantics for
+  `label_key`, `condition_key`, `donor_key`, `batch_key`, and `sample_key`.
+- Standardized condition-shift direction as `mean(to) - mean(from)`.
+- Made F2 OOD/realism behavior actionable via `CounterfactualResult.info` flags,
+  masks, and data-derived thresholds.
+- Split F10 into F10a internal metric harness and F10b external benchmark runner.
+- Marked F11-F14 as concept/research tracks with first actionable slices and explicit
+  restrictions on architecture changes.
+- Added an explicit blocker in `PLAN.md` for confirming the Kang IFN technical-batch
+  column before F4 benchmarking.
+
+Files:
+- `FEATURE_ROADMAP.md`
+- `PLAN.md`
+- `PROGRESS.md`
+
+---
+
 ## 2026-05-10 (tensor dimension mismatch fix: shape[-1] + mask reshape)
 
 ### RuntimeError fix for label-based PoE tensor concatenation
@@ -56,6 +114,8 @@ What changed:
   propagate them into `orthogonality_excluded_strata`.
 - Updated roadmap and plan sequencing per decision to keep F2 first and delay
   F10 activation until after F2 baseline APIs are in place.
+  Superseded by the later scientific-readiness reorder, which moves F4-lite before F2
+  and hardens F10 as an early metric harness.
 - Clarified `audits/kang_ifnb/` as the general benchmark lane, with optional
   F10-specific parity mirrors under `audits/F10/`.
 - Strengthened `tests/test_disentangle_metrics.py` to assert canonical
