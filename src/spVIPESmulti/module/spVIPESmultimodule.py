@@ -62,6 +62,17 @@ class spVIPESmultimodule(BaseModuleClass):
         Level at which to model the dispersion parameter in the negative binomial distribution.
     encoder_activation : {"silu", "relu", "leakyrelu"}, default="silu"
         Activation function used in all encoder hidden layers.
+    use_low_rank_mixer : bool, default=False
+        If ``True``, use a lightweight rank-``low_rank_mixer_rank`` bottleneck
+        in the decoder mixer instead of the full FCLayers chain.
+    low_rank_mixer_rank : int, default=4
+        Bottleneck rank when ``use_low_rank_mixer=True``.
+    label_class_weights : torch.Tensor, optional
+        1-D tensor of length ``n_labels`` with per-class weights for the
+        label cross-entropy losses (Components 2 and 4). Passed directly to
+        ``F.cross_entropy(weight=...)``. If ``None`` (default), uniform
+        weights are used. Typically set to inverse class frequencies so
+        minority cell types receive proportionally larger gradient signals.
 
     Notes
     -----
@@ -116,6 +127,9 @@ class spVIPESmultimodule(BaseModuleClass):
         strict_likelihood_support: bool = False,
         validate_observations: bool = False,
         encoder_activation: str = "silu",
+        use_low_rank_mixer: bool = False,
+        low_rank_mixer_rank: int = 4,
+        label_class_weights: Optional[torch.Tensor] = None,
     ):
         """
         Initialize the spVIPESmulti variational autoencoder module.
@@ -155,6 +169,9 @@ class spVIPESmultimodule(BaseModuleClass):
         self.strict_likelihood_support = strict_likelihood_support
         self.validate_observations = validate_observations
         self.encoder_activation = encoder_activation
+        self.use_low_rank_mixer = use_low_rank_mixer
+        self.low_rank_mixer_rank = low_rank_mixer_rank
+        self.register_buffer("label_class_weights", label_class_weights)
 
         # Multimodal configuration
         self.is_multimodal = groups_modality_lengths is not None
@@ -206,6 +223,8 @@ class spVIPESmultimodule(BaseModuleClass):
                         n_dimensions_private, n_dimensions_shared, n_features,
                         n_cat_list=cat_list, use_batch_norm=True,
                         use_layer_norm=False, bias=False,
+                        use_low_rank_mixer=use_low_rank_mixer,
+                        low_rank_mixer_rank=low_rank_mixer_rank,
                     )
 
             # Register sub-modules
@@ -241,6 +260,8 @@ class spVIPESmultimodule(BaseModuleClass):
                     n_dimensions_private, n_dimensions_shared, x_dim,
                     n_cat_list=cat_list, use_batch_norm=True,
                     use_layer_norm=False, bias=False,
+                    use_low_rank_mixer=use_low_rank_mixer,
+                    low_rank_mixer_rank=low_rank_mixer_rank,
                 )
                 for groups, x_dim in self.input_dims.items()
             }
@@ -1085,6 +1106,7 @@ class spVIPESmultimodule(BaseModuleClass):
                 F.cross_entropy(
                     self.q_label_shared(inference_outputs["poe_stats"][g]["logtheta_log_z"]),
                     labels_by_group[g].long(),
+                    weight=self.label_class_weights,
                 )
                 for g in range(n_groups)
             )
@@ -1133,6 +1155,7 @@ class spVIPESmultimodule(BaseModuleClass):
                 F.cross_entropy(
                     self.q_label_private(gradient_reversal(z)),
                     labels_by_group[g].long(),
+                    weight=self.label_class_weights,
                 )
                 for g in range(n_groups)
                 for z in _private_zs(g)

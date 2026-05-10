@@ -189,6 +189,21 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         use_labels = "labels" in self.adata_manager.data_registry
         n_labels = self.summary_stats.n_labels if use_labels else None
 
+        # Per-class inverse-frequency weights for label-CE components (N5-E).
+        # Computed once at init from the full dataset label distribution so that
+        # minority cell types (e.g. Activated MZ n≈200 vs Atypical n≈3155)
+        # receive proportionally larger gradient signals.
+        label_class_weights: Optional[torch.Tensor] = None
+        if use_labels and n_labels is not None:
+            label_codes = self.adata_manager.get_from_registry("labels")
+            codes_arr = np.asarray(label_codes).astype(int).ravel()
+            counts = np.bincount(codes_arr, minlength=n_labels).astype(float)
+            inv_freq = 1.0 / np.maximum(counts, 1.0)
+            # Normalize so weights sum to n_labels (keeps loss scale stable)
+            label_class_weights = torch.tensor(
+                inv_freq / inv_freq.sum() * n_labels, dtype=torch.float32
+            )
+
         # Multimodal parameters (if available)
         groups_modality_lengths = adata.uns.get("groups_modality_lengths")
         groups_modality_var_indices = adata.uns.get("groups_modality_var_indices")
@@ -233,6 +248,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             n_dimensions_shared=n_dimensions_shared,
             n_dimensions_private=n_dimensions_private,
             dropout_rate=dropout_rate,
+            label_class_weights=label_class_weights,
             groups_modality_lengths=groups_modality_lengths,
             groups_modality_var_indices=groups_modality_var_indices,
             modality_likelihoods=modality_likelihoods,
