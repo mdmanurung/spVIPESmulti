@@ -145,8 +145,11 @@ def prepare_adatas(
     multigroups_adata.uns["groups_var_indices"] = [
         np.where(multigroups_adata.var_names.str.startswith(f"{k}_"))[0] for k in adatas.keys()
     ]
+    # W-056: use flatnonzero + to_numpy() for stable, well-ordered index assembly.
+    # Ordering invariant: obs_indices[i] are sorted ascending (they come from
+    # ad.concat with label= which preserves per-adata row order).
     multigroups_adata.uns["groups_obs_indices"] = [
-        np.where(multigroups_adata.obs["groups"].values == k)[0] for k in adatas.keys()
+        np.flatnonzero(multigroups_adata.obs["groups"].to_numpy() == k) for k in adatas.keys()
     ]
     multigroups_adata.uns["groups_obs_names"] = groups_obs_names
     multigroups_adata.uns["groups_obs"] = groups_obs
