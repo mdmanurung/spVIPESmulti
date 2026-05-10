@@ -111,16 +111,19 @@ def traverse_latent(
     rng = np.random.default_rng(seed)
     n_cells = z_shared_all.shape[0]
     pick = rng.choice(n_cells, size=min(n_samples, n_cells), replace=False)
-    z_shared_sample = torch.tensor(z_shared_all[pick], dtype=torch.float32)  # (n_samples, n_dims_shared)
+    device = next(module.parameters()).device
+    z_shared_sample = torch.tensor(z_shared_all[pick], dtype=torch.float32, device=device)  # (n_samples, n_dims_shared)
 
     # Dim-wise empirical statistics (population-level, from all group cells)
-    dim_mean = torch.tensor(z_shared_all.mean(axis=0), dtype=torch.float32)
-    dim_std = torch.tensor(z_shared_all.std(axis=0) + 1e-6, dtype=torch.float32)
+    dim_mean = torch.tensor(z_shared_all.mean(axis=0), dtype=torch.float32, device=device)
+    dim_std = torch.tensor(z_shared_all.std(axis=0) + 1e-6, dtype=torch.float32, device=device)
 
     # Fixed inputs: z_private = 0 (prior mean), library = log(1e4)
-    z_private_zero = torch.zeros(z_shared_sample.shape[0], n_dims_private)
-    library_fixed = torch.full((z_shared_sample.shape[0], 1), float(np.log(1e4)))
-    cat_args = (0,) if n_batch > 1 else ()
+    z_private_zero = torch.zeros(z_shared_sample.shape[0], n_dims_private, device=device)
+    library_fixed = torch.full((z_shared_sample.shape[0], 1), float(np.log(1e4)), device=device)
+    cat_args = (
+        (torch.zeros(z_shared_sample.shape[0], 1, dtype=torch.long, device=device),) if n_batch > 1 else ()
+    )
 
     was_training = module.training
     module.eval()
