@@ -1,0 +1,63 @@
+warning: The top-level linter settings are deprecated in favour of their counterparts in the `lint` section. Please update the following options in `pyproject.toml`:
+  - 'ignore' -> 'lint.ignore'
+  - 'select' -> 'lint.select'
+  - 'pydocstyle' -> 'lint.pydocstyle'
+  - 'per-file-ignores' -> 'lint.per-file-ignores'
+
+ERROR conda.cli.main_run:execute(47): `conda run env PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 ruff format --check .` failed. (See above for error)
+Would reformat: audits/F4/notebooks/kang_ifn_commit_old_f4_probe_test.ipynb
+Would reformat: audits/F4/notebooks/malaria_bcells_recommended_time_f4_probe_test.ipynb
+Would reformat: audits/F4/notebooks/pbmc_citeseq_f4_probe_test.ipynb
+Would reformat: docs/extensions/typed_returns.py
+Would reformat: docs/notebooks/Tutorial.ipynb
+Would reformat: docs/notebooks/biolord_comparison_plasmodium_tutorial.ipynb
+Would reformat: docs/notebooks/cinemaot_nf_vignette.ipynb
+Would reformat: docs/notebooks/disentangle_ablation.ipynb
+Would reformat: docs/notebooks/kang_ifn_cd14_gene_programs.ipynb
+Would reformat: docs/notebooks/kang_ifn_cd14_response_probe.ipynb
+Would reformat: docs/notebooks/kang_ifn_commit_old.ipynb
+Would reformat: docs/notebooks/malaria_bcells_hparam_explore.ipynb
+Would reformat: docs/notebooks/malaria_bcells_nodisentangle.ipynb
+Would reformat: docs/notebooks/malaria_bcells_recommended.ipynb
+Would reformat: docs/notebooks/malaria_bcells_recommended_time.ipynb
+Would reformat: docs/notebooks/multimodal_nf_tutorial.ipynb
+Would reformat: docs/notebooks/pbmc_citeseq_tutorial.ipynb
+Would reformat: scripts/benchmark_f11_nonlinear_diagnostics.py
+Would reformat: scripts/benchmark_f3_orthogonality.py
+Would reformat: scripts/benchmark_f4_covariate_probes.py
+Would reformat: scripts/benchmark_kang_celldisect_parity.py
+Would reformat: scripts/benchmark_kang_ifnb.py
+Would reformat: scripts/build_iri_days_vignette.py
+Would reformat: scripts/build_notebook.py
+Would reformat: scripts/pilot_celltype_separation.py
+Would reformat: scripts/smoke_test.py
+Would reformat: scripts/smoke_vignettes.py
+Would reformat: scripts/validate_disentanglement.py
+Would reformat: scripts/validate_disentanglement_multimodal.py
+Would reformat: src/spVIPESmulti/data/_utils.py
+Would reformat: src/spVIPESmulti/data/prepare_adatas.py
+Would reformat: src/spVIPESmulti/dataloaders/_concat_dataloader.py
+Would reformat: src/spVIPESmulti/interventions/utils.py
+Would reformat: src/spVIPESmulti/metrics.py
+Would reformat: src/spVIPESmulti/model/_disentangle_presets.py
+Would reformat: src/spVIPESmulti/model/base/training_mixin.py
+Would reformat: src/spVIPESmulti/model/spvipesmulti.py
+Would reformat: src/spVIPESmulti/module/spVIPESmultimodule.py
+Would reformat: src/spVIPESmulti/module/utils.py
+Would reformat: src/spVIPESmulti/nn/networks.py
+Would reformat: src/spVIPESmulti/pl.py
+Would reformat: src/spVIPESmulti/traversal.py
+Would reformat: src/spVIPESmulti/utils.py
+Would reformat: tests/test_counterfactual_diagnostics.py
+Would reformat: tests/test_differential_abundance.py
+Would reformat: tests/test_disentangle_metrics.py
+Would reformat: tests/test_evaluate.py
+Would reformat: tests/test_lightning_trainer_compat.py
+Would reformat: tests/test_multigroup_multimodal.py
+Would reformat: tests/test_multimodal_disentangle.py
+Would reformat: tests/test_nf_prior.py
+Would reformat: tests/test_regression_fixes.py
+Would reformat: tests/test_scvi1x_compat.py
+Would reformat: tests/test_utils.py
+54 files would be reformatted, 41 files already formatted
+

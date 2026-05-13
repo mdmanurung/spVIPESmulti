@@ -1,0 +1,7 @@
+<string>:1: UserWarning: The value argument must be within the support of the distribution
+
+count_target [[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]]
+log1p_target [[0.0, 0.6931471824645996, 1.0986123085021973], [1.3862943649291992, 1.6094379425048828, 1.7917594909667969]]
+count_log_prob_sum [-5.599517822265625, -6.750980854034424]
+log1p_log_prob_sum [-5.562885284423828, -5.36795711517334]
+

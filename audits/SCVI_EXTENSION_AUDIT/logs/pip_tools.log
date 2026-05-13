@@ -1,0 +1,76 @@
+ERROR: Could not find a version that satisfies the requirement markdownlint-cli (from versions: none)
+ERROR: No matching distribution found for markdownlint-cli
+
+ERROR conda.cli.main_run:execute(47): `conda run env PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 python -m pip install ruff mypy build mdformat markdownlint-cli` failed. (See above for error)
+Collecting ruff
+  Downloading ruff-0.15.12-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (26 kB)
+Collecting mypy
+  Downloading mypy-2.1.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.3 kB)
+Collecting build
+  Downloading build-1.5.0-py3-none-any.whl.metadata (5.7 kB)
+Collecting mdformat
+  Downloading mdformat-1.0.0-py3-none-any.whl.metadata (9.6 kB)
+
+Collecting ruff
+  Using cached ruff-0.15.12-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (26 kB)
+Collecting mypy
+  Using cached mypy-2.1.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.3 kB)
+Collecting build
+  Using cached build-1.5.0-py3-none-any.whl.metadata (5.7 kB)
+Collecting mdformat
+  Using cached mdformat-1.0.0-py3-none-any.whl.metadata (9.6 kB)
+Requirement already satisfied: typing_extensions>=4.6.0 in /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages (from mypy) (4.15.0)
+Collecting mypy_extensions>=1.0.0 (from mypy)
+  Downloading mypy_extensions-1.1.0-py3-none-any.whl.metadata (1.1 kB)
+Collecting pathspec>=1.0.0 (from mypy)
+  Using cached pathspec-1.1.1-py3-none-any.whl.metadata (14 kB)
+Collecting librt>=0.11.0 (from mypy)
+  Downloading librt-0.11.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (1.3 kB)
+Collecting ast-serialize<1.0.0,>=0.3.0 (from mypy)
+  Downloading ast_serialize-0.3.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (1.3 kB)
+Requirement already satisfied: packaging>=24.0 in /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages (from build) (26.2)
+Collecting pyproject_hooks (from build)
+  Downloading pyproject_hooks-1.2.0-py3-none-any.whl.metadata (1.3 kB)
+Requirement already satisfied: markdown-it-py<5,>=1 in /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages (from mdformat) (4.2.0)
+Requirement already satisfied: mdurl~=0.1 in /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages (from markdown-it-py<5,>=1->mdformat) (0.1.2)
+Downloading ruff-0.15.12-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (11.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 11.3/11.3 MB 69.6 MB/s  0:00:00
+Downloading mypy-2.1.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (14.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 14.9/14.9 MB 63.5 MB/s  0:00:00
+Downloading ast_serialize-0.3.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (1.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 21.4 MB/s  0:00:00
+Downloading build-1.5.0-py3-none-any.whl (26 kB)
+Downloading mdformat-1.0.0-py3-none-any.whl (53 kB)
+Downloading librt-0.11.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (497 kB)
+Downloading mypy_extensions-1.1.0-py3-none-any.whl (5.0 kB)
+Using cached pathspec-1.1.1-py3-none-any.whl (57 kB)
+Downloading pyproject_hooks-1.2.0-py3-none-any.whl (10 kB)
+Installing collected packages: ruff, pyproject_hooks, pathspec, mypy_extensions, librt, ast-serialize, mypy, mdformat, build
+
+Successfully installed ast-serialize-0.3.0 build-1.5.0 librt-0.11.0 mdformat-1.0.0 mypy-2.1.0 mypy_extensions-1.1.0 pathspec-1.1.1 pyproject_hooks-1.2.0 ruff-0.15.12
+
+Collecting pytest-benchmark
+  Downloading pytest_benchmark-5.2.3-py3-none-any.whl.metadata (29 kB)
+Collecting hypothesis
+  Downloading hypothesis-6.152.7-py3-none-any.whl.metadata (5.6 kB)
+Collecting syrupy
+  Downloading syrupy-5.1.0-py3-none-any.whl.metadata (41 kB)
+Requirement already satisfied: pytest>=8.1 in /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages (from pytest-benchmark) (9.0.3)
+Collecting py-cpuinfo (from pytest-benchmark)
+  Downloading py_cpuinfo-9.0.0-py3-none-any.whl.metadata (794 bytes)
+Collecting sortedcontainers<3.0.0,>=2.1.0 (from hypothesis)
+  Downloading sortedcontainers-2.4.0-py2.py3-none-any.whl.metadata (10 kB)
+Requirement already satisfied: iniconfig>=1.0.1 in /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages (from pytest>=8.1->pytest-benchmark) (2.3.0)
+Requirement already satisfied: packaging>=22 in /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages (from pytest>=8.1->pytest-benchmark) (26.2)
+Requirement already satisfied: pluggy<2,>=1.5 in /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages (from pytest>=8.1->pytest-benchmark) (1.6.0)
+Requirement already satisfied: pygments>=2.7.2 in /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages (from pytest>=8.1->pytest-benchmark) (2.20.0)
+Downloading pytest_benchmark-5.2.3-py3-none-any.whl (45 kB)
+Downloading hypothesis-6.152.7-py3-none-any.whl (533 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 533.8/533.8 kB 5.7 MB/s  0:00:00
+Downloading sortedcontainers-2.4.0-py2.py3-none-any.whl (29 kB)
+Downloading syrupy-5.1.0-py3-none-any.whl (51 kB)
+Downloading py_cpuinfo-9.0.0-py3-none-any.whl (22 kB)
+Installing collected packages: sortedcontainers, py-cpuinfo, hypothesis, syrupy, pytest-benchmark
+
+Successfully installed hypothesis-6.152.7 py-cpuinfo-9.0.0 pytest-benchmark-5.2.3 sortedcontainers-2.4.0 syrupy-5.1.0
+

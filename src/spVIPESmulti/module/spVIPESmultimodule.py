@@ -111,7 +111,7 @@ def _orthogonality_corr_loss(
     z_private: torch.Tensor | np.ndarray,
     strata_ids: torch.Tensor | np.ndarray,
     min_cells: int = 16,
-    eps: float = 1e-8,
+    eps: float = 1e-4,
 ) -> torch.Tensor:
     """Differentiable F3 shared-private correlation penalty within strata.
 
@@ -142,9 +142,10 @@ def _orthogonality_corr_loss(
         zs_centered = (zs - zs_mean) * mask_f
         zp_centered = (zp - zp_mean) * mask_f
 
-        zs_scale = torch.sqrt(zs_centered.pow(2).sum(dim=0, keepdim=True) / n).clamp_min(eps)
-        zp_scale = torch.sqrt(zp_centered.pow(2).sum(dim=0, keepdim=True) / n).clamp_min(eps)
+        zs_scale = torch.sqrt(zs_centered.pow(2).sum(dim=0, keepdim=True) / n + eps)
+        zp_scale = torch.sqrt(zp_centered.pow(2).sum(dim=0, keepdim=True) / n + eps)
         corr = ((zs_centered / zs_scale) * (zp_centered / zp_scale)).sum(dim=0) / n
+        corr = corr.clamp(min=-1.0, max=1.0)
         scores.append(corr.pow(2).mean())
         valid.append((mask_f.sum() >= min_cells).to(dtype=zs.dtype))
 
@@ -1540,7 +1541,9 @@ class spVIPESmultimodule(BaseModuleClass):
         if self.orthogonality_weight > 0:
             ortho_group_losses: list[torch.Tensor] = []
             for g in range(n_groups):
-                z_shared = inference_outputs["poe_stats"][g]["logtheta_log_z"]
+                # Use posterior means for the F3 training penalty. Penalizing
+                # sampled latents made the audit unstable for positive weights.
+                z_shared = inference_outputs["poe_stats"][g]["logtheta_loc"]
                 strata_ids = _orthogonality_strata_ids(
                     tensors_by_group[g],
                     self.orthogonality_groupby_keys,
@@ -1553,7 +1556,7 @@ class spVIPESmultimodule(BaseModuleClass):
 
                 if self.is_multimodal and "per_modality_private" in inference_outputs:
                     z_private_by_modality = {
-                        mod: inference_outputs["per_modality_private"][(g, mod)]["log_z"]
+                        mod: inference_outputs["per_modality_private"][(g, mod)]["logtheta_loc"]
                         for mod in self.group_modalities[g]
                         if (g, mod) in inference_outputs["per_modality_private"]
                     }
@@ -1564,7 +1567,7 @@ class spVIPESmultimodule(BaseModuleClass):
                         min_cells=self.orthogonality_min_cells_per_stratum,
                     )
                 else:
-                    z_private = inference_outputs["private_stats"][g]["log_z"]
+                    z_private = inference_outputs["private_stats"][g]["logtheta_loc"]
                     group_loss = _orthogonality_corr_loss(
                         z_shared,
                         z_private,

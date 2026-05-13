@@ -1,0 +1,6 @@
+[warn] .github/workflows/python-package.yml
+[warn] Code style issues found in the above file. Run Prettier with --write to fix.
+
+ERROR conda.cli.main_run:execute(47): `conda run env PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 prettier --check **/*.yml **/*.yaml` failed. (See above for error)
+Checking formatting...
+

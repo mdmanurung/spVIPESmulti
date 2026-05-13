@@ -1,0 +1,40 @@
+
+
+Versions
+========
+
+* Platform:         linux; (Linux-4.18.0-553.89.1.el8_10.x86_64-x86_64-with-glibc2.28)
+* Python version:   3.11.15 (CPython)
+* Sphinx version:   9.0.4
+* Docutils version: 0.22.4
+* Jinja2 version:   3.1.6
+* Pygments version: 2.20.0
+
+Last Messages
+=============
+
+None.
+
+Loaded Extensions
+=================
+
+None.
+
+Traceback
+=========
+
+      File "/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/zmq/backend/cython/__init__.py", line 6, in <module>
+        from . import _zmq
+    ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.29' not found (required by /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/zmq/backend/cython/../../../../../libzmq.so.5)
+
+
+The full traceback has been saved in:
+/tmp/sphinx-err-iei4g0yk.log
+
+To report this error to the developers, please open an issue at <https://github.com/sphinx-doc/sphinx/issues/>. Thanks!
+Please also report this if it was a user error, so that a better error message can be provided next time.
+
+ERROR conda.cli.main_run:execute(47): `conda run env PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 python -m sphinx -W -b html docs audits/SCVI_EXTENSION_AUDIT/docs_build_html` failed. (See above for error)
+Running Sphinx v9.0.4
+loading translations [en]... done
+

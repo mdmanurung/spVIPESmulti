@@ -1,0 +1,33 @@
+/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/anndata/experimental/__init__.py:48: FutureWarning: Importing read_elem from `anndata.experimental` is deprecated. Import anndata.io.read_elem instead.
+  return module_get_attr_redirect(
+
+         1021966 function calls (1004804 primitive calls) in 0.970 seconds
+
+   Ordered by: cumulative time
+   List reduced from 801 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.001    0.001    0.970    0.970 /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/src/spVIPESmulti/metrics.py:414(integration_report)
+        1    0.016    0.016    0.780    0.780 /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/src/spVIPESmulti/metrics.py:251(kbet)
+      801    0.002    0.000    0.397    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/base.py:927(value_counts)
+      801    0.013    0.000    0.395    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/algorithms.py:862(value_counts_internal)
+      801    0.002    0.000    0.264    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/series.py:5155(reindex)
+      801    0.006    0.000    0.262    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/generic.py:5365(reindex)
+      801    0.004    0.000    0.246    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/generic.py:5636(_reindex_axes)
+     3050    0.033    0.000    0.237    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/series.py:392(__init__)
+      801    0.004    0.000    0.183    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/indexes/base.py:4330(reindex)
+        2    0.007    0.004    0.138    0.069 /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/src/spVIPESmulti/metrics.py:192(ilisi)
+      801    0.010    0.000    0.116    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/series.py:3706(sort_values)
+      801    0.001    0.000    0.110    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/ops/common.py:62(new_method)
+     1603    0.017    0.000    0.109    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/indexes/base.py:475(__new__)
+        4    0.000    0.000    0.109    0.027 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/sklearn/neighbors/_base.py:756(kneighbors)
+     4660    0.030    0.000    0.108    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/construction.py:517(sanitize_array)
+      801    0.001    0.000    0.108    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/arraylike.py:208(__truediv__)
+        4    0.044    0.011    0.108    0.027 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/sklearn/metrics/_pairwise_distances_reduction/_dispatcher.py:184(compute)
+      801    0.001    0.000    0.107    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/series.py:6152(_arith_method)
+      801    0.007    0.000    0.105    0.000 /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/pandas/core/base.py:1380(_arith_method)
+219518/218717    0.048    0.000    0.088    0.000 {built-in method builtins.isinstance}
+
+
+
+

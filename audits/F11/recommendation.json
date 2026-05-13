@@ -1,0 +1,44 @@
+{
+  "feature_id": "F11",
+  "verdict": "iterate",
+  "reason": "hsic_rbf CV >0.30 or missing",
+  "hidden_nonlinear_signal": true,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "cross_seed_cv": {
+    "hsic_rbf": 0.31162060823563753,
+    "partial_corr_mean_abs": 0.2429299330814246,
+    "partial_corr_adjusted_mean_abs": 0.2419203643883585
+  },
+  "means": {
+    "hsic_rbf": 0.006043283712981735,
+    "hsic_null_p95": 0.00018395639512197638,
+    "partial_corr_mean_abs": 0.15398895551460592,
+    "partial_corr_adjusted_mean_abs": 0.15413145879194656,
+    "orthogonality_within_stratum": 0.07397293361524741
+  },
+  "config": {
+    "run_id": "f11_nonlinear_20260513T125425Z",
+    "kang_h5ad_path": "docs/notebooks/data/kang_2018.h5ad",
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "max_epochs": 20,
+    "batch_size": 128,
+    "max_cells_per_condition": 600,
+    "n_top_genes": 1000,
+    "n_shared": 16,
+    "n_private": 16,
+    "n_hidden": 64,
+    "min_cells_per_stratum": 16,
+    "hsic_max_samples": 2000,
+    "hsic_permutations": 20,
+    "linear_hidden_threshold": 0.1,
+    "output_dir": "audits/F11"
+  }
+}

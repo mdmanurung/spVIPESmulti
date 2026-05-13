@@ -1,0 +1,9 @@
+xxxxxss                                                                  [100%]
+=============================== warnings summary ===============================
+../../../archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/anndata/experimental/__init__.py:48
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/anndata/experimental/__init__.py:48: FutureWarning: Importing read_elem from `anndata.experimental` is deprecated. Import anndata.io.read_elem instead.
+    return module_get_attr_redirect(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2 skipped, 5 xfailed, 1 warning in 28.34s
+

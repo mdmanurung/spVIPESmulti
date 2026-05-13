@@ -1,0 +1,201 @@
+{
+  "feature_id": "F3",
+  "verdict": "reject",
+  "recommended_weight": null,
+  "reason": "no tested F3 weight passed all gates",
+  "baseline": {
+    "orthogonality_within_stratum": 0.09213672516246636,
+    "reconstruction_loss_per_cell": 6.384576797485352,
+    "iLISI": 1.9190069642029934,
+    "kBET": 0.9691666666666667,
+    "cLISI": 1.8642131925187042,
+    "knn_purity": 0.64575,
+    "leiden_ari": null,
+    "active_dims_shared": 16.0,
+    "train_wall_time_sec": 4.733066666666667
+  },
+  "candidates": [
+    {
+      "weight": 0.01,
+      "passes": false,
+      "orthogonality_reduction": 0.14970119628697914,
+      "reconstruction_worse": 0.0,
+      "integration_worse": {
+        "iLISI": 7.183520946746955e-05,
+        "kBET": 0.004872456291201106,
+        "cLISI": 0.0,
+        "knn_purity": 0.0
+      },
+      "cross_seed_cv": {
+        "orthogonality_within_stratum": 0.37602782845402993,
+        "reconstruction_loss_per_cell": 0.008112199085061424,
+        "iLISI": 0.0047996765663480545,
+        "kBET": 0.01773594967550766,
+        "cLISI": 0.10709349283433679,
+        "knn_purity": 0.04098416563268936
+      },
+      "incomplete": [],
+      "failures": [
+        "orthogonality reduction <20%",
+        "orthogonality_within_stratum cross-seed CV >0.20 or missing"
+      ],
+      "diagnostics": {
+        "active_dims_ok": true,
+        "wall_overhead": 0.06598259056848264
+      },
+      "means": {
+        "orthogonality_within_stratum": 0.07834374718368053,
+        "reconstruction_loss_per_cell": 6.374020576477051,
+        "iLISI": 1.9188691119357504,
+        "kBET": 0.9644444444444443,
+        "cLISI": 1.8361304875248559,
+        "knn_purity": 0.6596666666666667,
+        "leiden_ari": null,
+        "active_dims_shared": 16.0,
+        "train_wall_time_sec": 5.045366666666666
+      }
+    },
+    {
+      "weight": 0.05,
+      "passes": false,
+      "orthogonality_reduction": 0.1878622973414421,
+      "reconstruction_worse": 0.002935798800864835,
+      "integration_worse": {
+        "iLISI": 0.0,
+        "kBET": 0.004872456291200877,
+        "cLISI": 0.0,
+        "knn_purity": 0.0
+      },
+      "cross_seed_cv": {
+        "orthogonality_within_stratum": 0.19438512666399121,
+        "reconstruction_loss_per_cell": 0.008574484535903239,
+        "iLISI": 0.003874640589439127,
+        "kBET": 0.011920623321759758,
+        "cLISI": 0.060786584737923366,
+        "knn_purity": 0.032783620195236736
+      },
+      "incomplete": [],
+      "failures": [
+        "orthogonality reduction <20%"
+      ],
+      "diagnostics": {
+        "active_dims_ok": true,
+        "wall_overhead": 0.05329173474561937
+      },
+      "means": {
+        "orthogonality_within_stratum": 0.07482770830392838,
+        "reconstruction_loss_per_cell": 6.4033206303914385,
+        "iLISI": 1.920471081132843,
+        "kBET": 0.9644444444444445,
+        "cLISI": 1.8213441020646375,
+        "knn_purity": 0.6569305555555555,
+        "leiden_ari": null,
+        "active_dims_shared": 16.0,
+        "train_wall_time_sec": 4.9853
+      }
+    },
+    {
+      "weight": 0.1,
+      "passes": false,
+      "orthogonality_reduction": 0.41993404255137057,
+      "reconstruction_worse": 0.0,
+      "integration_worse": {
+        "iLISI": 0.0,
+        "kBET": 0.0,
+        "cLISI": 0.03213489358997015,
+        "knn_purity": 0.024992472146943747
+      },
+      "cross_seed_cv": {
+        "orthogonality_within_stratum": 0.4762521257473602,
+        "reconstruction_loss_per_cell": 0.006834508278650692,
+        "iLISI": 0.003027195170477008,
+        "kBET": 0.011364911130002495,
+        "cLISI": 0.11668672475572495,
+        "knn_purity": 0.07608452717760046
+      },
+      "incomplete": [],
+      "failures": [
+        "orthogonality_within_stratum cross-seed CV >0.20 or missing"
+      ],
+      "diagnostics": {
+        "active_dims_ok": true,
+        "wall_overhead": 0.0
+      },
+      "means": {
+        "orthogonality_within_stratum": 0.05344537769754728,
+        "reconstruction_loss_per_cell": 6.3699116706848145,
+        "iLISI": 1.9201528196515654,
+        "kBET": 0.9700000000000001,
+        "cLISI": 1.9241194850893113,
+        "knn_purity": 0.6296111111111111,
+        "leiden_ari": null,
+        "active_dims_shared": 16.0,
+        "train_wall_time_sec": 4.673866666666666
+      }
+    },
+    {
+      "weight": 0.2,
+      "passes": false,
+      "orthogonality_reduction": -0.04290159430423004,
+      "reconstruction_worse": 0.0,
+      "integration_worse": {
+        "iLISI": 0.0,
+        "kBET": 0.0,
+        "cLISI": 0.0,
+        "knn_purity": 0.0
+      },
+      "cross_seed_cv": {
+        "orthogonality_within_stratum": 0.31973623918511873,
+        "reconstruction_loss_per_cell": 0.0052988081271577595,
+        "iLISI": 0.001970566397560765,
+        "kBET": 0.0009883314165870481,
+        "cLISI": 0.08821081966774234,
+        "knn_purity": 0.07133088139005986
+      },
+      "incomplete": [],
+      "failures": [
+        "orthogonality reduction <20%",
+        "orthogonality_within_stratum cross-seed CV >0.20 or missing"
+      ],
+      "diagnostics": {
+        "active_dims_ok": true,
+        "wall_overhead": 0.012465491013578264
+      },
+      "means": {
+        "orthogonality_within_stratum": 0.09608953756590684,
+        "reconstruction_loss_per_cell": 6.383211135864258,
+        "iLISI": 1.9234397771694978,
+        "kBET": 0.9736111111111111,
+        "cLISI": 1.8147410030659668,
+        "knn_purity": 0.6583888888888888,
+        "leiden_ari": null,
+        "active_dims_shared": 16.0,
+        "train_wall_time_sec": 4.792066666666667
+      }
+    }
+  ],
+  "config": {
+    "run_id": "f3_orthogonality_20260513T120104Z",
+    "kang_h5ad_path": "docs/notebooks/data/kang_2018.h5ad",
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "weights": [
+      0.01,
+      0.05,
+      0.1,
+      0.2
+    ],
+    "max_epochs": 20,
+    "batch_size": 128,
+    "max_cells_per_condition": 600,
+    "n_top_genes": 1000,
+    "n_shared": 16,
+    "n_private": 16,
+    "n_hidden": 64,
+    "min_cells_per_stratum": 16,
+    "output_dir": "audits/F3"
+  }
+}

@@ -27,6 +27,168 @@ import numpy as np
 import pandas as pd
 
 
+def _as_2d_finite_array(x: Any, name: str) -> np.ndarray:
+    """Coerce ``x`` to a finite 2-D float array."""
+    arr = np.asarray(x, dtype=float)
+    if arr.ndim != 2:
+        raise ValueError(f"{name} must be a 2-D array")
+    if arr.shape[0] < 3:
+        raise ValueError(f"{name} must contain at least 3 rows")
+    if arr.shape[1] < 1:
+        raise ValueError(f"{name} must contain at least one column")
+    if not np.isfinite(arr).all():
+        raise ValueError(f"{name} contains nonfinite values")
+    return arr
+
+
+def _pairwise_squared_distances(x: np.ndarray) -> np.ndarray:
+    gram = x @ x.T
+    sq_norm = np.diag(gram)
+    dist2 = sq_norm[:, None] + sq_norm[None, :] - 2.0 * gram
+    return np.maximum(dist2, 0.0)
+
+
+def _median_rbf_bandwidth(x: np.ndarray) -> float:
+    dist2 = _pairwise_squared_distances(x)
+    tri = dist2[np.triu_indices_from(dist2, k=1)]
+    nonzero = tri[tri > 0.0]
+    if nonzero.size == 0:
+        return 1.0
+    median_dist2 = float(np.median(nonzero))
+    if not np.isfinite(median_dist2) or median_dist2 <= 0.0:
+        return 1.0
+    return float(np.sqrt(median_dist2))
+
+
+def _resolve_rbf_bandwidth(x: np.ndarray, bandwidth: str | float) -> float:
+    if bandwidth == "median":
+        return _median_rbf_bandwidth(x)
+    try:
+        value = float(bandwidth)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("bandwidth must be 'median' or a positive float") from exc
+    if not np.isfinite(value) or value <= 0.0:
+        raise ValueError("bandwidth must be 'median' or a positive float")
+    return value
+
+
+def _rbf_kernel(x: np.ndarray, bandwidth: float) -> np.ndarray:
+    dist2 = _pairwise_squared_distances(x)
+    return np.exp(-dist2 / (2.0 * bandwidth * bandwidth))
+
+
+def hsic_rbf(
+    z_shared: np.ndarray,
+    z_private: np.ndarray,
+    bandwidth: str | float = "median",
+    max_samples: int = 2000,
+    seed: int = 0,
+) -> float:
+    """Hilbert-Schmidt independence criterion with RBF kernels.
+
+    This diagnostic detects nonlinear shared/private dependence that linear
+    correlation can miss. Inputs are raw latent matrices with matching rows.
+
+    Parameters
+    ----------
+    z_shared:
+        2-D shared latent matrix of shape ``(n_cells, n_shared_dims)``.
+    z_private:
+        2-D private latent matrix of shape ``(n_cells, n_private_dims)``.
+    bandwidth:
+        ``"median"`` for per-matrix median-distance bandwidths, or a positive
+        numeric bandwidth used for both kernels.
+    max_samples:
+        Maximum rows to use for the O(n^2) kernel calculation.
+    seed:
+        Seed for deterministic subsampling when ``n_cells > max_samples``.
+
+    Returns
+    -------
+    float
+        Nonnegative biased HSIC estimate.
+    """
+    zs = _as_2d_finite_array(z_shared, "z_shared")
+    zp = _as_2d_finite_array(z_private, "z_private")
+    if zs.shape[0] != zp.shape[0]:
+        raise ValueError("z_shared and z_private must have the same number of rows")
+    if max_samples < 3:
+        raise ValueError("max_samples must be at least 3")
+
+    n_obs = zs.shape[0]
+    if n_obs > max_samples:
+        rng = np.random.default_rng(seed)
+        pick = np.sort(rng.choice(n_obs, size=max_samples, replace=False))
+        zs = zs[pick]
+        zp = zp[pick]
+        n_obs = max_samples
+
+    sigma_shared = _resolve_rbf_bandwidth(zs, bandwidth)
+    sigma_private = _resolve_rbf_bandwidth(zp, bandwidth)
+    k_shared = _rbf_kernel(zs, sigma_shared)
+    k_private = _rbf_kernel(zp, sigma_private)
+    k_centered = k_shared - k_shared.mean(axis=0, keepdims=True) - k_shared.mean(axis=1, keepdims=True) + k_shared.mean()
+    l_centered = k_private - k_private.mean(axis=0, keepdims=True) - k_private.mean(axis=1, keepdims=True) + k_private.mean()
+    hsic = float(np.sum(k_centered * l_centered) / ((n_obs - 1) ** 2))
+    return max(0.0, hsic)
+
+
+def partial_corr_residualized(
+    z_shared: np.ndarray,
+    z_private: np.ndarray,
+    covariates: np.ndarray | pd.DataFrame | None = None,
+) -> dict[str, float | int]:
+    """Residualized shared/private partial-correlation summary.
+
+    Each latent dimension is residualized against an intercept plus optional
+    numeric covariates, then all pairwise shared/private Pearson correlations
+    are summarized by mean and maximum absolute correlation.
+    """
+    zs = _as_2d_finite_array(z_shared, "z_shared")
+    zp = _as_2d_finite_array(z_private, "z_private")
+    if zs.shape[0] != zp.shape[0]:
+        raise ValueError("z_shared and z_private must have the same number of rows")
+
+    n_obs = zs.shape[0]
+    if covariates is None:
+        cov = np.empty((n_obs, 0), dtype=float)
+    else:
+        cov = np.asarray(covariates, dtype=float)
+        if cov.ndim == 1:
+            cov = cov.reshape(-1, 1)
+        if cov.ndim != 2:
+            raise ValueError("covariates must be a 1-D or 2-D numeric array")
+        if cov.shape[0] != n_obs:
+            raise ValueError("covariates must have the same number of rows as z_shared")
+        if not np.isfinite(cov).all():
+            raise ValueError("covariates contains nonfinite values")
+
+    design = np.column_stack([np.ones(n_obs), cov])
+
+    def _residualize(y: np.ndarray) -> np.ndarray:
+        coef, *_ = np.linalg.lstsq(design, y, rcond=None)
+        return y - design @ coef
+
+    def _standardize(y: np.ndarray) -> np.ndarray:
+        centered = y - y.mean(axis=0, keepdims=True)
+        scale = centered.std(axis=0, ddof=1)
+        out = np.zeros_like(centered)
+        mask = scale > 1e-12
+        out[:, mask] = centered[:, mask] / scale[mask]
+        return out
+
+    zs_std = _standardize(_residualize(zs))
+    zp_std = _standardize(_residualize(zp))
+    corr = zs_std.T @ zp_std / (n_obs - 1)
+    abs_corr = np.abs(corr)
+    return {
+        "mean_abs_partial_corr": float(abs_corr.mean()),
+        "max_abs_partial_corr": float(abs_corr.max()),
+        "n_pairs": int(abs_corr.size),
+        "n_covariates": int(cov.shape[1]),
+    }
+
+
 def ilisi(rep: np.ndarray, groups: np.ndarray, k: int = 30) -> float:
     """Inverse Simpson's diversity index over k-NN neighbours (group labels).
 

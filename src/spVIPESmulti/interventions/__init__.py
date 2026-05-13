@@ -25,12 +25,19 @@ from .latent_operators import (
     latent_interpolation,
     latent_replacement,
 )
+from .protocols import (
+    donor_condition_shift,
+    private_swap_label_matched,
+    private_swap_stratified,
+    private_swap_unmatched,
+)
 
 __all__ = [
     "CounterfactualResult",
     "condition_centroid_shift",
     "condition_separability",
     "decode_counterfactual",
+    "donor_condition_shift",
     "edit_latent",
     "encode_cells",
     "integration_report",
@@ -40,5 +47,8 @@ __all__ = [
     "latent_variance_utilization",
     "leakage_score",
     "predict_counterfactual",
+    "private_swap_label_matched",
+    "private_swap_stratified",
+    "private_swap_unmatched",
     "transfer_condition",
 ]

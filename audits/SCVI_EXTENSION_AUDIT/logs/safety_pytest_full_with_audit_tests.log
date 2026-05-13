@@ -1,0 +1,162 @@
+s......xxxxxs.s......................................................... [ 24%]
+........................................................................ [ 49%]
+........................................................................ [ 73%]
+........................................................................ [ 98%]
+....                                                                     [100%]
+=============================== warnings summary ===============================
+../../../archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/anndata/experimental/__init__.py:48
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/anndata/experimental/__init__.py:48: FutureWarning: Importing read_elem from `anndata.experimental` is deprecated. Import anndata.io.read_elem instead.
+    return module_get_attr_redirect(
+
+tests/test_api_boilerplate_reduction.py::test_get_latent_representation_auto_infers_groups_warns_once
+tests/test_api_boilerplate_reduction.py::test_embed_writes_expected_keys_and_returns_payload
+tests/test_api_boilerplate_reduction.py::test_embed_overwrite_guard_is_transactional
+tests/test_api_boilerplate_reduction.py::test_train_auto_infers_group_indices
+tests/test_api_boilerplate_reduction.py::test_get_latent_representation_normalized_path_returns_expected_shapes
+tests/test_api_boilerplate_reduction.py::test_get_loadings_multimodal_returns_group_modality_keys
+tests/test_lightning_trainer_compat.py::test_multigroup_training_runs
+tests/test_lightning_trainer_compat.py::test_cosine_lr_scheduler
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/scvi/data/fields/_base_field.py:63: UserWarning: adata.X does not contain unnormalized count data. Are you sure this is what you want?
+    self.validate_field(adata)
+
+tests/test_api_boilerplate_reduction.py::test_get_latent_representation_auto_infers_groups_warns_once
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/scvi/data/fields/_dataframe_field.py:187: UserWarning: Category 14 in adata.obs['_scvi_indices'] has fewer than 3 cells. Models may not train properly.
+    categorical_mapping = _make_column_categorical(
+
+tests/test_api_boilerplate_reduction.py::test_embed_writes_expected_keys_and_returns_payload
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/scvi/data/fields/_dataframe_field.py:187: UserWarning: Category 10 in adata.obs['_scvi_indices'] has fewer than 3 cells. Models may not train properly.
+    categorical_mapping = _make_column_categorical(
+
+tests/test_api_boilerplate_reduction.py::test_embed_writes_expected_keys_and_returns_payload
+tests/test_api_boilerplate_reduction.py::test_embed_overwrite_guard_is_transactional
+  /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/src/spVIPESmulti/model/spvipesmulti.py:533: UserWarning: group_indices_list was not provided to embed(); inferred from adata.uns['groups_obs_indices'].
+    self._warn_group_indices_auto_inferred("embed")
+
+tests/test_api_boilerplate_reduction.py: 2 warnings
+tests/test_counterfactual_basics.py: 4 warnings
+tests/test_counterfactual_diagnostics.py: 5 warnings
+tests/test_counterfactual_integration.py: 5 warnings
+tests/test_counterfactual_protocols.py: 7 warnings
+tests/test_covariate_heads.py: 10 warnings
+tests/test_disentangle_metrics.py: 4 warnings
+tests/test_orthogonality_loss.py: 5 warnings
+tests/test_regression_fixes.py: 6 warnings
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/scvi/data/fields/_dataframe_field.py:187: UserWarning: Category 0 in adata.obs['_scvi_indices'] has fewer than 3 cells. Models may not train properly.
+    categorical_mapping = _make_column_categorical(
+
+tests/test_api_boilerplate_reduction.py::test_train_auto_infers_group_indices
+  /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/src/spVIPESmulti/model/base/training_mixin.py:201: UserWarning: group_indices_list was not provided to train(); inferred from adata.uns['groups_obs_indices'].
+    self._warn_group_indices_auto_inferred("train")
+
+tests/test_api_boilerplate_reduction.py: 1 warning
+tests/test_disentangle_metrics.py: 12 warnings
+tests/test_lightning_trainer_compat.py: 4 warnings
+tests/test_orthogonality_loss.py: 6 warnings
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/lightning/fabric/plugins/environments/slurm.py:204: The `srun` command is available on your system but is not used. HINT: If your intention is to run Lightning on SLURM, prepend your python command with `srun` like so: srun python /exports/archive/hg-funcgenom-research/mdmanurung/co ...
+
+tests/test_api_boilerplate_reduction.py::test_get_latent_representation_normalized_path_returns_expected_shapes
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/scvi/data/fields/_dataframe_field.py:187: UserWarning: Category 11 in adata.obs['_scvi_indices'] has fewer than 3 cells. Models may not train properly.
+    categorical_mapping = _make_column_categorical(
+
+tests/test_api_boilerplate_reduction.py::test_get_latent_representation_normalized_path_returns_expected_shapes
+  /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/src/spVIPESmulti/model/spvipesmulti.py:463: UserWarning: group_indices_list was not provided to get_latent_representation(); inferred from adata.uns['groups_obs_indices'].
+    self._warn_group_indices_auto_inferred("get_latent_representation")
+
+tests/test_api_boilerplate_reduction.py::test_get_loadings_multimodal_returns_group_modality_keys
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/scvi/data/fields/_dataframe_field.py:187: UserWarning: Category 8 in adata.obs['_scvi_indices'] has fewer than 3 cells. Models may not train properly.
+    categorical_mapping = _make_column_categorical(
+
+tests/test_counterfactual_basics.py: 4 warnings
+tests/test_counterfactual_diagnostics.py: 5 warnings
+tests/test_counterfactual_integration.py: 4 warnings
+tests/test_counterfactual_protocols.py: 4 warnings
+  /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/src/spVIPESmulti/interventions/utils.py:47: UserWarning: group_indices_list was not provided to encode_cells(); inferred from adata.uns['groups_obs_indices'].
+    model._warn_group_indices_auto_inferred("encode_cells")
+
+tests/test_counterfactual_basics.py::test_predict_counterfactual_centroid_shift_reports_ood_flags
+  /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/tests/test_counterfactual_basics.py:135: UserWarning: Shared latent leakage_score=0.500 exceeds 0.4; counterfactuals are diagnostic only.
+    result = svi.predict_counterfactual(
+
+tests/test_counterfactual_integration.py::test_transfer_condition_mean_direction_cosine
+  /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/tests/test_counterfactual_integration.py:107: UserWarning: Shared latent leakage_score=0.500 exceeds 0.4; counterfactuals are diagnostic only.
+    result = svi.transfer_condition(
+
+tests/test_counterfactual_protocols.py::test_private_swap_unmatched_shape_and_metadata
+tests/test_counterfactual_protocols.py::test_private_swap_label_matched_uses_matching_source_labels
+tests/test_counterfactual_protocols.py::test_private_swap_label_matched_raises_without_label_key
+tests/test_counterfactual_protocols.py::test_private_swap_stratified_reports_deterministic_fallback_counts
+tests/test_counterfactual_protocols.py::test_donor_condition_shift_requires_registered_keys
+tests/test_counterfactual_protocols.py::test_donor_condition_shift_uses_within_donor_direction
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/scvi/data/fields/_dataframe_field.py:187: UserWarning: Category 5 in adata.obs['_scvi_donor'] has fewer than 3 cells. Models may not train properly.
+    categorical_mapping = _make_column_categorical(
+
+tests/test_covariate_heads.py: 4 warnings
+tests/test_disentangle_metrics.py: 12 warnings
+tests/test_lightning_trainer_compat.py: 4 warnings
+tests/test_orthogonality_loss.py: 3 warnings
+  /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/src/spVIPESmulti/module/spVIPESmultimodule.py:1718: UserWarning: The value argument must be within the support of the distribution
+    recon_loss = -generative_outputs["private_poe"][str(g)]["px"].log_prob(x_target).sum(-1)
+
+tests/test_covariate_heads.py::test_covariate_head_emits_finite_metric_when_enabled[disentangle_batch_shared_weight-disentangle_batch_shared_loss]
+  /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/tests/test_covariate_heads.py:163: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+  Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+    assert np.isfinite(float(loss_output.extra_metrics[metric_name]))
+
+tests/test_differential_abundance.py::test_differential_abundance_output_size_matches_cell_count
+tests/test_differential_abundance.py::test_differential_abundance_sign_behavior_under_shift
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/torch/utils/_contextlib.py:124: UserWarning: differential_abundance() is running without explicit shared-latent alignment (disentangle_group_shared_weight=0 and use_jeffreys_integ=False); results may be biased.
+    return func(*args, **kwargs)
+
+tests/test_differential_abundance.py::test_differential_abundance_output_size_matches_cell_count
+tests/test_differential_abundance.py::test_differential_abundance_sign_behavior_under_shift
+  /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/src/spVIPESmulti/model/spvipesmulti.py:823: UserWarning: sample_key is not registered; aggregating with one synthetic sample per group.
+    aggregated_df, aggregation_meta = self._aggregate_shared_posterior(
+
+tests/test_disentangle_metrics.py: 6 warnings
+tests/test_lightning_trainer_compat.py: 2 warnings
+tests/test_orthogonality_loss.py: 3 warnings
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/lightning/pytorch/utilities/_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+
+tests/test_disentangle_metrics.py::TestOrthogonalityMetricPresence::test_orthogonality_metric_present_when_enabled
+tests/test_disentangle_metrics.py::TestOrthogonalityMetricPresence::test_orthogonality_metric_present_when_enabled
+tests/test_disentangle_metrics.py::TestOrthogonalityMetricPresence::test_orthogonality_metric_absent_when_disabled
+tests/test_disentangle_metrics.py::TestOrthogonalityMetricsInExtraMetrics::test_metrics_appear_when_enabled
+tests/test_disentangle_metrics.py::TestOrthogonalityMetricsInExtraMetrics::test_metrics_appear_when_enabled
+tests/test_disentangle_metrics.py::TestOrthogonalityMetricsInExtraMetrics::test_metrics_absent_when_disabled
+tests/test_orthogonality_loss.py::test_orthogonality_weight_defaults_to_zero
+tests/test_orthogonality_loss.py::test_orthogonality_loss_logged_when_weight_enabled
+tests/test_orthogonality_loss.py::test_orthogonality_loss_independent_of_f1_metric_flag
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/lightning/pytorch/loops/fit_loop.py:317: The number of training batches (2) is smaller than the logging interval Trainer(log_every_n_steps=10). Set a lower value for log_every_n_steps if you want to see logs for the training epoch.
+
+tests/test_evaluate.py: 22 warnings
+  /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/src/spVIPESmulti/model/spvipesmulti.py:1280: UserWarning: group_indices_list was not provided to evaluate(); inferred from adata.uns['groups_obs_indices'].
+    self._warn_group_indices_auto_inferred("evaluate")
+
+tests/test_lightning_trainer_compat.py::test_multigroup_training_runs
+tests/test_lightning_trainer_compat.py::test_cosine_lr_scheduler
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/scvi/data/fields/_dataframe_field.py:187: UserWarning: Category 18 in adata.obs['_scvi_indices'] has fewer than 3 cells. Models may not train properly.
+    categorical_mapping = _make_column_categorical(
+
+tests/test_lightning_trainer_compat.py::test_multigroup_training_runs
+tests/test_lightning_trainer_compat.py::test_cosine_lr_scheduler
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/lightning/pytorch/loops/fit_loop.py:317: The number of training batches (3) is smaller than the logging interval Trainer(log_every_n_steps=10). Set a lower value for log_every_n_steps if you want to see logs for the training epoch.
+
+tests/test_multimodal_disentangle.py::TestMultimodalDisentangle::test_loss_emits_disentangle_metrics
+tests/test_multimodal_disentangle.py::TestMultimodalDisentangle::test_disentangle_off_emits_no_metrics
+tests/test_multimodal_disentangle.py::TestMultimodalDisentangle::test_loss_is_finite_and_grad_flows
+tests/test_orthogonality_loss.py::test_multimodal_orthogonality_loss_runs_and_logs
+tests/test_regression_fixes.py::TestGradientPropagation::test_grad_flows_to_encoder_parameters
+  /exports/para-lipg-hpc/mdmanurung/spVIPESmulti/src/spVIPESmulti/module/spVIPESmultimodule.py:1819: UserWarning: The value argument must be within the support of the distribution
+    recon_loss = -gen_stats["px"].log_prob(x_mod).sum(-1)
+
+tests/test_regression_fixes.py::TestLatentRepresentationCompleteness::test_output_size_matches_n_cells
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/scvi/data/fields/_dataframe_field.py:187: UserWarning: Category 30 in adata.obs['_scvi_indices'] has fewer than 3 cells. Models may not train properly.
+    categorical_mapping = _make_column_categorical(
+
+tests/test_utils.py: 20 warnings
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/functools.py:909: ImplicitModificationWarning: Transforming to str index.
+    return dispatch(args[0].__class__)(*args, **kw)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+284 passed, 3 skipped, 5 xfailed, 213 warnings in 51.90s
+

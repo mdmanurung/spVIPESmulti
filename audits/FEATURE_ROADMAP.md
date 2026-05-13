@@ -23,14 +23,14 @@ tracks; schedule only when prerequisite benchmark gates exist.
 | F1 | Conditional orthogonality instrumentation | ✅ **closed** | Phase 1 | — |
 | F4 | Condition/donor/batch covariate heads + losses | ✅ **done** (preset rejected) | Phase 1.5 | F1 |
 | F2 | Safe counterfactual latent editing module (MVP) | ✅ **done** | Phase 2 | F1, F4-lite |
-| F3 | Optional shared–private orthogonality loss | ⚠️ **experimental/default-off** | Phase 2 | F1, F4 |
+| F3 | Optional shared–private orthogonality loss | ⚠️ **archived/default-off** | Phase 2 | F1, F4 |
 | F10 | CellDISECT-aligned Kang benchmark + metrics pack | ✅ F10a/F10b done | Phase 1.5 | F1 |
-| F5 | Donor/condition-aware counterfactual protocols | deferred | Phase 2 | F2, F4 |
+| F5 | Donor/condition-aware counterfactual protocols | ✅ **done** | Phase 2 | F2, F4 |
 | F6 | Graph-informed prototype regularizer | deferred | Phase 3 | F4 |
 | F7 | Counterfactual consistency loss + perturbation vectors | deferred | Phase 3 | F2, F4 |
 | F8 | Optional SysVI-style VampPrior for shared latent | deferred | Phase 3 | F1, F10 |
 | F9 | Optional SysVI-style latent cycle-consistency regularizer | deferred | Phase 3 | F4, F10 |
-| F11 | Nonlinear dependence diagnostics (HSIC / MI / partial corr) | deferred | Phase 2 | F1 |
+| F11 | Nonlinear dependence diagnostics (HSIC / MI / partial corr) | implemented; audit iterate | Phase 2 | F1 |
 | F12 | Conditional decoder / MMD alignment track | deferred | Phase 3 | F4, F10 |
 | F13 | Artifact/QC latent track | deferred | Phase 4 | QC labels, F10 |
 | F14 | Causal / coupled-VAE research track | research | Research | F2, F5, F10 |
@@ -134,10 +134,11 @@ donor/condition-conditional protocols beyond centroid shift, conditional decoder
 
 ---
 
-### F3 — Optional shared–private orthogonality loss ⚠️ EXPERIMENTAL
+### F3 — Optional shared–private orthogonality loss ⚠️ ARCHIVED
 
 **Background.** F1 measures conditional dependence; F3 penalizes residual dependence.
-Smoke audit (1-seed/2-epoch) returned `reject`; real multi-seed audit is required.
+Smoke audit (1-seed/2-epoch) returned `reject`; real multi-seed audit also rejected
+promotion. Keep implemented for manual experiments, but do not recommend a nonzero default.
 
 **Scope.**
 - Model/module kwargs (all default 0.0): `orthogonality_weight` in presets and constructors.
@@ -165,7 +166,8 @@ Run 3-seed matrix on Kang: baseline + `orthogonality_weight ∈ {0.01, 0.05, 0.1
 | Cross-seed CV on core metrics | ≤ 0.20 | > 0.30 |
 
 Promotion → smallest weight satisfying all pass gates.
-Artifacts: `audits/F3/metrics.csv`, `audits/F3/summary.md`, `audits/F3/recommendation.json`.
+Artifacts: `audits/F3/metrics.csv`, `audits/F3/summary.md`, `audits/F3/recommendation.json`
+(`reject`; archived/default-off).
 
 ---
 
@@ -184,12 +186,15 @@ No `batch_key` confirmed in Kang default mapping; `batch_shared` rows skipped.
 
 ---
 
-### F5 — Donor/condition-aware counterfactual protocols
+### F5 — Donor/condition-aware counterfactual protocols ✅ DONE
 
 **Background.** F2's MVP exposes generic latent edits. F4's `donor_key`/`condition_key`
 enable rigorous per-individual counterfactual protocols.
 
-**Scope (extensions to `interventions/counterfactual.py`).**
+**Artifacts:** `audits/F5/`
+**Validation:** `pytest tests/test_counterfactual_protocols.py tests/test_counterfactual_basics.py tests/test_counterfactual_integration.py tests/test_counterfactual_diagnostics.py -q`
+
+**Scope (implemented in `interventions/protocols.py`).**
 - P1: unmatched private swap (random donor-i → donor-j private latent, keep shared).
 - P2: label-matched private swap.
 - P3: label + donor/timepoint matched with fallback-count reporting.
@@ -357,6 +362,11 @@ Defer MI/total-correlation estimators until sample-size choices are benchmarked.
 **Benchmark gate.** Promote only if metrics are finite, reproducible across 3 seeds
 (CV ≤ 0.30), and explain failures not visible in F1 on at least one audit run.
 
+Artifacts: `audits/F11/metrics.csv`, `audits/F11/summary.md`,
+`audits/F11/recommendation.json`. First real Kang audit returned `iterate`: all rows
+completed and hidden nonlinear signal appeared in 2/3 seeds, but HSIC CV was 0.3116
+against the 0.30 promotion gate.
+
 ---
 
 ### F12 — Conditional decoder / MMD alignment track
@@ -445,12 +455,14 @@ A feature is "done" only when **all** are true:
 
 ## 6. Current next step
 
-**F3 decision:** Run real 3-seed Kang audit (`scripts/benchmark_f3_orthogonality.py`)
-before recommending any nonzero `orthogonality_weight`. The 1-seed/2-epoch smoke audit
-wrote `audits/F3/smoke/` and returned `reject`; that is insufficient promotion evidence.
+**F3 decision:** Complete. The real 3-seed Kang audit in `audits/F3/` rejected
+promotion; keep `orthogonality_weight=0.0` by default.
 
-**F5+ activation trigger:** After F3 decision and once F10 parity baseline is confirmed
-with external CellDISECT installed.
+**F11 status:** Metric helpers and the audit runner are implemented. The first real Kang
+audit returned `iterate` because HSIC CV was 0.3116 against the 0.30 promotion gate.
+
+**Next feature:** Decide whether to stabilize/re-audit F11 or move to the next deferred
+track. F6-F9 remain Phase 3/deferred.
 
 ---
 

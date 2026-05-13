@@ -103,9 +103,10 @@ def _collect_encoded(model: Any, adata: Any | None = None, batch_size: int | Non
 
     for g in range(n_groups):
         n_g = len(group_indices_list[g])
-        indices = torch.cat(original_indices[g]).numpy().astype(int).ravel()[:n_g]
-        order = np.argsort(indices)
-        obs_indices = indices[order]
+        # ConcatDataLoader exposes group-local indices for some loaders; the
+        # public intervention API must report global AnnData observation indices.
+        obs_indices = np.asarray(group_indices_list[g], dtype=int)
+        order = np.arange(n_g, dtype=int)
         out["shared"][g] = torch.cat(shared[g]).numpy()[:n_g][order].astype(np.float32, copy=False)
         out["private"][g] = torch.cat(private[g]).numpy()[:n_g][order].astype(np.float32, copy=False)
         out["shared_scale"][g] = torch.cat(shared_scale[g]).numpy()[:n_g][order].astype(np.float32, copy=False)

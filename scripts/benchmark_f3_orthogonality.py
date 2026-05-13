@@ -48,7 +48,7 @@ def parse_args() -> Config:
     )
     parser.add_argument("--kang-h5ad-path", default="docs/notebooks/data/kang_2018.h5ad")
     parser.add_argument("--seeds", default="0,1,2")
-    parser.add_argument("--weights", default="0.01,0.05,0.1")
+    parser.add_argument("--weights", default="0.01,0.05,0.1,0.2")
     parser.add_argument("--max-epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--max-cells-per-condition", type=int, default=600)
@@ -99,6 +99,18 @@ def _mean(rows: list[dict[str, Any]], key: str) -> float | None:
     return sum(vals) / len(vals) if vals else None
 
 
+def _cv(rows: list[dict[str, Any]], key: str) -> float | None:
+    vals = [float(row[key]) for row in rows if _is_finite(row.get(key))]
+    if len(vals) < 2:
+        return None
+    mean = sum(vals) / len(vals)
+    denom = abs(mean)
+    if denom < 1e-8:
+        return None
+    variance = sum((val - mean) ** 2 for val in vals) / (len(vals) - 1)
+    return math.sqrt(variance) / denom
+
+
 def _relative_worse(candidate: float | None, baseline: float | None, *, higher_is_better: bool) -> float | None:
     if candidate is None or baseline is None or not _is_finite(candidate) or not _is_finite(baseline):
         return None
@@ -106,6 +118,20 @@ def _relative_worse(candidate: float | None, baseline: float | None, *, higher_i
     if higher_is_better:
         return max(0.0, (float(baseline) - float(candidate)) / denom)
     return max(0.0, (float(candidate) - float(baseline)) / denom)
+
+
+_ROADMAP_GATE_METRICS = (
+    "orthogonality_within_stratum",
+    "reconstruction_loss_per_cell",
+    "iLISI",
+    "kBET",
+    "cLISI",
+    "knn_purity",
+)
+
+
+def _has_required_metrics(rows: list[dict[str, Any]]) -> bool:
+    return all(all(_is_finite(row.get(metric)) for metric in _ROADMAP_GATE_METRICS) for row in rows)
 
 
 def recommend_f3_variant(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -127,11 +153,19 @@ def recommend_f3_variant(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "candidates": [],
         }
 
+    baseline_seeds = {int(row["seed"]) for row in baseline_rows if _is_finite(row.get("seed"))}
+    coverage_failures: list[str] = []
+    if len(baseline_seeds) < 3:
+        coverage_failures.append("baseline has fewer than 3 successful seeds")
+    if not _has_required_metrics(baseline_rows):
+        coverage_failures.append("baseline rows missing required F3 gate metrics")
+
     baseline = {
         "orthogonality_within_stratum": _mean(baseline_rows, "orthogonality_within_stratum"),
         "reconstruction_loss_per_cell": _mean(baseline_rows, "reconstruction_loss_per_cell"),
         "iLISI": _mean(baseline_rows, "iLISI"),
         "kBET": _mean(baseline_rows, "kBET"),
+        "cLISI": _mean(baseline_rows, "cLISI"),
         "knn_purity": _mean(baseline_rows, "knn_purity"),
         "leiden_ari": _mean(baseline_rows, "leiden_ari"),
         "active_dims_shared": _mean(baseline_rows, "active_dims_shared"),
@@ -141,11 +175,13 @@ def recommend_f3_variant(rows: list[dict[str, Any]]) -> dict[str, Any]:
     candidates: list[dict[str, Any]] = []
     for weight in candidate_weights:
         weight_rows = [row for row in ok_rows if float(row.get("orthogonality_weight", 0.0)) == weight]
+        weight_seeds = {int(row["seed"]) for row in weight_rows if _is_finite(row.get("seed"))}
         means = {
             "orthogonality_within_stratum": _mean(weight_rows, "orthogonality_within_stratum"),
             "reconstruction_loss_per_cell": _mean(weight_rows, "reconstruction_loss_per_cell"),
             "iLISI": _mean(weight_rows, "iLISI"),
             "kBET": _mean(weight_rows, "kBET"),
+            "cLISI": _mean(weight_rows, "cLISI"),
             "knn_purity": _mean(weight_rows, "knn_purity"),
             "leiden_ari": _mean(weight_rows, "leiden_ari"),
             "active_dims_shared": _mean(weight_rows, "active_dims_shared"),
@@ -163,48 +199,67 @@ def recommend_f3_variant(rows: list[dict[str, Any]]) -> dict[str, Any]:
             higher_is_better=False,
         )
         integration_worse = {
-            metric: _relative_worse(means[metric], baseline[metric], higher_is_better=True)
-            for metric in ("iLISI", "kBET", "knn_purity", "leiden_ari")
+            "iLISI": _relative_worse(means["iLISI"], baseline["iLISI"], higher_is_better=True),
+            "kBET": _relative_worse(means["kBET"], baseline["kBET"], higher_is_better=True),
+            "cLISI": _relative_worse(means["cLISI"], baseline["cLISI"], higher_is_better=False),
+            "knn_purity": _relative_worse(means["knn_purity"], baseline["knn_purity"], higher_is_better=True),
         }
-        active_dims_ok = (
-            means["active_dims_shared"] is not None
-            and baseline["active_dims_shared"] is not None
-            and means["active_dims_shared"] >= baseline["active_dims_shared"] - 2
-        )
-        wall_overhead = _relative_worse(
+        cv_by_metric = {metric: _cv(weight_rows, metric) for metric in _ROADMAP_GATE_METRICS}
+        diagnostics = {
+            "active_dims_ok": (
+                means["active_dims_shared"] is not None
+                and baseline["active_dims_shared"] is not None
+                and means["active_dims_shared"] >= baseline["active_dims_shared"] - 2
+            ),
+            "wall_overhead": _relative_worse(
             means["train_wall_time_sec"],
             baseline["train_wall_time_sec"],
             higher_is_better=False,
-        )
+            ),
+        }
 
         failures = []
+        incomplete = []
+        if weight_seeds != baseline_seeds or len(weight_seeds) < 3:
+            incomplete.append("candidate seed coverage does not match the 3-seed baseline")
+        if not _has_required_metrics(weight_rows):
+            incomplete.append("candidate rows missing required F3 gate metrics")
         if ortho_reduction is None or ortho_reduction < 0.20:
             failures.append("orthogonality reduction <20%")
         if recon_worse is None or recon_worse > 0.05:
             failures.append("reconstruction NLL worsened >5% or missing")
-        for metric, worse in integration_worse.items():
+        for metric in ("iLISI", "kBET"):
+            worse = integration_worse[metric]
+            if worse is None or worse > 0.10:
+                failures.append(f"{metric} worsened >10% or missing")
+        for metric in ("cLISI", "knn_purity"):
+            worse = integration_worse[metric]
             if worse is None or worse > 0.05:
                 failures.append(f"{metric} worsened >5% or missing")
-        if not active_dims_ok:
-            failures.append("active dims dropped below baseline -2 or missing")
-        if wall_overhead is None or wall_overhead > 0.10:
-            failures.append("wall-time overhead >10% or missing")
+        for metric, cv in cv_by_metric.items():
+            if cv is None or cv > 0.20:
+                failures.append(f"{metric} cross-seed CV >0.20 or missing")
 
         candidates.append({
             "weight": weight,
-            "passes": not failures,
+            "passes": not failures and not incomplete,
             "orthogonality_reduction": ortho_reduction,
             "reconstruction_worse": recon_worse,
             "integration_worse": integration_worse,
-            "active_dims_ok": active_dims_ok,
-            "wall_overhead": wall_overhead,
+            "cross_seed_cv": cv_by_metric,
+            "incomplete": incomplete,
             "failures": failures,
+            "diagnostics": diagnostics,
             "means": means,
         })
+        coverage_failures.extend(f"weight={weight}: {msg}" for msg in incomplete)
 
-    passing = [candidate for candidate in candidates if candidate["passes"]]
-    if passing:
-        best = max(passing, key=lambda item: item["orthogonality_reduction"] or 0.0)
+    if coverage_failures:
+        verdict = "iterate"
+        recommended_weight = None
+        reason = "; ".join(dict.fromkeys(coverage_failures))
+    elif passing := [candidate for candidate in candidates if candidate["passes"]]:
+        best = min(passing, key=lambda item: item["weight"])
         verdict = "pass"
         recommended_weight = best["weight"]
         reason = f"weight={recommended_weight} passed all F3 gates"
@@ -315,7 +370,7 @@ def _stitch(latents_by_group: dict[int, Any], group_indices_list: list[list[int]
 def _shared_metrics(model, prepared, group_indices_list, cfg: Config) -> dict[str, float | None]:
     import numpy as np
 
-    from spVIPESmulti.metrics import ilisi, kbet, knn_purity, latent_dimension_stats, leiden_ari
+    from spVIPESmulti.metrics import clisi, ilisi, kbet, knn_purity, latent_dimension_stats, leiden_ari
     from spVIPESmulti.module.spVIPESmultimodule import _within_stratum_corr_norm
 
     latents = model.get_latent_representation(group_indices_list=group_indices_list, batch_size=cfg.batch_size)
@@ -335,6 +390,7 @@ def _shared_metrics(model, prepared, group_indices_list, cfg: Config) -> dict[st
     return {
         "iLISI": float(ilisi(z_shared, groups, k=20)),
         "kBET": float(kbet(z_shared, groups, k=20)),
+        "cLISI": float(clisi(z_shared, labels, k=20)),
         "knn_purity": float(knn_purity(z_shared, labels, k=20)),
         "leiden_ari": float(leiden_ari(z_shared, labels, resolution=0.8)),
         "orthogonality_within_stratum": float(ortho_mean),
@@ -371,6 +427,7 @@ def train_variant(cfg: Config, prepared, group_indices_list, *, seed: int, ortho
         "orthogonality_loss": None,
         "iLISI": None,
         "kBET": None,
+        "cLISI": None,
         "knn_purity": None,
         "leiden_ari": None,
         "orthogonality_within_stratum": None,

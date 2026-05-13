@@ -1,0 +1,47 @@
+Retrieving notices: ...working... done
+Collecting package metadata (current_repodata.json): ...working... done
+Solving environment: ...working... done
+
+
+==> WARNING: A newer version of conda exists. <==
+  current version: 23.3.1
+  latest version: 26.3.2
+
+Please update conda by running
+
+    $ conda update -n base -c defaults conda
+
+Or to minimize the number of packages updated during conda update use
+
+     conda install conda=26.3.2
+
+
+
+## Package Plan ##
+
+  environment location: /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm
+
+  added / updated specs:
+    - nodejs
+
+
+The following NEW packages will be INSTALLED:
+
+  c-ares             conda-forge/linux-64::c-ares-1.34.6-hb03c661_0 
+  icu                conda-forge/linux-64::icu-78.3-h33c6efd_0 
+  libabseil          conda-forge/linux-64::libabseil-20260107.1-cxx17_h7b12aa8_0 
+  libbrotlicommon    conda-forge/linux-64::libbrotlicommon-1.2.0-hb03c661_1 
+  libbrotlidec       conda-forge/linux-64::libbrotlidec-1.2.0-hb03c661_1 
+  libbrotlienc       conda-forge/linux-64::libbrotlienc-1.2.0-hb03c661_1 
+  libev              conda-forge/linux-64::libev-4.33-hd590300_2 
+  libnghttp2         conda-forge/linux-64::libnghttp2-1.68.1-h877daf1_0 
+  libuv              conda-forge/linux-64::libuv-1.51.0-hb03c661_1 
+  nodejs             conda-forge/linux-64::nodejs-25.8.2-he4ff34a_0 
+
+
+
+Downloading and Extracting Packages
+
+Preparing transaction: ...working... done
+Verifying transaction: ...working... done
+Executing transaction: ...working... done

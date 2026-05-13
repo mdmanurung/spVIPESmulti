@@ -1,0 +1,54 @@
+scvi-tools 1.4.2
+LossOutput (loss: 'LossRecord', reconstruction_loss: 'LossRecord | None' = None, kl_local: 'LossRecord | None' = None, kl_global: 'LossRecord | None' = None, classification_loss: 'LossRecord | None' = None, logits: 'Tensor | None' = None, true_labels: 'Tensor | None' = None, extra_metrics: 'dict[str, Tensor] | None' = <factory>, n_obs_minibatch: 'int | None' = None, reconstruction_loss_sum: 'Tensor' = None, kl_local_sum: 'Tensor' = None, kl_global_sum: 'Tensor' = None) -> None
+BaseModuleClass.forward (self, tensors, get_inference_input_kwargs: 'dict | None' = None, get_generative_input_kwargs: 'dict | None' = None, inference_kwargs: 'dict | None' = None, generative_kwargs: 'dict | None' = None, loss_kwargs: 'dict | None' = None, compute_loss=True) -> 'tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, LossOutput]'
+TrainingPlan.configure_optimizers (self)
+BaseModelClass.register_manager True
+BaseModelClass._make_data_loader True
+auto_move_data <function auto_move_data at 0x7fc37028c4a0>
+BaseModelClass._validate_anndata source:
+    def _validate_anndata(
+        self, adata: AnnOrMuData | None = None, copy_if_view: bool = True
+    ) -> AnnData:
+        """Validate anndata has been properly registered, transfer if necessary."""
+        if adata is None:
+            adata = self.adata
+
+        _check_if_view(adata, copy_if_view=copy_if_view)
+
+        adata_manager = self.get_anndata_manager(adata)
+        if adata_manager is None:
+            if self.adata_manager is None:
+                # Model was loaded without AnnData, need to set up the new AnnData
+                # using the saved registry
+                logger.info(
+                    "Model was loaded without AnnData. Setting up provided AnnData "
+                    "using saved registry."
+                )
+                cls = self.__class__
+                registry = self.registry_
+                if _SETUP_ARGS_KEY not in registry:
+                    raise ValueError(
+                        "Saved model does not contain original setup inputs. "
+                        "Cannot setup the provided AnnData."
+                    )
+                method_name = registry.get(_SETUP_METHOD_NAME, "setup_anndata")
+                getattr(cls, method_name)(
+                    adata, source_registry=registry, **registry[_SETUP_ARGS_KEY]
+                )
+                # Now get the manager that was just created
+                self._adata = adata
+                self._adata_manager = self._get_most_recent_anndata_manager(adata, required=True)
+                self._register_manager_for_instance(self.adata_manager)
+            else:
+                logger.info(
+                    "Input AnnData not setup with scvi-tools. "
+                    + "attempting to transfer AnnData setup"
+                )
+                self._register_manager_for_instance(self.adata_manager.transfer_fields(adata))
+        else:
+            # Case where the correct AnnDataManager is found, replay registration as necessary.
+            adata_manager.validate()
+
+        return adata
+
+

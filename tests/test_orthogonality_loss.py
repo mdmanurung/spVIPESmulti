@@ -148,6 +148,21 @@ def test_no_eligible_strata_returns_zero_loss():
     loss.backward()
 
 
+def test_orthogonality_loss_handles_zero_variance_strata():
+    from spVIPESmulti.module.spVIPESmultimodule import _orthogonality_corr_loss
+
+    z_shared = torch.ones(40, 6, requires_grad=True)
+    z_private = torch.ones(40, 4, requires_grad=True)
+    strata_ids = torch.tensor([0] * 20 + [1] * 20)
+
+    loss = _orthogonality_corr_loss(z_shared, z_private, strata_ids, min_cells=10)
+    loss.backward()
+
+    assert torch.isfinite(loss)
+    assert torch.isfinite(z_shared.grad).all()
+    assert torch.isfinite(z_private.grad).all()
+
+
 def test_orthogonality_loss_logged_when_weight_enabled(minimal_two_group_adata):
     model = _train_tiny_model(minimal_two_group_adata, orthogonality_weight=0.1)
 
