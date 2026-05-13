@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Any, Literal
-import warnings
 
 import numpy as np
 
@@ -50,7 +50,7 @@ def encode_cells(
         keys = ["shared", "private", "library", "batch_index", "obs_indices", "obs_names"]
         if include_variance:
             keys.extend(["shared_scale", "private_scale"])
-        filtered = {key: {group_idx: encoded[key][group_idx]} for key in keys}
+        filtered: dict[str, Any] = {key: {group_idx: encoded[key][group_idx]} for key in keys}
         filtered["group_indices_list"] = [encoded["group_indices_list"][group_idx]]
         return filtered
     if not include_variance:
@@ -238,7 +238,7 @@ def _warn_if_leaky(model: Any, adata: Any) -> None:
         from .diagnostics import leakage_score
 
         score = leakage_score(model, adata, group_key="groups", latent_type="shared")
-    except Exception:
+    except (AttributeError, ImportError, KeyError, TypeError, ValueError):
         return
     if score > 0.4:
         warnings.warn(

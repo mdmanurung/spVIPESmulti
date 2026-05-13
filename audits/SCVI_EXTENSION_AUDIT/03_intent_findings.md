@@ -3,6 +3,8 @@
 ## Finding IMPL-001: Latent Representation Return Contract Is Misdocumented
 
 - Severity: MEDIUM
+- Status: FIXED in 1.0.1. Historical observation describes the 1.0.0 audit
+  baseline.
 - Locations: `src/spVIPESmulti/model/spvipesmulti.py:L430`,
   `src/spVIPESmulti/model/spvipesmulti.py:L456` to
   `src/spVIPESmulti/model/spvipesmulti.py:L458`, and
@@ -22,6 +24,8 @@
 ## Finding IMPL-002: `indices` Documentation Claims Subsetting That Is Absent
 
 - Severity: HIGH
+- Status: FIXED in 1.0.1. Historical observation describes the 1.0.0 audit
+  baseline.
 - Locations: `src/spVIPESmulti/model/spvipesmulti.py:L442` to
   `src/spVIPESmulti/model/spvipesmulti.py:L443` and
   `src/spVIPESmulti/model/spvipesmulti.py:L475` to
@@ -37,6 +41,8 @@
 ## Finding IMPL-003: Single-modal and Multimodal Library Handling Diverge
 
 - Severity: MEDIUM
+- Status: FIXED in 1.0.1. Historical observation describes the 1.0.0 audit
+  baseline.
 - Locations: `src/spVIPESmulti/module/spVIPESmultimodule.py:L801` and
   `src/spVIPESmulti/module/spVIPESmultimodule.py:L858` to
   `src/spVIPESmulti/module/spVIPESmultimodule.py:L859`

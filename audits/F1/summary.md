@@ -5,7 +5,7 @@ Verdict: **pass**
 
 ## Overhead Gate
 
-- Gate: orthogonality metric wall-time overhead <= +5%
+- Gate: orthogonality metric wall-time overhead \<= +5%
 - Disabled mean wall time: 0.5078 sec
 - Enabled mean wall time: 0.5001 sec
 - Overhead: -1.5164%

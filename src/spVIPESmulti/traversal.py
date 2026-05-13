@@ -12,9 +12,10 @@ traverse_latent
 calculate_differential_vars
     Rank genes per dimension from traversal output.
 """
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -99,7 +100,7 @@ def traverse_latent(
     from spVIPESmulti.utils import resolve_group_indices_list
 
     group_indices_list, _ = resolve_group_indices_list(adata, None)
-    group_cell_indices = group_indices_list[group_idx]
+    group_indices_list[group_idx]
 
     latent_dict = model.get_latent_representation(
         group_indices_list=group_indices_list,
@@ -121,9 +122,7 @@ def traverse_latent(
     # Fixed inputs: z_private = 0 (prior mean), library = log(1e4)
     z_private_zero = torch.zeros(z_shared_sample.shape[0], n_dims_private, device=device)
     library_fixed = torch.full((z_shared_sample.shape[0], 1), float(np.log(1e4)), device=device)
-    cat_args = (
-        (torch.zeros(z_shared_sample.shape[0], 1, dtype=torch.long, device=device),) if n_batch > 1 else ()
-    )
+    cat_args = (torch.zeros(z_shared_sample.shape[0], 1, dtype=torch.long, device=device),) if n_batch > 1 else ()
 
     was_training = module.training
     module.eval()

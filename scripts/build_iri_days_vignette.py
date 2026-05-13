@@ -8,6 +8,7 @@ the paper's two-group "IRI short" vs "IRI long" stratification. With
 three groups we exercise the label-based PoE path that supports N >= 2
 groups.
 """
+
 import json
 from pathlib import Path
 
@@ -542,6 +543,7 @@ programme.
   `nf_target="shared"`) and compare ARI / mixing to the Gaussian
   baseline above.
 """)
+
 
 # ------------------------------------------------------------------
 # Build the notebook JSON

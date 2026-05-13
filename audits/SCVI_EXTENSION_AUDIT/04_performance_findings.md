@@ -1,8 +1,9 @@
 # Phase 4 - Performance Findings
 
-## Finding PERF-001: `kbet` Builds Pandas Series Once Per Cell
+## Finding PERF-001: `kbet` Built Pandas Series Once Per Cell
 
 - Severity: MEDIUM
+- Status: FIXED. Historical observation describes the 1.0.0 audit baseline.
 - Locations: `src/spVIPESmulti/metrics.py:L251` to
   `src/spVIPESmulti/metrics.py:L308`
 - Evidence: `audits/SCVI_EXTENSION_AUDIT/perf/metrics_integration_report_cprofile.log`
@@ -19,10 +20,17 @@
 - Implementation risk: LOW. Encode group labels once with `np.unique` and
   `return_inverse=True`, then accumulate neighbor counts with NumPy.
 - Native requirement: none. Try vectorized NumPy first.
+- Resolution: `kbet` now uses `_neighbor_label_counts`, which encodes labels
+  once and accumulates per-neighbourhood counts with NumPy. Parity coverage is
+  in `tests/test_utils.py::TestKbet`, including imbalanced string labels and
+  single-group inputs.
+- Benchmark: `audits/SCVI_EXTENSION_AUDIT/perf/kbet_vectorized_pytest_benchmark.log`
+  records 800 cells x 16 dims with mean runtime 6.99 ms.
 
-## Finding PERF-002: LISI Metrics Use Python Loops Over Cells
+## Finding PERF-002: LISI Metrics Used Python Loops Over Cells
 
 - Severity: LOW
+- Status: FIXED. Historical observation describes the 1.0.0 audit baseline.
 - Locations: `src/spVIPESmulti/metrics.py:L192` to
   `src/spVIPESmulti/metrics.py:L224`
 - Evidence: the same cProfile run shows `ilisi` called twice and consuming
@@ -36,10 +44,14 @@
   single-category inputs, and small `k`.
 - Native requirement: none. Vectorized NumPy or scikit-learn output reuse is
   preferred before any native path.
+- Resolution: `ilisi` and `clisi` now share `_neighbor_label_counts` with
+  `kbet`. Parity coverage is in `tests/test_utils.py::TestIlisi`, including
+  imbalanced string labels and single-category inputs.
 
 ## Finding PERF-003: Posterior Mean Defaults to 5000 Monte Carlo Samples
 
 - Severity: LOW
+- Status: DEFERRED. This is not a 1.0.1 release blocker.
 - Locations: `src/spVIPESmulti/model/spvipesmulti.py:L427`,
   `src/spVIPESmulti/model/spvipesmulti.py:L1484` to
   `src/spVIPESmulti/model/spvipesmulti.py:L1488`, and
@@ -56,3 +68,5 @@
 - Implementation risk: MEDIUM because changing the default alters numerical
   outputs.
 - Native requirement: none.
+- Next step: profile real posterior extraction workflows before changing
+  defaults or adding approximations.

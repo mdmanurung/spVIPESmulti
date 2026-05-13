@@ -21,7 +21,6 @@ from scipy import sparse
 
 import spVIPESmulti as sv
 
-
 ROOT = Path(__file__).resolve().parent.parent
 AUDIT_DIR = ROOT / "audits" / "F1"
 METRICS_CSV = AUDIT_DIR / "metrics.csv"

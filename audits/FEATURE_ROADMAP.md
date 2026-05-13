@@ -5,15 +5,16 @@ Status: Active
 Supersedes: `DISENTANGLE_SECOND_PASS_ACTION_PLAN.md`, `COUNTERFACTUAL_DESIGN.md`,
 `COUNTERFACTUAL_AUDIT.md`, `audits/SECOND_PASS_AUDIT_PLAN.md` (all merged here).
 
----
+______________________________________________________________________
 
 ## 0. How to read this document
 
 Single source of truth for the next batch of feature work. Every feature ships with:
+
 1. **Background & motivation** — what problem it solves and why now.
-2. **Scope & non-goals** — explicit boundaries.
-3. **TDD implementation plan** — failing tests first, then implementation, then validation.
-4. **Quantitative go/no-go benchmark** — concrete numerical gates.
+1. **Scope & non-goals** — explicit boundaries.
+1. **TDD implementation plan** — failing tests first, then implementation, then validation.
+1. **Quantitative go/no-go benchmark** — concrete numerical gates.
 
 Features are ordered by **scientific readiness**. F8-F14 are optional extension
 tracks; schedule only when prerequisite benchmark gates exist.
@@ -36,13 +37,14 @@ tracks; schedule only when prerequisite benchmark gates exist.
 | F14 | Causal / coupled-VAE research track | research | Research | F2, F5, F10 |
 
 Cross-cutting hard constraints:
+
 - No rewrites to encoders, decoders, PoE strategy, or latent dimensionality for F1-F11.
 - All new losses must be **opt-in** (default weights = 0.0); backward compatible.
 - Single-modal and multimodal paths must remain feature-parity.
 - Counterfactual outputs are **associative predictions**, not causal claims, unless a
   benchmark uses interventional ground truth and passes the corresponding audit gates.
 
----
+______________________________________________________________________
 
 ## 1. Shared infrastructure
 
@@ -101,11 +103,11 @@ unavailable; do not silently omit them.
 - **CRADLE-VAE** → F13 (deferred): artifact/QC latent with explicit artifact labels.
 - **scCausalVI / CoupledVAE** → F14 (research): causal assumptions; no core API changes.
 
----
+______________________________________________________________________
 
 ## 2. Feature specifications
 
----
+______________________________________________________________________
 
 ### F1 — Conditional orthogonality instrumentation ✅ CLOSED
 
@@ -115,7 +117,7 @@ unavailable; do not silently omit them.
 `extra_metrics` (`orthogonality_within_stratum`, `orthogonality_worst_stratum`) behind
 `compute_orthogonality_metric=True`. No loss change.
 
----
+______________________________________________________________________
 
 ### F2 — Safe counterfactual latent editing module (MVP) ✅ DONE
 
@@ -123,6 +125,7 @@ unavailable; do not silently omit them.
 **Validation:** `pytest tests/test_counterfactual_basics.py tests/test_counterfactual_integration.py tests/test_counterfactual_diagnostics.py tests/test_celldisect_metric_parity.py -q`
 
 **Public API** (`src/spVIPESmulti/interventions/`):
+
 - `encode_cells`, `decode_counterfactual`, `predict_counterfactual`, `transfer_condition`
 - `leakage_score`, `condition_separability`, `integration_report`
 - Returns `CounterfactualResult` with `.X`, `.uncertainty`, `.info` (includes `ood_flags`, `rejected_mask`).
@@ -132,7 +135,7 @@ unavailable; do not silently omit them.
 **Non-goals (deferred to F5/F7):** Per-modality editing, perturbation vector learning,
 donor/condition-conditional protocols beyond centroid shift, conditional decoder generation.
 
----
+______________________________________________________________________
 
 ### F3 — Optional shared–private orthogonality loss ⚠️ ARCHIVED
 
@@ -141,16 +144,18 @@ Smoke audit (1-seed/2-epoch) returned `reject`; real multi-seed audit also rejec
 promotion. Keep implemented for manual experiments, but do not recommend a nonzero default.
 
 **Scope.**
+
 - Model/module kwargs (all default 0.0): `orthogonality_weight` in presets and constructors.
 - Penalty term in `_compute_disentangle_losses`; `orthogonality_loss` logged only when > 0.
 - Warmup: off for first 30% of epochs, linear ramp to target by 60%.
 - F11 may later replace/augment with HSIC/MI-style penalties.
 
 **TDD plan.**
+
 1. `tests/test_orthogonality_loss.py`: positive `orthogonality_weight` constructs; `ValueError` on negative;
    default-off numerical match within 1e-6; finite loss when enabled; metric appears only when > 0.
-2. Implement: kwargs → preset keys → helper reuse from F1 → warmup ramp.
-3. `pytest tests/test_orthogonality_loss.py tests/test_f3_benchmark.py -q`, then full suite.
+1. Implement: kwargs → preset keys → helper reuse from F1 → warmup ramp.
+1. `pytest tests/test_orthogonality_loss.py tests/test_f3_benchmark.py -q`, then full suite.
 
 **Quantitative go/no-go benchmark.**
 
@@ -169,7 +174,7 @@ Promotion → smallest weight satisfying all pass gates.
 Artifacts: `audits/F3/metrics.csv`, `audits/F3/summary.md`, `audits/F3/recommendation.json`
 (`reject`; archived/default-off).
 
----
+______________________________________________________________________
 
 ### F4 — Condition/donor/batch covariate heads ✅ DONE (preset promotion rejected)
 
@@ -184,7 +189,7 @@ default-off `disentangle_batch_shared_weight`, `disentangle_donor_shared_weight`
 Current audit evidence does not support recommending them as defaults.
 No `batch_key` confirmed in Kang default mapping; `batch_shared` rows skipped.
 
----
+______________________________________________________________________
 
 ### F5 — Donor/condition-aware counterfactual protocols ✅ DONE
 
@@ -195,6 +200,7 @@ enable rigorous per-individual counterfactual protocols.
 **Validation:** `pytest tests/test_counterfactual_protocols.py tests/test_counterfactual_basics.py tests/test_counterfactual_integration.py tests/test_counterfactual_diagnostics.py -q`
 
 **Scope (implemented in `interventions/protocols.py`).**
+
 - P1: unmatched private swap (random donor-i → donor-j private latent, keep shared).
 - P2: label-matched private swap.
 - P3: label + donor/timepoint matched with fallback-count reporting.
@@ -202,9 +208,10 @@ enable rigorous per-individual counterfactual protocols.
   Requires `condition_key` registered; raises `ValueError` otherwise.
 
 **TDD plan.**
+
 1. `tests/test_counterfactual_protocols.py`: shape checks for P1-P3; P3 fallback counts in
    `result.info["fallback_counts"]`; condition shift without key raises; identity protocol tolerance.
-2. Implement using F2 building blocks; no new model methods.
+1. Implement using F2 building blocks; no new model methods.
 
 **Quantitative go/no-go benchmark.**
 
@@ -218,7 +225,7 @@ enable rigorous per-individual counterfactual protocols.
 
 Artifacts: `audits/F5/counterfactuals.csv`, `audits/F5/summary.md`, `audits/F5/recommendation.json`.
 
----
+______________________________________________________________________
 
 ### F6 — Knowledge-informed prototype graph regularizer (Phase 3)
 
@@ -226,14 +233,16 @@ Artifacts: `audits/F5/counterfactuals.csv`, `audits/F5/summary.md`, `audits/F5/r
 prototypes to cluster in `z_shared`.
 
 **Scope.**
+
 - `graph_regularizer_weight: float = 0.0` (default off). Adjacency from `label_key` + optional covariates.
 - Penalty: `tr(P^T L P)`. Edge weighting and minimum-support filtering.
 - Logged metric: `graph_regularizer_loss`.
 
 **TDD plan.**
+
 1. `tests/test_graph_regularizer.py`: default-off equivalence, Laplacian symmetry, finite loss,
    missing-key behavior (warn or raise).
-2. Implement in `spVIPESmultimodule.py` (+ small helper in `module/utils.py`).
+1. Implement in `spVIPESmultimodule.py` (+ small helper in `module/utils.py`).
 
 **Quantitative go/no-go benchmark.**
 
@@ -247,20 +256,22 @@ prototypes to cluster in `z_shared`.
 
 Artifacts: `audits/F6/`.
 
----
+______________________________________________________________________
 
 ### F7 — Counterfactual consistency loss + perturbation vectors (Phase 3)
 
 **Scope.**
+
 - `counterfactual_consistency_weight: float = 0.0` (latent-only; no decoder rollout).
 - Inference: `learn_perturbation_vector(model, adata, condition_pairs, latent_type, method)`,
   supporting `mean_difference`, `classifier_gradient`, `gradient_ascent`.
 - `predict_perturbation_response(model, adata, perturbation_vector, magnitude)`.
 
 **TDD plan.**
+
 1. `tests/test_perturbation_vectors.py`: `mean_difference` recovers planted shift (cosine ≥ 0.9);
    `classifier_gradient` increases target logit; default-off matches baseline within 1e-6.
-2. Implement in `src/spVIPESmulti/interventions/perturbation.py` + one loss term.
+1. Implement in `src/spVIPESmulti/interventions/perturbation.py` + one loss term.
 
 **Quantitative go/no-go benchmark.**
 
@@ -273,20 +284,22 @@ Artifacts: `audits/F6/`.
 
 Artifacts: `audits/F7/`.
 
----
+______________________________________________________________________
 
 ### F8 — Optional SysVI-style VampPrior for shared latent (Phase 3)
 
 **Scope.**
+
 - `shared_prior: Literal["standard_normal", "vamp"] = "standard_normal"` (default off).
 - `shared_prior_components: int = 5`, `shared_prior_trainable: bool = True`,
   `shared_prior_pseudoinput_strategy: Literal["random_cells", "stratified_labels"] = "stratified_labels"`.
 - MC KL estimation for VampPrior; logged metrics: `kl_shared_prior`, `vamp_weight_entropy`.
 
 **TDD plan.**
+
 1. `tests/test_vampprior_shared.py`: constructor validation; default-off equivalence within 1e-6;
    finite KL/loss with `vamp`; save/load parity.
-2. Implement in module + model constructor; pseudoinput init.
+1. Implement in module + model constructor; pseudoinput init.
 
 **Quantitative go/no-go benchmark.**
 
@@ -300,20 +313,22 @@ Artifacts: `audits/F7/`.
 
 Artifacts: `audits/F8/`.
 
----
+______________________________________________________________________
 
 ### F9 — Optional SysVI-style latent cycle-consistency regularizer (Phase 3)
 
 **Scope.**
+
 - `latent_cycle_weight: float = 0.0` (default off). `latent_cycle_key: str = "sample"`.
 - Random alternative category selection per cell (must differ from original).
 - Standardized latent MSE between original and cycle pass means.
 - Logged metrics: `latent_cycle_loss`, `latent_cycle_active_fraction`.
 
 **TDD plan.**
+
 1. `tests/test_latent_cycle_loss.py`: default-off within 1e-6; positive finite loss when on;
    switched category differs from source; multimodal parity finite.
-2. Implement cycle helpers + training loss wiring.
+1. Implement cycle helpers + training loss wiring.
 
 **Quantitative go/no-go benchmark.**
 
@@ -327,7 +342,7 @@ Artifacts: `audits/F8/`.
 
 Artifacts: `audits/F9/`.
 
----
+______________________________________________________________________
 
 ### F10 — CellDISECT-aligned Kang benchmark and metrics pack ✅ F10a/F10b done
 
@@ -335,6 +350,7 @@ Artifacts: `audits/F9/`.
 **Validation:** `pytest tests/test_celldisect_metric_parity.py tests/test_celldisect_parity_runner.py -q`
 
 **What's available:**
+
 - F10a: `spVIPESmulti.interventions.metrics` — Pearson, delta-Pearson, top-DE cosine,
   Wasserstein, CAG, MIG-shaped scores, skipped-baseline artifact rows.
 - F10b: `scripts/benchmark_kang_celldisect_parity.py` — optional parity runner; records
@@ -348,7 +364,7 @@ Artifacts: `audits/F9/`.
 | Reproducibility across 3 seeds (Pearson/delta, EMD) | CV ≤ 0.20 | CV > 0.30 |
 | Artifact completeness per split | all expected files | missing files |
 
----
+______________________________________________________________________
 
 ### F11 — Nonlinear dependence diagnostics (HSIC / MI / partial correlation)
 
@@ -367,7 +383,7 @@ Artifacts: `audits/F11/metrics.csv`, `audits/F11/summary.md`,
 completed and hidden nonlinear signal appeared in 2/3 seeds, but HSIC CV was 0.3116
 against the 0.30 promotion gate.
 
----
+______________________________________________________________________
 
 ### F12 — Conditional decoder / MMD alignment track
 
@@ -379,7 +395,7 @@ saved-model compatibility).
 Pearson/delta-Pearson or DE recovery without degrading reconstruction, iLISI/kBET,
 or cell-type retention beyond the existing F2/F4 gates.
 
----
+______________________________________________________________________
 
 ### F13 — Artifact/QC latent track
 
@@ -390,7 +406,7 @@ is checked into the audit workflow.
 **Benchmark gate.** Promote only on perturbation datasets with known artifact labels and
 only if artifact removal improves QC realism without erasing perturbation signal.
 
----
+______________________________________________________________________
 
 ### F14 — Causal / coupled-VAE research track
 
@@ -398,7 +414,7 @@ Research-only until F2/F5/F10 establish reliable counterfactual benchmarks.
 No core API or architecture changes allowed until a separate design document defines
 assumptions, data requirements, and failure modes.
 
----
+______________________________________________________________________
 
 ## 3. Validation commands (canonical order)
 
@@ -423,19 +439,20 @@ pytest tests/ -q --ignore=tests/test_evaluate.py
 python scripts/smoke_vignettes.py --epochs 5 --cells_per_group 300
 ```
 
----
+______________________________________________________________________
 
 ## 4. Acceptance criteria (apply to every feature)
 
 A feature is "done" only when **all** are true:
-1. Existing API behavior unchanged for users who do not pass new args.
-2. New loss/metric terms are no-ops at default weights (numerical equivalence ≤ 1e-6).
-3. New metrics appear in `extra_metrics` only when the corresponding weight > 0.
-4. Targeted tests pass; full suite passes.
-5. Quantitative go/no-go benchmark from §2 satisfies all "Pass" rules across ≥ 3 seeds.
-6. Artifacts written to `audits/<feature_id>/` and entry appended to `audits/PROGRESS.md`.
 
----
+1. Existing API behavior unchanged for users who do not pass new args.
+1. New loss/metric terms are no-ops at default weights (numerical equivalence ≤ 1e-6).
+1. New metrics appear in `extra_metrics` only when the corresponding weight > 0.
+1. Targeted tests pass; full suite passes.
+1. Quantitative go/no-go benchmark from §2 satisfies all "Pass" rules across ≥ 3 seeds.
+1. Artifacts written to `audits/<feature_id>/` and entry appended to `audits/PROGRESS.md`.
+
+______________________________________________________________________
 
 ## 5. Risks & mitigations
 
@@ -451,7 +468,7 @@ A feature is "done" only when **all** are true:
 | External benchmark mismatch vs CellDISECT | Lock split definitions + metric parity tests + artifact schema checks |
 | Nonlinear metrics overfit small batches | Metric-only F11 first; require finite/reproducible before loss use |
 
----
+______________________________________________________________________
 
 ## 6. Current next step
 
@@ -464,7 +481,7 @@ audit returned `iterate` because HSIC CV was 0.3116 against the 0.30 promotion g
 **Next feature:** Decide whether to stabilize/re-audit F11 or move to the next deferred
 track. F6-F9 remain Phase 3/deferred.
 
----
+______________________________________________________________________
 
 ## 7. Cross-references
 

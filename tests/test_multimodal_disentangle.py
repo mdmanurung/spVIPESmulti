@@ -5,13 +5,13 @@ package (which transitively pulls in scvi-tools, torch, jax, etc.). It
 exercises the loss function path that wires `_compute_disentangle_losses`
 into `_loss_multimodal`.
 """
+
+import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
 import torch
 from scipy.sparse import csr_matrix
-
-import anndata as ad
 
 import spVIPESmulti
 from spVIPESmulti.dataloaders._concat_dataloader import ConcatDataLoader
@@ -42,9 +42,7 @@ def _make_multimodal_adata(n_groups=3, n_per_group=60, n_rna=50, n_prot=20, n_ce
         prot.obs["cell_types"] = cts
         groups[gname] = {"rna": rna, "protein": prot}
 
-    prepared = spVIPESmulti.data.prepare_multimodal_adatas(
-        groups, modality_likelihoods={"rna": "nb", "protein": "nb"}
-    )
+    prepared = spVIPESmulti.data.prepare_multimodal_adatas(groups, modality_likelihoods={"rna": "nb", "protein": "nb"})
     # `prepare_multimodal_adatas`'s outer concat preserves the obs column when
     # both modalities had it; just confirm it survived.
     assert "cell_types" in prepared.obs.columns
@@ -68,9 +66,7 @@ def _build_and_run_one_step(prepared, *, disentangle_preset, batch_size=32):
     )
 
     gi = [list(map(int, g)) for g in prepared.uns["groups_obs_indices"]]
-    scdl = ConcatDataLoader(
-        model.adata_manager, indices_list=gi, shuffle=False, batch_size=batch_size, drop_last=False
-    )
+    scdl = ConcatDataLoader(model.adata_manager, indices_list=gi, shuffle=False, batch_size=batch_size, drop_last=False)
     tensors_by_group = next(iter(scdl))
     inference_inputs = model.module._get_inference_input(tensors_by_group)
     inference_outputs = model.module.inference(**inference_inputs)
@@ -87,12 +83,16 @@ class TestMultimodalDisentangle:
         """Multimodal + disentangle_preset='full' should construct cleanly."""
         prepared = _make_multimodal_adata()
         spVIPESmulti.model.spVIPESmulti.setup_anndata(
-            prepared, groups_key="groups", label_key="cell_types",
+            prepared,
+            groups_key="groups",
+            label_key="cell_types",
             modality_likelihoods={"rna": "nb", "protein": "nb"},
         )
         model = spVIPESmulti.model.spVIPESmulti(
             prepared,
-            n_hidden=32, n_dimensions_shared=8, n_dimensions_private=4,
+            n_hidden=32,
+            n_dimensions_shared=8,
+            n_dimensions_private=4,
             disentangle_preset="full",
         )
         assert model.module.is_multimodal is True
@@ -147,7 +147,7 @@ class TestMultimodalDisentangle:
         """Without labels, label-using disentangle weights should still raise."""
         # Build adata WITHOUT label_key; setup_anndata won't register labels.
         groups = {}
-        rng = np.random.default_rng(0)
+        np.random.default_rng(0)
         for gi in range(3):
             gname = f"g{gi}"
             rna = _make_mod(60, 50, seed=10 * gi)
@@ -159,11 +159,15 @@ class TestMultimodalDisentangle:
             groups, modality_likelihoods={"rna": "nb", "protein": "nb"}
         )
         spVIPESmulti.model.spVIPESmulti.setup_anndata(
-            prepared, groups_key="groups",  # no label_key
+            prepared,
+            groups_key="groups",  # no label_key
             modality_likelihoods={"rna": "nb", "protein": "nb"},
         )
         with pytest.raises(ValueError, match="use_labels=True"):
             spVIPESmulti.model.spVIPESmulti(
-                prepared, n_hidden=32, n_dimensions_shared=8, n_dimensions_private=4,
+                prepared,
+                n_hidden=32,
+                n_dimensions_shared=8,
+                n_dimensions_private=4,
                 disentangle_preset="full",
             )

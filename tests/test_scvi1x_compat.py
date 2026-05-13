@@ -31,6 +31,7 @@ def _collect_imports(path: pathlib.Path):
 # Step 1 — _base_field.py: private scvi.data._constants / _utils redirected
 # ---------------------------------------------------------------------------
 
+
 class TestBaseFieldImports:
     PATH = SRC / "data" / "fields" / "_base_field.py"
 
@@ -44,8 +45,7 @@ class TestBaseFieldImports:
                 )
             if kind == "from":
                 assert not module.startswith("scvi.data._constants"), (
-                    "Found import from 'scvi.data._constants' — "
-                    "must use local spVIPESmulti.data._constants"
+                    "Found import from 'scvi.data._constants' — must use local spVIPESmulti.data._constants"
                 )
 
     def test_no_scvi_data_utils_get_anndata_attribute(self):
@@ -68,9 +68,7 @@ class TestBaseFieldImports:
     def test_local_utils_imported(self):
         """from spVIPESmulti.data._utils import get_anndata_attribute must be present."""
         found = any(
-            kind == "from"
-            and module == "spVIPESmulti.data._utils"
-            and "get_anndata_attribute" in names
+            kind == "from" and module == "spVIPESmulti.data._utils" and "get_anndata_attribute" in names
             for kind, module, names in _collect_imports(self.PATH)
         )
         assert found, "Missing 'from spVIPESmulti.data._utils import get_anndata_attribute' in _base_field.py"
@@ -80,12 +78,13 @@ class TestBaseFieldImports:
 # Step 2 — _manager.py: AnnTorchDataset from public scvi.data
 # ---------------------------------------------------------------------------
 
+
 class TestAnnTorchDatasetImport:
     PATH = SRC / "data" / "_manager.py"
 
     def test_no_private_anntorchdataset(self):
         """scvi.dataloaders._anntorchdataset must not be imported."""
-        for kind, module, names in _collect_imports(self.PATH):
+        for kind, module, _names in _collect_imports(self.PATH):
             if kind == "from":
                 assert not module.startswith("scvi.dataloaders._anntorchdataset"), (
                     "Found private 'scvi.dataloaders._anntorchdataset' — "
@@ -105,19 +104,20 @@ class TestAnnTorchDatasetImport:
 # Step 3 — _multi_datasplitter.py: lightning 2, no parse_use_gpu_arg, no use_gpu
 # ---------------------------------------------------------------------------
 
+
 class TestDataSplitter:
     PATH = SRC / "data" / "_multi_datasplitter.py"
 
     def test_no_pytorch_lightning(self):
         """pytorch_lightning must not be imported (replaced by lightning.pytorch)."""
-        for kind, module, _ in _collect_imports(self.PATH):
+        for _kind, module, _ in _collect_imports(self.PATH):
             assert not module.startswith("pytorch_lightning"), (
                 "Found 'pytorch_lightning' import — must use 'lightning.pytorch'"
             )
 
     def test_no_private_data_splitting_import(self):
         """scvi.dataloaders._data_splitting.validate_data_split must not be imported (vendored)."""
-        for kind, module, _ in _collect_imports(self.PATH):
+        for _kind, module, _ in _collect_imports(self.PATH):
             assert not module.startswith("scvi.dataloaders._data_splitting"), (
                 "Found 'scvi.dataloaders._data_splitting' import — function is vendored locally"
             )
@@ -126,9 +126,7 @@ class TestDataSplitter:
         """A local _validate_data_split helper must be defined."""
         tree = ast.parse(self.PATH.read_text())
         names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
-        assert "_validate_data_split" in names, (
-            "Missing local _validate_data_split helper in _multi_datasplitter.py"
-        )
+        assert "_validate_data_split" in names, "Missing local _validate_data_split helper in _multi_datasplitter.py"
 
     def test_lightning_pytorch_imported(self):
         """lightning.pytorch must be imported."""
@@ -140,41 +138,32 @@ class TestDataSplitter:
 
     def test_no_parse_use_gpu_arg(self):
         """parse_use_gpu_arg (removed in scvi 1.1) must not be imported."""
-        for kind, module, names in _collect_imports(self.PATH):
+        for kind, _module, names in _collect_imports(self.PATH):
             if kind == "from":
-                assert "parse_use_gpu_arg" not in names, (
-                    "Found 'parse_use_gpu_arg' import — removed in scvi-tools 1.1"
-                )
+                assert "parse_use_gpu_arg" not in names, "Found 'parse_use_gpu_arg' import — removed in scvi-tools 1.1"
 
     def test_no_anndata_import(self):
         """'from anndata import AnnData' must be removed (annotation fixed to AnnDataManager)."""
         for kind, module, names in _collect_imports(self.PATH):
             if kind == "from" and module == "anndata":
                 assert "AnnData" not in names, (
-                    "Found 'from anndata import AnnData' — "
-                    "parameter annotation must use AnnDataManager"
+                    "Found 'from anndata import AnnData' — parameter annotation must use AnnDataManager"
                 )
 
     def test_no_use_gpu_scvi_model_utils(self):
         """scvi.model._utils must not be imported (parse_use_gpu_arg lived there)."""
-        for kind, module, _ in _collect_imports(self.PATH):
-            assert not module.startswith("scvi.model._utils"), (
-                "Found import from 'scvi.model._utils' — must be removed"
-            )
+        for _kind, module, _ in _collect_imports(self.PATH):
+            assert not module.startswith("scvi.model._utils"), "Found import from 'scvi.model._utils' — must be removed"
 
     def test_anndatamanager_annotation(self):
         """AnnDataManager must be imported for the updated type annotation."""
-        found = any(
-            "AnnDataManager" in names
-            for _, _, names in _collect_imports(self.PATH)
-        )
+        found = any("AnnDataManager" in names for _, _, names in _collect_imports(self.PATH))
         assert found, "Missing AnnDataManager import in _multi_datasplitter.py"
 
     def test_torch_imported(self):
         """torch must be imported (used for cuda.is_available())."""
         found = any(
-            (kind == "import" and module == "torch") or
-            (kind == "from" and module == "torch")
+            (kind == "import" and module == "torch") or (kind == "from" and module == "torch")
             for kind, module, _ in _collect_imports(self.PATH)
         )
         assert found, "Missing 'import torch' in _multi_datasplitter.py"
@@ -183,6 +172,7 @@ class TestDataSplitter:
 # ---------------------------------------------------------------------------
 # Step 4 — training_mixin.py: use_gpu removed, Union removed
 # ---------------------------------------------------------------------------
+
 
 class TestTrainingMixin:
     PATH = SRC / "model" / "base" / "training_mixin.py"
@@ -193,9 +183,7 @@ class TestTrainingMixin:
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == "train":
                 arg_names = [a.arg for a in node.args.args + node.args.kwonlyargs]
-                assert "use_gpu" not in arg_names, (
-                    "train() still has 'use_gpu' parameter — must be removed"
-                )
+                assert "use_gpu" not in arg_names, "train() still has 'use_gpu' parameter — must be removed"
                 return
         pytest.fail("train() function not found in training_mixin.py")
 
@@ -203,9 +191,7 @@ class TestTrainingMixin:
         """Union must not be imported (only used with use_gpu, which is removed)."""
         for kind, module, names in _collect_imports(self.PATH):
             if kind == "from" and module == "typing":
-                assert "Union" not in names, (
-                    "Found 'Union' in typing imports — unused after use_gpu removal"
-                )
+                assert "Union" not in names, "Found 'Union' in typing imports — unused after use_gpu removal"
 
     def test_no_use_gpu_kwarg_in_any_call(self):
         """No call site may pass a ``use_gpu`` keyword (kwarg removed in scvi 1.x)."""
@@ -213,9 +199,7 @@ class TestTrainingMixin:
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 for kw in node.keywords:
-                    assert kw.arg != "use_gpu", (
-                        "Found a call passing 'use_gpu=...' — kwarg removed in scvi-tools 1.x"
-                    )
+                    assert kw.arg != "use_gpu", "Found a call passing 'use_gpu=...' — kwarg removed in scvi-tools 1.x"
 
 
 # ---------------------------------------------------------------------------
@@ -235,8 +219,7 @@ class TestVendoredTypes:
         """``from scvi._types import ...`` must be replaced by spVIPESmulti.data._types."""
         for kind, module, _ in _collect_imports(path):
             assert not (kind == "from" and module == "scvi._types"), (
-                f"{path.name} still imports from private 'scvi._types' — "
-                "use 'spVIPESmulti.data._types' instead"
+                f"{path.name} still imports from private 'scvi._types' — use 'spVIPESmulti.data._types' instead"
             )
 
     def test_local_types_module_exposes_aliases(self):
@@ -259,6 +242,7 @@ class TestVendoredTypes:
 # Step 5 — pyproject.toml: version pins updated
 # ---------------------------------------------------------------------------
 
+
 class TestPyprojectToml:
     PATH = pathlib.Path(__file__).parent.parent / "pyproject.toml"
 
@@ -268,27 +252,20 @@ class TestPyprojectToml:
     def test_scvi_tools_pin_updated(self):
         """scvi-tools must be pinned to >=1.0,<2 (not <0.21)."""
         text = self._text()
-        assert "scvi-tools>=0.20" not in text, (
-            "pyproject.toml still pins scvi-tools<0.21 — must be updated to >=1.0,<2"
-        )
-        assert "scvi-tools>=1.0" in text, (
-            "pyproject.toml must pin 'scvi-tools>=1.0,<2'"
-        )
+        assert "scvi-tools>=0.20" not in text, "pyproject.toml still pins scvi-tools<0.21 — must be updated to >=1.0,<2"
+        assert "scvi-tools>=1.0" in text, "pyproject.toml must pin 'scvi-tools>=1.0,<2'"
 
     def test_requires_python_updated(self):
         """requires-python must not cap at <3.12."""
         text = self._text()
-        assert "<3.12" not in text, (
-            "pyproject.toml caps Python at <3.12 — must be removed (use >=3.10)"
-        )
-        assert ">=3.10" in text, (
-            "pyproject.toml must set requires-python = '>=3.10'"
-        )
+        assert "<3.12" not in text, "pyproject.toml caps Python at <3.12 — must be removed (use >=3.10)"
+        assert ">=3.10" in text, "pyproject.toml must set requires-python = '>=3.10'"
 
 
 # ---------------------------------------------------------------------------
 # Integration tests (require scvi-tools>=1.0 installed)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.integration
 class TestIntegration:

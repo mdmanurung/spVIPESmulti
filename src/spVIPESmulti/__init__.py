@@ -5,6 +5,7 @@ from ._siteguard import apply_user_site_guard as _apply_user_site_guard
 _apply_user_site_guard()
 del _apply_user_site_guard
 
+import importlib.metadata as importlib_metadata
 import logging
 
 from rich.console import Console
@@ -17,11 +18,6 @@ __all__ = ["data", "interventions", "metrics", "model", "module", "nn", "pl", "t
 
 # https://github.com/python-poetry/poetry/pull/2366#issuecomment-652418094
 # https://github.com/python-poetry/poetry/issues/144#issuecomment-623927302
-try:
-    import importlib.metadata as importlib_metadata
-except ModuleNotFoundError:
-    import importlib_metadata
-
 package_name = "spVIPESmulti"
 __version__ = importlib_metadata.version(package_name)
 

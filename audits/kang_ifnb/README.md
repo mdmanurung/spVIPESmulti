@@ -9,9 +9,9 @@ while keeping aggregated experiment tracking in this folder.
 Use this benchmark to compare every new spVIPESmulti feature against three anchors:
 
 - current spVIPESmulti implementation
-- original spVIPES from https://github.com/nrclaudio/spVIPES
+- original spVIPES from <https://github.com/nrclaudio/spVIPES>
 - contrastiveVAE from scvi-tools
-  https://github.com/scverse/scvi-tools/blob/612157b04320cf13b72e3e500707371b05811f54/src/scvi/external/contrastivevi/_model.py#L49
+  <https://github.com/scverse/scvi-tools/blob/612157b04320cf13b72e3e500707371b05811f54/src/scvi/external/contrastivevi/_model.py#L49>
 
 ## Required comparison settings
 

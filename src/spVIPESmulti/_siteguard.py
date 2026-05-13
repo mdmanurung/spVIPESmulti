@@ -48,10 +48,11 @@ def _is_relative_to(path: Path, root: Path) -> bool:
 
 def _get_user_site_roots() -> tuple[Path, ...]:
     try:
-        raw_user_sites = site.getusersitepackages()
+        raw_user_sites: str | tuple[str, ...] = site.getusersitepackages()
     except (AttributeError, OSError, RuntimeError):
         raw_user_sites = ()
 
+    user_sites: tuple[str, ...]
     if isinstance(raw_user_sites, str):
         user_sites = (raw_user_sites,)
     else:

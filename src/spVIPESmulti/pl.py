@@ -33,11 +33,12 @@ show_top_differential_vars
 differential_vars_heatmap
     Heatmap of traversal effects across all z_shared dimensions and top genes.
 """
+
 from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -62,15 +63,15 @@ if TYPE_CHECKING:
 
 
 def heatmap_loadings(
-    loadings_df: Optional[pd.DataFrame] = None,
+    loadings_df: pd.DataFrame | None = None,
     *,
     model: object = None,
     group_idx: int = 0,
     latent_type: str = "shared",
     n_top: int = 5,
-    figsize: Optional[tuple[float, float]] = None,
-    ax: Optional["Axes"] = None,
-) -> "Axes":
+    figsize: tuple[float, float] | None = None,
+    ax: Axes | None = None,
+) -> Axes:
     """Heatmap of the top-*n_top* genes by absolute loading per latent dimension.
 
     Parameters
@@ -105,11 +106,8 @@ def heatmap_loadings(
     """
     try:
         import seaborn as sns
-    except ImportError:
-        raise ImportError(
-            "seaborn is required for heatmap_loadings. "
-            "Install it with: pip install seaborn"
-        )
+    except ImportError as exc:
+        raise ImportError("seaborn is required for heatmap_loadings. Install it with: pip install seaborn") from exc
     import matplotlib.pyplot as plt
 
     df = _resolve_loadings(loadings_df, model, group_idx, latent_type)
@@ -125,6 +123,7 @@ def heatmap_loadings(
         for raw, display in zip(
             df.index.tolist(),
             _strip_group_gene_prefix(df.index.tolist(), gene_prefix),
+            strict=False,
         )
     }
 
@@ -168,8 +167,8 @@ def heatmap_loadings(
 
 
 def umap_shared(
-    adata: "AnnData",
-    color: Union[str, list[str]],
+    adata: AnnData,
+    color: str | list[str],
     basis: str = "X_umap_spvipesmulti_shared",
     **kwargs,
 ) -> None:
@@ -204,13 +203,13 @@ def umap_shared(
 
 
 def umap_private(
-    adatas_per_group: dict[str, "AnnData"],
-    color: Union[str, list[str]],
+    adatas_per_group: dict[str, AnnData],
+    color: str | list[str],
     basis: str = "X_umap_spvipesmulti_private",
     ncols: int = 3,
-    figsize: Optional[tuple[float, float]] = None,
+    figsize: tuple[float, float] | None = None,
     **kwargs,
-) -> "plt.Figure":
+) -> plt.Figure:
     """Grid of per-group private UMAP panels.
 
     Parameters
@@ -279,12 +278,12 @@ def umap_private(
 
 
 def factor_violin(
-    adata: "AnnData",
+    adata: AnnData,
     dim_idx: int,
     groupby: str,
     obsm_key: str,
     latent_type: str = "private",
-    ax: Optional["Axes"] = None,
+    ax: Axes | None = None,
     **kwargs,
 ) -> None:
     """Violin plot of a single latent factor stratified by a metadata column.
@@ -331,9 +330,9 @@ def factor_violin(
 
 def training_curves(
     model: object,
-    metrics: Optional[list[str]] = None,
-    figsize: Optional[tuple[float, float]] = None,
-) -> "plt.Figure":
+    metrics: list[str] | None = None,
+    figsize: tuple[float, float] | None = None,
+) -> plt.Figure:
     """Multi-panel plot of spVIPESmulti training history.
 
     Train and validation curves for the same metric are overlaid on one panel.
@@ -361,7 +360,7 @@ def training_curves(
     """
     import matplotlib.pyplot as plt
 
-    history = model.history
+    history = getattr(model, "history", None)
     if not history:
         raise ValueError("model.history is empty — has the model been trained?")
 
@@ -397,12 +396,14 @@ def training_curves(
 
     # filter to requested metrics when provided
     if metrics is not None:
+
         def _base(m: str) -> str:
             if m.endswith("_train"):
                 return m[:-6]
             if m.endswith("_validation"):
                 return m[:-11]
             return m
+
         requested = {_base(m) for m in metrics}
         panels = {k: v for k, v in panels.items() if k in requested}
 
@@ -470,18 +471,18 @@ def training_curves(
 
 
 def loadings_dotplot(
-    adata: "AnnData",
-    dims: Union[list[int], list[str]],
+    adata: AnnData,
+    dims: list[int] | list[str],
     groupby: str,
     *,
-    loadings_df: Optional[pd.DataFrame] = None,
+    loadings_df: pd.DataFrame | None = None,
     model: object = None,
     group_idx: int = 0,
     latent_type: str = "shared",
     n_top: int = 5,
     **kwargs,
 ) -> None:
-    """scanpy dotplot of top genes for selected latent dimensions.
+    """Scanpy dotplot of top genes for selected latent dimensions.
 
     For each requested dimension, the ``n_top`` genes with the largest
     absolute loadings are collected. A single :func:`scanpy.pl.dotplot` is
@@ -529,16 +530,12 @@ def loadings_dotplot(
             col = f"{prefix}{d}"
             if col not in col_names:
                 raise ValueError(
-                    f"Dimension index {d} → '{col}' not found in loadings_df columns. "
-                    f"Available: {col_names}"
+                    f"Dimension index {d} → '{col}' not found in loadings_df columns. Available: {col_names}"
                 )
             resolved_dims.append(col)
         else:
             if d not in col_names:
-                raise ValueError(
-                    f"Dimension '{d}' not found in loadings_df columns. "
-                    f"Available: {col_names}"
-                )
+                raise ValueError(f"Dimension '{d}' not found in loadings_df columns. Available: {col_names}")
             resolved_dims.append(d)
 
     # Collect top genes per dim in a labelled dict for scanpy dotplot var_names
@@ -572,13 +569,13 @@ def loadings_dotplot(
 def enrichment_heatmap(
     scores_df: pd.DataFrame,
     *,
-    group_labels: Optional[Sequence[object]] = None,
+    group_labels: Sequence[object] | None = None,
     top_n: int = 20,
-    figsize: Optional[tuple[float, float]] = None,
-    ax: Optional["Axes"] = None,
+    figsize: tuple[float, float] | None = None,
+    ax: Axes | None = None,
     cmap: str = "RdBu_r",
     center: float = 0.0,
-) -> "Axes":
+) -> Axes:
     """Heatmap of enrichment activity scores.
 
     Parameters
@@ -604,9 +601,7 @@ def enrichment_heatmap(
         Axes containing the heatmap.
     """
     if not isinstance(scores_df, pd.DataFrame):
-        raise TypeError(
-            f"scores_df must be a pandas DataFrame, got {type(scores_df).__name__}."
-        )
+        raise TypeError(f"scores_df must be a pandas DataFrame, got {type(scores_df).__name__}.")
     if scores_df.empty:
         raise ValueError("scores_df is empty.")
     if top_n < 1:
@@ -614,19 +609,14 @@ def enrichment_heatmap(
 
     try:
         import seaborn as sns
-    except ImportError:
-        raise ImportError(
-            "seaborn is required for enrichment_heatmap. "
-            "Install it with: pip install seaborn"
-        )
+    except ImportError as exc:
+        raise ImportError("seaborn is required for enrichment_heatmap. Install it with: pip install seaborn") from exc
     import matplotlib.pyplot as plt
 
     plot_df = scores_df.copy()
     if group_labels is not None:
         if len(group_labels) != scores_df.shape[0]:
-            raise ValueError(
-                "group_labels length must match number of rows in scores_df."
-            )
+            raise ValueError("group_labels length must match number of rows in scores_df.")
         grouped = plot_df.copy()
         grouped["__group"] = [str(g) for g in group_labels]
         plot_df = grouped.groupby("__group", observed=True).mean()
@@ -647,7 +637,7 @@ def enrichment_heatmap(
 
 
 def interpretation_dashboard(
-    adata: "AnnData",
+    adata: AnnData,
     scores_df: pd.DataFrame,
     groupby: str,
     *,
@@ -655,7 +645,7 @@ def interpretation_dashboard(
     top_n: int = 20,
     figsize: tuple[float, float] = (14.0, 5.0),
     cmap: str = "RdBu_r",
-) -> "plt.Figure":
+) -> plt.Figure:
     """Create a compact two-panel interpretation dashboard.
 
     Left panel:
@@ -666,9 +656,7 @@ def interpretation_dashboard(
     import matplotlib.pyplot as plt
 
     if groupby not in adata.obs:
-        raise KeyError(
-            f"'{groupby}' not found in adata.obs. Available columns: {list(adata.obs.columns)}"
-        )
+        raise KeyError(f"'{groupby}' not found in adata.obs. Available columns: {list(adata.obs.columns)}")
 
     fig, axes = plt.subplots(1, 2, figsize=figsize)
     ax_left, ax_right = axes
@@ -676,9 +664,7 @@ def interpretation_dashboard(
     if shared_basis in adata.obsm:
         coords = np.asarray(adata.obsm[shared_basis])
         if coords.shape[1] < 2:
-            raise ValueError(
-                f"adata.obsm['{shared_basis}'] must have at least 2 columns."
-            )
+            raise ValueError(f"adata.obsm['{shared_basis}'] must have at least 2 columns.")
         cats = adata.obs[groupby].astype(str).values
         unique = pd.unique(cats)
         for name in unique:
@@ -718,16 +704,16 @@ def interpretation_dashboard(
 
 
 def plot_latent_dims_in_umap(
-    adata: "AnnData",
+    adata: AnnData,
     obsm_key: str,
     *,
-    dims: Optional[list[int]] = None,
+    dims: list[int] | None = None,
     basis: str = "X_umap",
     ncols: int = 5,
     point_size: float = 8.0,
     cmap: str = "RdBu_r",
     figsize_per_panel: tuple[float, float] = (3.5, 3.0),
-) -> "plt.Figure":
+) -> plt.Figure:
     """One UMAP panel per latent dimension, colored by that dimension's value.
 
     Useful for identifying what each z_shared dimension encodes biologically.
@@ -768,9 +754,7 @@ def plot_latent_dims_in_umap(
     if obsm_key not in adata.obsm:
         raise KeyError(f"'{obsm_key}' not in adata.obsm.")
     if basis not in adata.obsm:
-        raise KeyError(
-            f"'{basis}' not in adata.obsm. Run scanpy.tl.umap first, or pass the correct basis key."
-        )
+        raise KeyError(f"'{basis}' not in adata.obsm. Run scanpy.tl.umap first, or pass the correct basis key.")
 
     latent = np.asarray(adata.obsm[obsm_key])
     coords = np.asarray(adata.obsm[basis])[:, :2]
@@ -817,14 +801,14 @@ def plot_latent_dims_in_umap(
 
 
 def plot_latent_dims_in_heatmap(
-    adata: "AnnData",
+    adata: AnnData,
     obsm_key: str,
     groupby: str,
     *,
     normalize: bool = True,
-    figsize: Optional[tuple[float, float]] = None,
+    figsize: tuple[float, float] | None = None,
     cmap: str = "RdBu_r",
-) -> "plt.Figure":
+) -> plt.Figure:
     """Heatmap of mean z_shared activity per cell-type (or other grouping).
 
     Shows which latent dimensions are active in which cell populations,
@@ -858,8 +842,8 @@ def plot_latent_dims_in_heatmap(
     """
     try:
         import seaborn as sns
-    except ImportError:
-        raise ImportError("seaborn is required. Install with: pip install seaborn")
+    except ImportError as exc:
+        raise ImportError("seaborn is required. Install with: pip install seaborn") from exc
     import matplotlib.pyplot as plt
 
     if obsm_key not in adata.obsm:
@@ -910,8 +894,8 @@ def plot_latent_dimension_stats(
     dim_stats_df: pd.DataFrame,
     *,
     highlight_vanished: bool = True,
-    figsize: Optional[tuple[float, float]] = None,
-) -> "plt.Figure":
+    figsize: tuple[float, float] | None = None,
+) -> plt.Figure:
     """Barplot of per-dimension standard deviation, flagging vanished dims.
 
     Parameters
@@ -939,10 +923,7 @@ def plot_latent_dimension_stats(
         figsize = (max(6, 0.35 * n_dims), 3.5)
 
     fig, ax = plt.subplots(figsize=figsize)
-    colors = [
-        "firebrick" if (highlight_vanished and v) else "steelblue"
-        for v in dim_stats_df["is_vanished"]
-    ]
+    colors = ["firebrick" if (highlight_vanished and v) else "steelblue" for v in dim_stats_df["is_vanished"]]
     ax.bar(dim_stats_df["dim"], dim_stats_df["std"], color=colors, width=0.7)
     if highlight_vanished and dim_stats_df["is_vanished"].any():
         ax.axhline(
@@ -974,9 +955,9 @@ def show_top_differential_vars(
     dim_idx: int,
     *,
     top_n: int = 20,
-    figsize: Optional[tuple[float, float]] = None,
+    figsize: tuple[float, float] | None = None,
     color: str = "steelblue",
-) -> "plt.Figure":
+) -> plt.Figure:
     """Horizontal bar chart of top genes for one z_shared dimension.
 
     Parameters
@@ -1030,9 +1011,9 @@ def differential_vars_heatmap(
     traversal_df: pd.DataFrame,
     *,
     top_n_genes: int = 40,
-    figsize: Optional[tuple[float, float]] = None,
+    figsize: tuple[float, float] | None = None,
     cmap: str = "YlOrRd",
-) -> "plt.Figure":
+) -> plt.Figure:
     """Heatmap of traversal effects: z_shared dimensions × top genes.
 
     Shows which genes are most affected by each latent dimension, giving a
@@ -1062,8 +1043,8 @@ def differential_vars_heatmap(
     """
     try:
         import seaborn as sns
-    except ImportError:
-        raise ImportError("seaborn is required. Install with: pip install seaborn")
+    except ImportError as exc:
+        raise ImportError("seaborn is required. Install with: pip install seaborn") from exc
     import matplotlib.pyplot as plt
 
     max_effect_per_gene = traversal_df.max(axis=1)

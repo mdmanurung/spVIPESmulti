@@ -1,24 +1,24 @@
 # Phase 6 - Regression Safety Net
 
-## Added Tests
+## Regression Tests
 
-New additive files:
+Audit regression files:
 
 - `tests/test_audit_dataloaders.py`
-  - `test_dataloaders_all_exports_are_importable`: strict `xfail` for INT-001.
+  - `test_dataloaders_all_exports_are_importable`: guards INT-001.
 - `tests/test_audit_model_spvipesmulti.py`
-  - `test_get_latent_representation_indices_subset_loader`: strict `xfail` for
-    INT-002.
-  - `test_get_latent_representation_uses_validated_adata_manager`: strict
-    `xfail` for INT-003.
+  - `test_get_latent_representation_indices_subset_loader`: guards INT-002.
+  - `test_get_latent_representation_uses_validated_adata_manager`: guards
+    INT-003.
 - `tests/test_audit_module_spvipesmultimodule.py`
-  - `test_negative_binomial_loss_uses_raw_count_targets`: strict `xfail` for
-    INT-005.
-  - `test_single_modal_all_zero_library_is_finite`: strict `xfail` for INT-004.
+  - `test_negative_binomial_loss_uses_raw_count_targets`: guards INT-005.
+  - `test_multimodal_negative_binomial_loss_uses_raw_count_targets`: guards
+    INT-005 in multimodal mode.
+  - `test_single_modal_all_zero_library_is_finite`: guards INT-004.
 
-These tests are intentionally written as expected-failing tests against desired
-contract behavior. When fixes are approved, each corresponding `xfail` should be
-removed in the same patch as the fix.
+These tests now pass normally against the fixed implementation. The only
+remaining skipped audit test is the native-candidate placeholder for NAT-001,
+which is intentionally not part of the 1.0.1 correctness release.
 
 ## Test Data and Reproducibility
 
@@ -31,24 +31,31 @@ removed in the same patch as the fix.
 
 Logs are under `audits/SCVI_EXTENSION_AUDIT/logs/`.
 
-- New files only:
-  - `ruff format --check tests/test_audit_*.py`: PASS.
-  - `ruff check tests/test_audit_*.py`: PASS.
-  - `mdformat --check audits/SCVI_EXTENSION_AUDIT/*.md`: PASS.
-  - `markdownlint audits/SCVI_EXTENSION_AUDIT/*.md`: PASS.
-  - `python -m pytest -p no:cacheprovider tests/test_audit_*.py -q`: PASS as
-    expected-failing safety net, `5 xfailed`.
-- Full suite with additive audit tests:
-  - `python -m pytest -p no:cacheprovider --collect-only -q`: PASS,
-    292 tests collected.
-  - `python -m pytest -p no:cacheprovider -q`: PASS,
-    284 passed, 3 skipped, 5 xfailed, 213 warnings.
+- Audit regression slice:
+  - `python -m pytest -p no:cacheprovider tests/test_audit_*.py -q`: PASS,
+    6 passed, 1 skipped, 1 warning.
+- Full suite after fixes:
+  - `python -m pytest -p no:cacheprovider -q`: PASS, 294 passed, 3 skipped,
+    185 warnings.
+- Quality gates after cleanup:
+  - `ruff format --check .`: PASS.
+  - `ruff check .`: PASS.
+  - `git ls-files '*.md' -z | xargs -0 mdformat --check`: PASS.
+  - `git ls-files '*.md' -z | xargs -0 markdownlint`: PASS.
+  - `python -m mypy src/spVIPESmulti`: PASS.
+  - `LD_LIBRARY_PATH=<spvm>/lib:$LD_LIBRARY_PATH python -m sphinx -W -b html docs audits/SCVI_EXTENSION_AUDIT/docs_build_html`:
+    PASS.
+  - `python -m build`: PASS.
+- PERF-001 benchmark:
+  - `SPVIPES_RUN_BENCHMARKS=1 python -m pytest tests/bench/test_audit_metrics_benchmark.py --benchmark-only -q`:
+    PASS, mean 6.99 ms on the 800 cells x 16 dims fixture.
 
 ## Baseline Comparison
 
-- Before additive audit tests: 285 collected; 284 passed, 1 skipped,
+- Before additive audit tests: 285 collected; 284 passed, 1 skipped, 213
+  warnings.
+- Initial safety-net state: 292 collected; 284 passed, 3 skipped, 5 xfailed,
   213 warnings.
-- After additive audit tests: 292 collected; 284 passed, 3 skipped, 5 xfailed,
-  213 warnings.
-- The functional pass count is unchanged; the new tests add expected-failing
-  guards for fix approval.
+- Fixed state: 297 tests run; 294 passed, 3 skipped, 185 warnings.
+- The INT-001 through INT-005 audit tests have moved from expected-failing
+  safety guards to passing regression coverage.

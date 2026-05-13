@@ -4,11 +4,10 @@ import os
 
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 
+import anndata as ad
 import numpy as np
 import pytest
 from scipy.sparse import csr_matrix
-
-import anndata as ad
 
 import spVIPESmulti as sv
 
@@ -75,16 +74,16 @@ def test_identity_reconstruction_pearson_on_toy_data():
     prepared = _make_prepared()
     model = _model(prepared)
     encoded = svi.encode_cells(model, prepared)
-    kwargs = dict(
-        model=model,
-        z_shared=encoded["shared"][0][:6],
-        z_private=encoded["private"][0][:6],
-        group_idx=0,
-        adata=prepared,
-        cells=encoded["obs_indices"][0][:6],
-        library=encoded["library"][0][:6],
-        include_uncertainty=False,
-    )
+    kwargs = {
+        "model": model,
+        "z_shared": encoded["shared"][0][:6],
+        "z_private": encoded["private"][0][:6],
+        "group_idx": 0,
+        "adata": prepared,
+        "cells": encoded["obs_indices"][0][:6],
+        "library": encoded["library"][0][:6],
+        "include_uncertainty": False,
+    }
     first = svi.decode_counterfactual(**kwargs).X.ravel()
     second = svi.decode_counterfactual(**kwargs).X.ravel()
     corr = np.corrcoef(first, second)[0, 1]

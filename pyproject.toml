@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = "spVIPESmulti"
-version = "1.0.0"
+version = "1.0.1"
 description = "Shared-private Variational Inference with Product of Experts and Supervision"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -83,6 +83,14 @@ line-length = 120
 [tool.ruff]
 src = ["src"]
 line-length = 120
+extend-exclude = [
+    "*.ipynb",
+    ".venv",
+    ".pytest_cache",
+    "audits/SCVI_EXTENSION_AUDIT/docs_build_html",
+]
+
+[tool.ruff.lint]
 select = [
     "F",  # Errors detected by Pyflakes
     "E",  # Error detected by Pycodestyle
@@ -125,13 +133,38 @@ ignore = [
     "D205"
 ]
 
-[tool.ruff.pydocstyle]
+[tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
-[tool.ruff.per-file-ignores]
-"docs/*" = ["I"]
-"tests/*" = ["D"]
+[tool.ruff.lint.per-file-ignores]
+"docs/**/*.py" = ["BLE", "D", "I"]
+"scripts/**/*.py" = ["BLE", "D", "E402"]
+"scripts/*.py" = ["BLE", "D", "E402"]
+"src/spVIPESmulti/__init__.py" = ["E402", "F401"]
+"src/spVIPESmulti/model/base/training_mixin.py" = ["E402"]
+"tests/**/*.py" = ["D"]
+"tests/*.py" = ["D"]
 "*/__init__.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+no_implicit_optional = false
+warn_unused_ignores = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = [
+    "spVIPESmulti.data._manager",
+    "spVIPESmulti.data._utils",
+    "spVIPESmulti.dataloaders._ann_dataloader",
+    "spVIPESmulti.dataloaders._concat_dataloader",
+    "spVIPESmulti.model.base.training_mixin",
+    "spVIPESmulti.model.spvipesmulti",
+    "spVIPESmulti.module.spVIPESmultimodule",
+    "spVIPESmulti.nn.networks",
+]
+ignore_errors = true
 
 [tool.cruft]
 skip = [

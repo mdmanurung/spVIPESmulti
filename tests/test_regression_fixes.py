@@ -13,6 +13,7 @@ Tests in this file:
   - get_latent_representation completeness — Phase 4.8
   - ConcatDataLoader balance — Phase 4.10
 """
+
 import importlib.util
 import os
 
@@ -35,11 +36,14 @@ def _load_module(name, filepath):
 # Helpers
 # ============================================================
 
+
 def _make_decoder(n_private=10, n_shared=25, n_output=50):
     """Instantiate a LinearDecoderSPVIPE without triggering full spVIPESmulti init."""
     import sys
+
     sys.path.insert(0, _SRC)
     from spVIPESmulti.nn.networks import LinearDecoderSPVIPE
+
     return LinearDecoderSPVIPE(
         n_input_private=n_private,
         n_input_shared=n_shared,
@@ -54,10 +58,11 @@ def _make_decoder(n_private=10, n_shared=25, n_output=50):
 def _make_module(n_private=10, n_shared=25, n_genes=40, n_cells=30, n_groups=2, **kwargs):
     """Instantiate a minimal spVIPESmultimodule for use in unit tests."""
     import sys
+
     sys.path.insert(0, _SRC)
     from spVIPESmulti.module.spVIPESmultimodule import spVIPESmultimodule
 
-    groups_lengths = {i: n_genes for i in range(n_groups)}
+    groups_lengths = dict.fromkeys(range(n_groups), n_genes)
     groups_obs_names = [list(range(n_cells))] * n_groups
     groups_var_names = [[f"g{v}" for v in range(n_genes)]] * n_groups
     groups_obs_indices = [list(range(n_cells))] * n_groups
@@ -87,10 +92,10 @@ def _make_minimal_loss_inputs(module, frac=False):
     generative_outputs = {"private_poe": {}}
 
     for g in range(n_groups):
-        x = torch.tensor(
-            [[1.5, 2.0, 3.0], [2.0, 1.0, 4.0], [3.0, 2.0, 1.0]], dtype=torch.float32
-        ) if frac else torch.tensor(
-            [[1.0, 2.0, 3.0], [2.0, 1.0, 4.0], [3.0, 2.0, 1.0]], dtype=torch.float32
+        x = (
+            torch.tensor([[1.5, 2.0, 3.0], [2.0, 1.0, 4.0], [3.0, 2.0, 1.0]], dtype=torch.float32)
+            if frac
+            else torch.tensor([[1.0, 2.0, 3.0], [2.0, 1.0, 4.0], [3.0, 2.0, 1.0]], dtype=torch.float32)
         )
         if module.input_dims[g] != x.shape[1]:
             x = x[:, : module.input_dims[g]]
@@ -126,6 +131,7 @@ def _make_minimal_loss_inputs(module, frac=False):
 # ============================================================
 # Phase 1.1 — Generative latent slicing
 # ============================================================
+
 
 class TestGenerativeSlicing:
     """Ensure the decoder receives the correct private vs shared latents."""
@@ -173,6 +179,7 @@ class TestGenerativeSlicing:
     def test_generative_slicing_correctness(self):
         """generative() must pass private dims to private decoder and shared to shared."""
         import sys
+
         sys.path.insert(0, _SRC)
         module = _make_module(n_private=10, n_shared=25, n_genes=40)
         module.eval()
@@ -181,8 +188,8 @@ class TestGenerativeSlicing:
         torch.manual_seed(42)
 
         # Craft private_stats and poe_stats with known, distinct values
-        z_private = torch.zeros(batch_size, 10)           # private is all zeros
-        z_shared = torch.ones(batch_size, 25) * 5.0       # shared is all fives
+        z_private = torch.zeros(batch_size, 10)  # private is all zeros
+        z_shared = torch.ones(batch_size, 25) * 5.0  # shared is all fives
 
         private_stats = {
             0: {
@@ -271,12 +278,8 @@ class TestPrepareAdatasPrefixOverlap:
         assert len(result.uns["groups_obs_indices"][1]) == 20
 
         # Indices must be disjoint.
-        assert set(result.uns["groups_var_indices"][0]).isdisjoint(
-            set(result.uns["groups_var_indices"][1])
-        )
-        assert set(result.uns["groups_obs_indices"][0]).isdisjoint(
-            set(result.uns["groups_obs_indices"][1])
-        )
+        assert set(result.uns["groups_var_indices"][0]).isdisjoint(set(result.uns["groups_var_indices"][1]))
+        assert set(result.uns["groups_obs_indices"][0]).isdisjoint(set(result.uns["groups_obs_indices"][1]))
 
     def test_multimodal_overlapping_prefixes(self):
         prepare_multimodal_adatas = self._load_prepare_multimodal()
@@ -299,12 +302,8 @@ class TestPrepareAdatasPrefixOverlap:
         # Var indices for each (group, modality) live under the
         # `{group}_{modality}_` prefix; no group should leak into the other's
         # var indices.
-        assert (
-            len(result.uns["groups_modality_var_indices"][0]["rna"]) == 10
-        )
-        assert (
-            len(result.uns["groups_modality_var_indices"][1]["rna"]) == 10
-        )
+        assert len(result.uns["groups_modality_var_indices"][0]["rna"]) == 10
+        assert len(result.uns["groups_modality_var_indices"][1]["rna"]) == 10
 
     def test_multimodal_mismatched_obs_names_raise(self):
         prepare_multimodal_adatas = self._load_prepare_multimodal()
@@ -327,12 +326,14 @@ class TestPrepareAdatasPrefixOverlap:
 # Phase 1.2 — PoE double-prior
 # ============================================================
 
+
 class TestPoEDoublePrior:
     """Absent-label group should contribute near-zero precision (not 1+1=2)."""
 
     def test_absent_group_uses_large_logvar(self):
         """In _label_based_poe, absent groups must have logvar=30 (not 0)."""
         import sys
+
         sys.path.insert(0, _SRC)
         module = _make_module(n_private=10, n_shared=8, n_genes=20, n_groups=2)
 
@@ -371,6 +372,7 @@ class TestPoEDoublePrior:
     def test_product_of_experts_precision_accumulation(self):
         """_product_of_experts with one near-zero-precision expert should behave like 1-expert + prior."""
         import sys
+
         sys.path.insert(0, _SRC)
         module = _make_module(n_private=5, n_shared=4, n_genes=10, n_groups=2)
 
@@ -393,18 +395,21 @@ class TestPoEDoublePrior:
         assert (joint_var < 1.0).all(), f"Expected joint_var < 1, got {joint_var}"
         # With logvar=30 for absent group, absent precision ≈ exp(-30) ≈ 0
         # So joint_var ≈ 1/(1+1) = 0.5
-        assert torch.allclose(joint_var, torch.full_like(joint_var, 0.5), atol=0.01), \
+        assert torch.allclose(joint_var, torch.full_like(joint_var, 0.5), atol=0.01), (
             f"Expected joint_var ≈ 0.5, got {joint_var}"
+        )
 
 
 # ============================================================
 # Phase 2.5 — n_labels guard
 # ============================================================
 
+
 class TestNLabelsGuard:
     def test_use_labels_without_n_labels_raises(self):
         """use_labels=True with n_labels=None should raise ValueError immediately."""
         import sys
+
         sys.path.insert(0, _SRC)
         from spVIPESmulti.module.spVIPESmultimodule import spVIPESmultimodule
 
@@ -417,13 +422,14 @@ class TestNLabelsGuard:
                 groups_obs_indices=[[]] * 2,
                 groups_var_indices=[[]] * 2,
                 use_labels=True,
-                n_labels=None,   # <-- should fail
+                n_labels=None,  # <-- should fail
             )
 
 
 # ============================================================
 # Phase 3.1 — px_scale blending includes private
 # ============================================================
+
 
 class TestPxScaleBlending:
     def test_px_scale_includes_private(self):
@@ -443,8 +449,9 @@ class TestPxScaleBlending:
             *_, px_scale_b = dec("gene", z_private_b, z_shared, library)
 
         # If private is now included in px_scale, it must differ
-        assert not torch.allclose(px_scale_a, px_scale_b), \
+        assert not torch.allclose(px_scale_a, px_scale_b), (
             "px_scale did not change when z_private changed — private component may still be missing"
+        )
 
     def test_px_scale_sums_to_one(self):
         """px_scale should be L1-normalized (sums to 1 per cell)."""
@@ -461,19 +468,20 @@ class TestPxScaleBlending:
             *_, px_scale = dec("gene", z_private, z_shared, library)
 
         row_sums = px_scale.sum(dim=-1)
-        assert torch.allclose(row_sums, torch.ones(batch_size), atol=1e-5), \
-            f"px_scale rows do not sum to 1: {row_sums}"
+        assert torch.allclose(row_sums, torch.ones(batch_size), atol=1e-5), f"px_scale rows do not sum to 1: {row_sums}"
 
 
 # ============================================================
 # Phase 3.2 — DISENTANGLE_PRESETS key validation
 # ============================================================
 
+
 class TestDisentanglePresets:
     def test_all_presets_have_required_keys(self):
         import sys
+
         sys.path.insert(0, _SRC)
-        from spVIPESmulti.model._disentangle_presets import DISENTANGLE_PRESETS, _REQUIRED_PRESET_KEYS
+        from spVIPESmulti.model._disentangle_presets import _REQUIRED_PRESET_KEYS, DISENTANGLE_PRESETS
 
         assert "orthogonality_weight" in _REQUIRED_PRESET_KEYS
         for name, preset in DISENTANGLE_PRESETS.items():
@@ -482,6 +490,7 @@ class TestDisentanglePresets:
 
     def test_existing_presets_keep_orthogonality_loss_disabled(self):
         import sys
+
         sys.path.insert(0, _SRC)
         from spVIPESmulti.model._disentangle_presets import DISENTANGLE_PRESETS
 
@@ -492,6 +501,7 @@ class TestDisentanglePresets:
 
     def test_preset_values_are_non_negative(self):
         import sys
+
         sys.path.insert(0, _SRC)
         from spVIPESmulti.model._disentangle_presets import DISENTANGLE_PRESETS
 
@@ -504,13 +514,15 @@ class TestDisentanglePresets:
 # Phase 3.3 — Negative weight guard (requires full spVIPESmulti)
 # ============================================================
 
+
 class TestNegativeWeightGuard:
     @pytest.mark.integration
     def test_negative_weight_raises(self):
         """Passing a negative disentangle weight should raise ValueError."""
-        import spVIPESmulti
         import anndata as ad
         from scipy.sparse import csr_matrix
+
+        import spVIPESmulti
 
         rng = np.random.default_rng(0)
         X = rng.poisson(5, size=(40, 30)).astype(np.float32)
@@ -535,13 +547,15 @@ class TestNegativeWeightGuard:
 # Phase 3.4 — ConcatDataLoader empty indices guard
 # ============================================================
 
+
 class TestConcatDataLoaderGuard:
     @pytest.mark.integration
     def test_empty_indices_list_raises(self):
         """ConcatDataLoader with empty indices_list should raise ValueError."""
-        import spVIPESmulti
         import anndata as ad
         from scipy.sparse import csr_matrix
+
+        import spVIPESmulti
 
         rng = np.random.default_rng(0)
         X = rng.poisson(5, size=(40, 30)).astype(np.float32)
@@ -556,15 +570,17 @@ class TestConcatDataLoaderGuard:
         model = spVIPESmulti.model.spVIPESmulti(prepared)
 
         from spVIPESmulti.dataloaders._concat_dataloader import ConcatDataLoader
+
         with pytest.raises(ValueError, match="empty"):
             ConcatDataLoader(model.adata_manager, indices_list=[])
 
     @pytest.mark.integration
     def test_all_groups_represented_each_batch(self):
         """Every batch from ConcatDataLoader should contain cells from all groups."""
-        import spVIPESmulti
         import anndata as ad
         from scipy.sparse import csr_matrix
+
+        import spVIPESmulti
         from spVIPESmulti.dataloaders._concat_dataloader import ConcatDataLoader
 
         rng = np.random.default_rng(0)
@@ -592,14 +608,16 @@ class TestConcatDataLoaderGuard:
 # Phase 4.2 — Gradient propagation (moved here from test_multimodal_disentangle)
 # ============================================================
 
+
 class TestGradientPropagation:
     @pytest.mark.integration
     def test_grad_flows_to_encoder_parameters(self):
         """loss.backward() must produce non-zero gradients on model parameters."""
-        import spVIPESmulti
         import anndata as ad
         import pandas as pd
         from scipy.sparse import csr_matrix
+
+        import spVIPESmulti
         from spVIPESmulti.dataloaders._concat_dataloader import ConcatDataLoader
 
         def _make_mod(n_obs, n_vars, seed):
@@ -627,11 +645,16 @@ class TestGradientPropagation:
             groups, modality_likelihoods={"rna": "nb", "protein": "nb"}
         )
         spVIPESmulti.model.spVIPESmulti.setup_anndata(
-            prepared, groups_key="groups", label_key="cell_types",
+            prepared,
+            groups_key="groups",
+            label_key="cell_types",
             modality_likelihoods={"rna": "nb", "protein": "nb"},
         )
         model = spVIPESmulti.model.spVIPESmulti(
-            prepared, n_hidden=32, n_dimensions_shared=8, n_dimensions_private=4,
+            prepared,
+            n_hidden=32,
+            n_dimensions_shared=8,
+            n_dimensions_private=4,
             disentangle_preset="full",
         )
 
@@ -647,10 +670,7 @@ class TestGradientPropagation:
 
         loss_output.loss.backward()
 
-        has_grad = any(
-            p.grad is not None and p.grad.abs().sum().item() > 0
-            for p in model.module.parameters()
-        )
+        has_grad = any(p.grad is not None and p.grad.abs().sum().item() > 0 for p in model.module.parameters())
         assert has_grad, "No gradients flowed to any model parameter after loss.backward()"
 
 
@@ -658,12 +678,14 @@ class TestGradientPropagation:
 # Phase 4.6 — Disentangle preset edge cases
 # ============================================================
 
+
 class TestDisentanglePresetEdgeCases:
     @pytest.mark.integration
     def test_invalid_preset_raises(self):
-        import spVIPESmulti
         import anndata as ad
         from scipy.sparse import csr_matrix
+
+        import spVIPESmulti
 
         rng = np.random.default_rng(0)
         X = rng.poisson(5, size=(40, 20)).astype(np.float32)
@@ -682,9 +704,10 @@ class TestDisentanglePresetEdgeCases:
     @pytest.mark.integration
     def test_preset_off_with_weight_override_works(self):
         """Preset='off' with a weight override should construct cleanly."""
-        import spVIPESmulti
         import anndata as ad
         from scipy.sparse import csr_matrix
+
+        import spVIPESmulti
 
         rng = np.random.default_rng(0)
         X = rng.poisson(5, size=(40, 20)).astype(np.float32)
@@ -710,13 +733,15 @@ class TestDisentanglePresetEdgeCases:
 # Phase 4.8 — get_latent_representation completeness
 # ============================================================
 
+
 class TestLatentRepresentationCompleteness:
     @pytest.mark.integration
     def test_output_size_matches_n_cells(self):
         """Latent output arrays must have exactly n_cells rows for each group."""
-        import spVIPESmulti
         import anndata as ad
         from scipy.sparse import csr_matrix
+
+        import spVIPESmulti
 
         rng = np.random.default_rng(0)
         n_cells = [30, 45]
@@ -736,10 +761,12 @@ class TestLatentRepresentationCompleteness:
         result = model.get_latent_representation(gi, batch_size=16)
 
         for g, expected_n in enumerate(n_cells):
-            assert result["shared"][g].shape[0] == expected_n, \
+            assert result["shared"][g].shape[0] == expected_n, (
                 f"Group {g}: expected {expected_n} shared rows, got {result['shared'][g].shape[0]}"
-            assert result["private"][g].shape[0] == expected_n, \
+            )
+            assert result["private"][g].shape[0] == expected_n, (
                 f"Group {g}: expected {expected_n} private rows, got {result['private'][g].shape[0]}"
+            )
 
 
 class TestJeffreysAndLikelihoodHardening:
@@ -871,6 +898,7 @@ class TestUnequalGroupBatchLossAggregation:
 
     def test_multimodal_loss_handles_unequal_group_batch_sizes(self, monkeypatch):
         import sys
+
         sys.path.insert(0, _SRC)
         from spVIPESmulti.module.spVIPESmultimodule import spVIPESmultimodule
 

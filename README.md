@@ -9,11 +9,11 @@
 
 </div>
 
----
+______________________________________________________________________
 
 ## About
 
-spVIPESmulti (v1.0.0) enables robust integration of multi-group single-cell datasets through a principled shared-private latent space decomposition. The model learns both **shared** representations (biological signals common across groups) and **private** representations (group-specific variation) using a Product of Experts (PoE) framework.
+spVIPESmulti (v1.0.1) enables robust integration of multi-group single-cell datasets through a principled shared-private latent space decomposition. The model learns both **shared** representations (biological signals common across groups) and **private** representations (group-specific variation) using a Product of Experts (PoE) framework.
 
 An optional **disentanglement objective** (inspired by CellDISECT and Multi-ContrastiveVAE) can additionally enforce that `z_shared` encodes biology — and only biology — while `z_private` encodes group-specific variation — and only that. This objective is fully supported in both single-modal and multimodal modes. See [Disentanglement Objective](#disentanglement-objective) below.
 
@@ -32,10 +32,10 @@ Current package capabilities include single-modal and multimodal AnnData prepara
 
 ### Requirements
 
--   Python ≥ 3.10
--   scvi-tools ≥ 1.0, < 2 (built on `lightning.pytorch`)
--   PyTorch ≥ 2.0 (GPU strongly recommended)
--   zuko ≥ 1.0.0 (normalizing flows prior)
+- Python ≥ 3.10
+- scvi-tools ≥ 1.0, < 2 (built on `lightning.pytorch`)
+- PyTorch ≥ 2.0 (GPU strongly recommended)
+- zuko ≥ 1.0.0 (normalizing flows prior)
 
 > **scvi-tools 1.x note.** The deprecated `use_gpu=True` kwarg on `model.train(...)` has been removed upstream. Pass GPU settings via `trainer_kwargs`: `model.train(accelerator="gpu", devices=1)`. Several private scvi-tools modules removed in 1.x are now vendored under `spVIPESmulti.data`.
 
@@ -230,9 +230,10 @@ model = spVIPESmulti.model.spVIPESmulti(
 
 `strict_likelihood_support` enables additional input validation before
 likelihood `log_prob` evaluation:
+
 - always validates finite inputs and non-negative targets for NB likelihood;
 - in strict mode, also enforces integer-like counts for NB when
-    `log_variational_generative=False`.
+  `log_variational_generative=False`.
 
 This is useful when you want early, explicit failures on mismatched training
 targets instead of downstream warning-only behavior.
@@ -254,10 +255,10 @@ model.train(
 
 spVIPESmulti exposes an optional disentanglement objective inspired by **CellDISECT** and **Multi-ContrastiveVAE**. It is implemented as a mix of:
 
--   **Adversarial losses** via gradient reversal (GRL / DANN-style) — to *erase* a covariate from a latent space
--   **Supervised classification losses** — acting as variational MI lower bounds to *preserve* a covariate
--   **Prototype InfoNCE** on `z_shared` — pulls same-label cells together across groups
--   **Optional F3 orthogonality loss** — penalizes aligned-dimension correlation between `z_shared` and `z_private` within configured strata
+- **Adversarial losses** via gradient reversal (GRL / DANN-style) — to *erase* a covariate from a latent space
+- **Supervised classification losses** — acting as variational MI lower bounds to *preserve* a covariate
+- **Prototype InfoNCE** on `z_shared` — pulls same-label cells together across groups
+- **Optional F3 orthogonality loss** — penalizes aligned-dimension correlation between `z_shared` and `z_private` within configured strata
 
 The core loss components and what they enforce:
 
@@ -323,9 +324,9 @@ model = spVIPESmulti.model.spVIPESmulti(
 
 ### Constraints
 
--   **Labels required for label-using components.** Components 2 (`label_shared`), 4 (`label_private`), and 5 (contrastive) require `label_key` in `setup_anndata`. Components 1 and 3 (the `group_*` classifiers) work without labels — group identity is always known.
--   **Covariate keys required for covariate components.** `disentangle_batch_shared_weight` requires `batch_key`; `disentangle_donor_shared_weight` and `disentangle_donor_private_weight` require `donor_key`.
--   **Multimodal fully supported.** Shared components act on the post-PoE shared latent. Private components loop over each modality's private latent, summing per-modality CE terms.
+- **Labels required for label-using components.** Components 2 (`label_shared`), 4 (`label_private`), and 5 (contrastive) require `label_key` in `setup_anndata`. Components 1 and 3 (the `group_*` classifiers) work without labels — group identity is always known.
+- **Covariate keys required for covariate components.** `disentangle_batch_shared_weight` requires `batch_key`; `disentangle_donor_shared_weight` and `disentangle_donor_private_weight` require `donor_key`.
+- **Multimodal fully supported.** Shared components act on the post-PoE shared latent. Private components loop over each modality's private latent, summing per-modality CE terms.
 
 See [`docs/notebooks/disentangle_ablation.ipynb`](docs/notebooks/disentangle_ablation.ipynb) for a per-component ablation walkthrough, and `scripts/validate_disentanglement_multimodal.py` for a systematic multimodal preset benchmark.
 
@@ -547,7 +548,7 @@ fig = spVIPESmulti.pl.differential_vars_heatmap(traversal)
 
 This section covers common training pathologies visible in `spVIPESmulti.pl.training_curves(model)` and how to fix them.
 
----
+______________________________________________________________________
 
 ### `kl_divergence_private_group_N` is orders of magnitude higher than other groups
 
@@ -558,6 +559,7 @@ This section covers common training pathologies visible in `spVIPESmulti.pl.trai
 **Fixes (in order of impact):**
 
 1. **Reduce `disentangle_label_private_weight`** (no code change needed). The default for `"no_contrastive"` and `"full"` presets is 1.0. Drop it to 0.1–0.3:
+
    ```python
    model = spVIPESmulti.model.spVIPESmulti(
        adata_spv,
@@ -566,17 +568,19 @@ This section covers common training pathologies visible in `spVIPESmulti.pl.trai
    )
    ```
 
-2. **Increase KL warmup** (`n_epochs_kl_warmup`). A longer warmup (150–200 epochs) gives the KL penalty more time to regularise the private posterior before the GRL has fully pushed it toward high variance:
+1. **Increase KL warmup** (`n_epochs_kl_warmup`). A longer warmup (150–200 epochs) gives the KL penalty more time to regularise the private posterior before the GRL has fully pushed it toward high variance:
+
    ```python
    model.train(..., n_epochs_kl_warmup=150)
    ```
 
-3. **Soften `group_loss_weights`**. Inverse-frequency weights (`1/n`) can give small groups an 8× higher effective loss scale. Square-root weights are a less aggressive alternative:
+1. **Soften `group_loss_weights`**. Inverse-frequency weights (`1/n`) can give small groups an 8× higher effective loss scale. Square-root weights are a less aggressive alternative:
+
    ```python
    GROUP_LOSS_WEIGHTS = [1 / n**0.5 for n in GROUP_SIZES]
    ```
 
----
+______________________________________________________________________
 
 ### LR scheduler never fires / loss plateau not detected
 
@@ -585,6 +589,7 @@ This section covers common training pathologies visible in `spVIPESmulti.pl.trai
 **Cause:** `ReduceLROnPlateau` requires the monitored metric to have stopped improving by more than `threshold` for `patience` consecutive checks. If the metric is still slowly declining, the scheduler never triggers.
 
 **Fix:** Switch to a cosine schedule which decays on a fixed timeline regardless of plateau detection:
+
 ```python
 model.train(
     ...,
@@ -596,7 +601,7 @@ model.train(
 )
 ```
 
----
+______________________________________________________________________
 
 ### Reconstruction loss stalls early; ELBO doesn't improve after KL warmup
 
@@ -611,7 +616,7 @@ model.train(
 | `batch_size` too small | Larger batches (512–2048) reduce gradient noise, especially on GPU |
 | KL weight fully active too fast | Increase `n_epochs_kl_warmup` (75→150) |
 
----
+______________________________________________________________________
 
 ### Integration is poor — groups don't overlap in the shared UMAP
 
@@ -621,7 +626,8 @@ model.train(
 
 1. **Label-PoE quality**: If `label_key` labels are inconsistent across groups (different annotation granularity, or one group has many unlabelled cells), the PoE posteriors are misaligned. Use a coarser, consensus annotation across groups.
 
-2. **`disentangle_group_shared_weight` too low**: Increase this to 1.0–2.0 to push group identity out of `z_shared`:
+1. **`disentangle_group_shared_weight` too low**: Increase this to 1.0–2.0 to push group identity out of `z_shared`:
+
    ```python
    model = spVIPESmulti.model.spVIPESmulti(
        adata_spv,
@@ -630,13 +636,14 @@ model.train(
    )
    ```
 
-3. **Imbalanced groups**: Apply inverse-frequency `group_loss_weights` so the smallest group does not get overwhelmed during training:
+1. **Imbalanced groups**: Apply inverse-frequency `group_loss_weights` so the smallest group does not get overwhelmed during training:
+
    ```python
    GROUP_SIZES = [len(g) for g in group_indices_list]
    GROUP_LOSS_WEIGHTS = [1 / n**0.5 for n in GROUP_SIZES]   # sqrt weighting
    ```
 
----
+______________________________________________________________________
 
 ### Recommended starting hyperparameters (3-group dataset, ~10k cells)
 
@@ -693,7 +700,7 @@ model.train(
 | `disentangle_label_private_weight` | 0.1 | Keep low; high values trigger GRL-driven variance explosion |
 | `group_loss_weights` | `1/sqrt(n)` | Less extreme than `1/n`; balances groups without over-weighting small ones |
 
----
+______________________________________________________________________
 
 ## Counterfactual Interventions
 
@@ -735,26 +742,26 @@ When `condition_key` was registered in `setup_anndata(...)`,
 the registered obs column and decode selected cells through a source or target
 group decoder.
 
----
+______________________________________________________________________
 
 ## Documentation & Tutorials
 
--   [Enrichment quickstart (ORA/GSEA/ULM)](docs/enrichment_quickstart.md) — Interpretation-first workflow with reporting + plotting helpers
--   [Basic Tutorial](docs/notebooks/Tutorial.ipynb) — Complete walkthrough of spVIPESmulti functionality
--   [Disentanglement ablation](docs/notebooks/disentangle_ablation.ipynb) — Per-component ablation of the disentanglement objective
--   [PBMC CITE-seq vaccination](docs/notebooks/pbmc_citeseq_tutorial.ipynb) — Three time-point integration + multimodal appendix
--   [CINEMA-OT + NF prior](docs/notebooks/cinemaot_nf_vignette.ipynb) — Gaussian vs. NSF prior vs. disentanglement
--   [Plasmodium liver-stage](docs/notebooks/biolord_comparison_plasmodium_tutorial.ipynb) — Comparison with biolord
--   [Malaria B-cell recommended workflow](docs/notebooks/malaria_bcells_recommended.ipynb) — Lightweight end-to-end B-cell workflow from CSV inputs
--   [Malaria B-cell ablations](docs/notebooks/malaria_bcells_nodisentangle.ipynb) and [hyperparameter exploration](docs/notebooks/malaria_bcells_hparam_explore.ipynb)
--   [Kang IFN-beta workflow](docs/notebooks/kang_ifn_commit_old.ipynb) — IFN-beta benchmark notebook
--   [Counterfactual interventions](docs/notebooks/counterfactual_interventions_tutorial.ipynb) — Safe centroid-shift editing with OOD diagnostics
--   [Multimodal + NF prior](docs/notebooks/multimodal_nf_tutorial.ipynb) — RNA + protein integration with `prepare_multimodal_adatas`
--   [API Documentation][link-api] — Comprehensive API reference
+- [Enrichment quickstart (ORA/GSEA/ULM)](docs/enrichment_quickstart.md) — Interpretation-first workflow with reporting + plotting helpers
+- [Basic Tutorial](docs/notebooks/Tutorial.ipynb) — Complete walkthrough of spVIPESmulti functionality
+- [Disentanglement ablation](docs/notebooks/disentangle_ablation.ipynb) — Per-component ablation of the disentanglement objective
+- [PBMC CITE-seq vaccination](docs/notebooks/pbmc_citeseq_tutorial.ipynb) — Three time-point integration + multimodal appendix
+- [CINEMA-OT + NF prior](docs/notebooks/cinemaot_nf_vignette.ipynb) — Gaussian vs. NSF prior vs. disentanglement
+- [Plasmodium liver-stage](docs/notebooks/biolord_comparison_plasmodium_tutorial.ipynb) — Comparison with biolord
+- [Malaria B-cell recommended workflow](docs/notebooks/malaria_bcells_recommended.ipynb) — Lightweight end-to-end B-cell workflow from CSV inputs
+- [Malaria B-cell ablations](docs/notebooks/malaria_bcells_nodisentangle.ipynb) and [hyperparameter exploration](docs/notebooks/malaria_bcells_hparam_explore.ipynb)
+- [Kang IFN-beta workflow](docs/notebooks/kang_ifn_commit_old.ipynb) — IFN-beta benchmark notebook
+- [Counterfactual interventions](docs/notebooks/counterfactual_interventions_tutorial.ipynb) — Safe centroid-shift editing with OOD diagnostics
+- [Multimodal + NF prior](docs/notebooks/multimodal_nf_tutorial.ipynb) — RNA + protein integration with `prepare_multimodal_adatas`
+- [API Documentation][link-api] — Comprehensive API reference
 
 ## Support
 
--   [Issue Tracker][issue-tracker] — Report bugs and request features
+- [Issue Tracker][issue-tracker] — Report bugs and request features
 
 ## Citation
 
@@ -773,19 +780,13 @@ If you use spVIPESmulti in your research, please cite:
 
 **Paper**: [bioRxiv preprint](https://www.biorxiv.org/content/10.1101/2023.11.07.565957v1)
 
----
+______________________________________________________________________
 
 <!-- Badge references -->
 
-[badge-tests]: https://img.shields.io/github/actions/workflow/status/mdmanurung/spVIPESmulti/test.yaml?branch=main
-[badge-python]: https://img.shields.io/pypi/pyversions/spVIPESmulti
-[badge-pypi]: https://img.shields.io/pypi/v/spVIPESmulti
 [badge-docs]: https://readthedocs.org/projects/spvipesmulti/badge/?version=latest
-[link-tests]: https://github.com/mdmanurung/spVIPESmulti/actions/workflows/test.yml
-[link-python]: https://pypi.org/project/spVIPESmulti
-[link-pypi]: https://pypi.org/project/spVIPESmulti
-[scverse-discourse]: https://discourse.scverse.org/
+[badge-pypi]: https://img.shields.io/pypi/v/spVIPESmulti
 [issue-tracker]: https://github.com/mdmanurung/spVIPESmulti/issues
-[changelog]: https://spVIPESmulti.readthedocs.io/latest/changelog.html
-[link-docs]: https://spvipesmulti.readthedocs.io/en/latest/
 [link-api]: https://spvipesmulti.readthedocs.io/en/latest/api.html
+[link-docs]: https://spvipesmulti.readthedocs.io/en/latest/
+[link-pypi]: https://pypi.org/project/spVIPESmulti

@@ -4,11 +4,10 @@ import os
 
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 
+import anndata as ad
 import numpy as np
 import pytest
 from scipy.sparse import csr_matrix
-
-import anndata as ad
 
 import spVIPESmulti as sv
 
@@ -81,7 +80,13 @@ def test_integration_report_contains_expected_fields():
     prepared = _prepared()
     model = _model(prepared)
     report = svi.integration_report(model, prepared, group_key="groups", label_key="condition")
-    assert {"leakage_shared", "leakage_private", "shared_variance", "private_variance", "condition_separability"}.issubset(report)
+    assert {
+        "leakage_shared",
+        "leakage_private",
+        "shared_variance",
+        "private_variance",
+        "condition_separability",
+    }.issubset(report)
     assert 0.0 <= report["leakage_shared"] <= 1.0
 
 

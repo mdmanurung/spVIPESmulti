@@ -18,10 +18,10 @@ Private latent (z_private) — you want groups to *separate*:
 
 ``integration_report`` bundles all of these into a single DataFrame.
 """
+
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -138,8 +138,12 @@ def hsic_rbf(
     sigma_private = _resolve_rbf_bandwidth(zp, bandwidth)
     k_shared = _rbf_kernel(zs, sigma_shared)
     k_private = _rbf_kernel(zp, sigma_private)
-    k_centered = k_shared - k_shared.mean(axis=0, keepdims=True) - k_shared.mean(axis=1, keepdims=True) + k_shared.mean()
-    l_centered = k_private - k_private.mean(axis=0, keepdims=True) - k_private.mean(axis=1, keepdims=True) + k_private.mean()
+    k_centered = (
+        k_shared - k_shared.mean(axis=0, keepdims=True) - k_shared.mean(axis=1, keepdims=True) + k_shared.mean()
+    )
+    l_centered = (
+        k_private - k_private.mean(axis=0, keepdims=True) - k_private.mean(axis=1, keepdims=True) + k_private.mean()
+    )
     hsic = float(np.sum(k_centered * l_centered) / ((n_obs - 1) ** 2))
     return max(0.0, hsic)
 
@@ -257,7 +261,7 @@ def clisi(rep: np.ndarray, labels: np.ndarray, k: int = 30) -> float:
 
 
 def kbet(rep: np.ndarray, groups: np.ndarray, k: int = 20) -> float:
-    """kBET acceptance rate (Büttner et al., 2019) — chi-squared per-cell test.
+    """KBET acceptance rate (Büttner et al., 2019) — chi-squared per-cell test.
 
     For each cell, compares the observed group frequency in its k-NN
     neighbourhood to the global expected frequency via a chi-squared
@@ -330,9 +334,7 @@ def knn_purity(rep: np.ndarray, labels: np.ndarray, k: int = 20) -> float:
     nn = NearestNeighbors(n_neighbors=k + 1).fit(rep)
     _, idx = nn.kneighbors(rep)
     idx = idx[:, 1:]
-    return float(
-        np.mean([(labels[idx[i]] == labels[i]).mean() for i in range(len(labels))])
-    )
+    return float(np.mean([(labels[idx[i]] == labels[i]).mean() for i in range(len(labels))]))
 
 
 def leiden_ari(rep: np.ndarray, labels: np.ndarray, resolution: float = 0.8) -> float:
@@ -363,8 +365,7 @@ def leiden_ari(rep: np.ndarray, labels: np.ndarray, resolution: float = 0.8) -> 
         import warnings
 
         warnings.warn(
-            "leiden_ari requires igraph. Install with: pip install igraph. "
-            "Returning nan.",
+            "leiden_ari requires igraph. Install with: pip install igraph. Returning nan.",
             ImportWarning,
             stacklevel=2,
         )
@@ -415,7 +416,7 @@ def integration_report(
     group_labels: np.ndarray,
     cell_labels: np.ndarray,
     *,
-    z_private_dict: Optional[dict[str, np.ndarray]] = None,
+    z_private_dict: dict[str, np.ndarray] | None = None,
     k: int = 20,
     leiden_resolution: float = 0.8,
 ) -> pd.DataFrame:
@@ -495,7 +496,7 @@ def integration_report(
         #
         # We need cell-type labels aligned to each group's rows. Build a mapping
         # from global cell order: for group g we use the cells in group_labels==g.
-        unique_group_names = list(z_private_dict.keys())
+        list(z_private_dict.keys())
         group_label_arr = np.asarray(group_labels)
         cell_label_arr = np.asarray(cell_labels)
 
@@ -519,6 +520,7 @@ def integration_report(
                 n_sub = min(2000, n_g)
                 pick = rng.choice(n_g, size=n_sub, replace=False)
                 from sklearn.metrics import silhouette_score
+
                 sil = float(silhouette_score(z_priv[pick], ct_labels[pick]))
             else:
                 sil = float("nan")
@@ -544,11 +546,11 @@ def integration_report(
 
 def latent_dimension_stats(
     latent_array: np.ndarray,
-    mu_array: Optional[np.ndarray] = None,
-    sigma_array: Optional[np.ndarray] = None,
+    mu_array: np.ndarray | None = None,
+    sigma_array: np.ndarray | None = None,
     threshold: float = 0.05,
 ) -> pd.DataFrame:
-    """Per-dimension activity statistics for a latent matrix.
+    r"""Per-dimension activity statistics for a latent matrix.
 
     Computes the standard deviation and mean absolute value of each column.
     When ``mu_array`` and ``sigma_array`` are provided (posterior mean and
@@ -612,7 +614,7 @@ def latent_dimension_stats(
         mu = np.asarray(mu_array)
         sigma = np.asarray(sigma_array).clip(min=1e-8)
         # Marginal KL per dimension: mean over cells
-        kl_per_dim = (0.5 * (mu ** 2 + sigma ** 2 - 1.0 - 2.0 * np.log(sigma))).mean(axis=0)
+        kl_per_dim = (0.5 * (mu**2 + sigma**2 - 1.0 - 2.0 * np.log(sigma))).mean(axis=0)
         is_collapsed = kl_per_dim < threshold
     else:
         # Fallback: std heuristic
@@ -703,9 +705,9 @@ def reconstruction_error(
     was_training = module.training
     module.eval()
 
-    accum_sq_err = {g: 0.0 for g in range(n_groups)}
-    accum_nll = {g: 0.0 for g in range(n_groups)}
-    accum_count = {g: 0 for g in range(n_groups)}
+    accum_sq_err = dict.fromkeys(range(n_groups), 0.0)
+    accum_nll = dict.fromkeys(range(n_groups), 0.0)
+    accum_count = dict.fromkeys(range(n_groups), 0)
 
     try:
         with torch.no_grad():
@@ -729,8 +731,8 @@ def reconstruction_error(
                     if key not in gen_out["private_poe"]:
                         continue
 
-                    px_scale = gen_out["private_poe"][key]["px_scale"].cpu()
-                    px_rate = gen_out["private_poe"][key]["px_rate_shared"].cpu()
+                    gen_out["private_poe"][key]["px_scale"].cpu()
+                    gen_out["private_poe"][key]["px_rate_shared"].cpu()
 
                     # Raw observed counts, sliced to group's genes
                     x_raw = per_group[g][REGISTRY_KEYS.X_KEY]
@@ -749,6 +751,7 @@ def reconstruction_error(
                     # W-043: Poisson NLL with mixed rate (private + shared blend)
                     # and proper log-factorial term via torch.distributions.Poisson.
                     import torch.distributions as _td
+
                     px_rate_priv = gen_out["private_poe"][key]["px_rate_private"].cpu()
                     px_rate_shar = gen_out["private_poe"][key]["px_rate_shared"].cpu()
                     px_mixing = getattr(gen_out["private_poe"][key]["px"], "mixture_logits", None)

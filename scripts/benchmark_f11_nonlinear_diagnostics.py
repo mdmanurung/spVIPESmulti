@@ -7,11 +7,12 @@ import csv
 import json
 import math
 import os
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Sequence
+from typing import Any
 
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 
@@ -160,12 +161,7 @@ def recommend_f11_diagnostics(
         failures.append(f"seed coverage mismatch: expected {sorted(expected)}, observed {sorted(observed)}")
 
     missing_metrics = sorted(
-        {
-            metric
-            for row in ok_rows
-            for metric in REQUIRED_METRICS
-            if not _is_finite(row.get(metric))
-        }
+        {metric for row in ok_rows for metric in REQUIRED_METRICS if not _is_finite(row.get(metric))}
     )
     if missing_metrics:
         failures.append(f"missing or nonfinite required metrics: {missing_metrics}")
@@ -323,7 +319,11 @@ def _compute_f11_metrics(model, prepared, group_indices_list, cfg: Config, seed:
     z_shared = _stitch(latents["shared"], group_indices_list, prepared.n_obs)
     z_private = _stitch(latents["private"], group_indices_list, prepared.n_obs)
 
-    strata = prepared.obs["sample"].astype(str).values if "sample" in prepared.obs else prepared.obs["groups"].astype(str).values
+    strata = (
+        prepared.obs["sample"].astype(str).values
+        if "sample" in prepared.obs
+        else prepared.obs["groups"].astype(str).values
+    )
     _, strata_ids = np.unique(strata, return_inverse=True)
     ortho_mean, ortho_worst, ortho_excluded = _within_stratum_corr_norm(
         z_shared,
@@ -418,7 +418,7 @@ def train_and_score(cfg: Config, prepared, group_indices_list, *, seed: int) -> 
         )
         row["train_wall_time_sec"] = round(perf_counter() - start, 4)
         row.update(_compute_f11_metrics(model, prepared, group_indices_list, cfg, seed))
-    except Exception as exc:  # noqa: BLE001  # pragma: no cover - benchmark guardrail
+    except Exception as exc:  # pragma: no cover - benchmark guardrail
         row["notes"] = f"failed: {type(exc).__name__}: {exc}"
     return row
 

@@ -1,14 +1,32 @@
 """Generate multimodal_nf_tutorial.ipynb programmatically."""
+
 import json
 from pathlib import Path
 
 cells = []
 
+
 def md(src):
-    cells.append({"cell_type": "markdown", "metadata": {}, "source": src.rstrip("\n").split("\n") and [l + "\n" for l in src.rstrip("\n").split("\n")][:-1] + [src.rstrip("\n").split("\n")[-1]]})
+    cells.append(
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": src.rstrip("\n").split("\n")
+            and [l + "\n" for l in src.rstrip("\n").split("\n")][:-1] + [src.rstrip("\n").split("\n")[-1]],
+        }
+    )
+
 
 def code(src):
-    cells.append({"cell_type": "code", "metadata": {}, "execution_count": None, "outputs": [], "source": [l + "\n" for l in src.rstrip("\n").split("\n")[:-1]] + [src.rstrip("\n").split("\n")[-1]]})
+    cells.append(
+        {
+            "cell_type": "code",
+            "metadata": {},
+            "execution_count": None,
+            "outputs": [],
+            "source": [l + "\n" for l in src.rstrip("\n").split("\n")[:-1]] + [src.rstrip("\n").split("\n")[-1]],
+        }
+    )
 
 
 # ------------------------------------------------------------------

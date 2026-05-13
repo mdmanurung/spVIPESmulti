@@ -1,7 +1,6 @@
 """Utilities for splitting a dataset into training, validation, and test set."""
 
 from math import ceil, floor
-from typing import Optional
 
 import lightning.pytorch as pl
 import numpy as np
@@ -12,7 +11,7 @@ from spVIPESmulti.data._manager import AnnDataManager
 from spVIPESmulti.dataloaders._concat_dataloader import ConcatDataLoader
 
 
-def _validate_data_split(n_samples: int, train_size: float, validation_size: Optional[float] = None) -> tuple[int, int]:
+def _validate_data_split(n_samples: int, train_size: float, validation_size: float | None = None) -> tuple[int, int]:
     """Compute (n_train, n_val) for a split, vendored from scvi-tools to avoid a private import."""
     if train_size > 1.0 or train_size <= 0.0:
         raise ValueError("Invalid train_size. Must be: 0 < train_size <= 1")
@@ -60,7 +59,7 @@ class MultiGroupDataSplitter(pl.LightningDataModule):
         adata_manager: AnnDataManager,
         group_indices_list: list[list[int]],
         train_size: float = 0.9,
-        validation_size: Optional[float] = None,
+        validation_size: float | None = None,
         **kwargs,
     ) -> None:
         super().__init__()
@@ -85,7 +84,7 @@ class MultiGroupDataSplitter(pl.LightningDataModule):
         self.n_train = int(sum(n_train_per_group))
         self.n_val = int(sum(n_val_per_group))
 
-    def setup(self, stage: Optional[str] = None):
+    def setup(self, stage: str | None = None):
         random_state = np.random.RandomState(seed=settings.seed)
 
         self.train_idx_per_group = []
@@ -129,7 +128,7 @@ class MultiGroupDataSplitter(pl.LightningDataModule):
             drop_last=True,
         )
 
-    def val_dataloader(self) -> Optional[ConcatDataLoader]:
+    def val_dataloader(self) -> ConcatDataLoader | None:
         # Lightning treats None as "no validation". We return None explicitly
         # when any group ended up with zero validation cells, so the user gets
         # a quiet "no validation this run" rather than a cryptic crash inside
@@ -143,7 +142,7 @@ class MultiGroupDataSplitter(pl.LightningDataModule):
             )
         return None
 
-    def test_dataloader(self) -> Optional[ConcatDataLoader]:
+    def test_dataloader(self) -> ConcatDataLoader | None:
         if np.all([len(test_idx) > 0 for test_idx in self.test_idx_per_group]):
             return self._get_multigroup_dataloader(
                 self.test_idx_per_group,

@@ -1,6 +1,5 @@
 import logging
 import warnings
-from typing import Optional, Union
 from uuid import uuid4
 
 import h5py
@@ -18,8 +17,10 @@ except ImportError:  # anndata >= 0.11
     try:
         from anndata._core.sparse_dataset import BaseCompressedSparseDataset as SparseDataset
     except ImportError:
-        class SparseDataset:  # noqa: D401 — sentinel for isinstance fallthrough
+
+        class SparseDataset:
             """Sentinel; no real SparseDataset is available on this anndata version."""
+
 
 # TODO use the experimental api once we lower bound to anndata 0.8
 try:
@@ -40,9 +41,9 @@ logger = logging.getLogger(__name__)
 def get_anndata_attribute(
     adata: AnnOrMuData,
     attr_name: str,
-    attr_key: Optional[str],
-    mod_key: Optional[str] = None,
-) -> Union[np.ndarray, pd.DataFrame]:
+    attr_key: str | None,
+    mod_key: str | None = None,
+) -> np.ndarray | pd.DataFrame:
     """Returns the requested data from a given AnnData/MuData object."""
     if mod_key is not None:
         if isinstance(adata, AnnData):
@@ -69,9 +70,9 @@ def get_anndata_attribute(
 
 def _set_data_in_registry(
     adata: AnnData,
-    data: Union[np.ndarray, pd.DataFrame],
+    data: np.ndarray | pd.DataFrame,
     attr_name: str,
-    attr_key: Optional[str],
+    attr_key: str | None,
 ):
     """Sets the data in the AnnData object according to the attr_name and attr_key.
 
@@ -102,7 +103,7 @@ def _set_data_in_registry(
         setattr(adata, attr_name, attribute)
 
 
-def _verify_and_correct_data_format(adata: AnnData, attr_name: str, attr_key: Optional[str]):
+def _verify_and_correct_data_format(adata: AnnData, attr_name: str, attr_key: str | None):
     """Will make sure that the user's AnnData field is C_CONTIGUOUS and csr if it is dense numpy or sparse respectively.
 
     Parameters
@@ -139,7 +140,7 @@ def _make_column_categorical(
     df: pd.DataFrame,
     column_key: str,
     alternate_column_key: str,
-    categorical_dtype: Optional[Union[str, CategoricalDtype]] = None,
+    categorical_dtype: str | CategoricalDtype | None = None,
 ):
     """Makes the data in column_key in DataFrame all categorical.
 
@@ -167,9 +168,7 @@ def _make_column_categorical(
     if np.min(counts) < 3:
         category = unique[np.argmin(counts)]
         warnings.warn(
-            "Category {} in adata.obs['{}'] has fewer than 3 cells. Models may not train properly.".format(
-                category, alternate_column_key
-            ),
+            f"Category {category} in adata.obs['{alternate_column_key}'] has fewer than 3 cells. Models may not train properly.",
             UserWarning,
             stacklevel=settings.warnings_stacklevel,
         )
@@ -187,7 +186,7 @@ def _assign_adata_uuid(adata: AnnOrMuData, overwrite: bool = False) -> None:
 
 
 def _check_nonnegative_integers(
-    data: Union[pd.DataFrame, np.ndarray, sp_sparse.spmatrix, h5py.Dataset],
+    data: pd.DataFrame | np.ndarray | sp_sparse.spmatrix | h5py.Dataset,
     n_to_check: int = 20,
 ):
     """Approximately checks values of data to ensure it is count data."""
@@ -246,11 +245,11 @@ def _check_mudata_fully_paired(mdata: MuData):
             )
 
 
-def _get_adata_minify_type(adata: AnnData) -> Union[MinifiedDataType, None]:
+def _get_adata_minify_type(adata: AnnData) -> MinifiedDataType | None:
     return adata.uns.get(_constants._ADATA_MINIFY_TYPE_UNS_KEY, None)
 
 
-def _is_minified(adata: Union[AnnData, str]) -> bool:
+def _is_minified(adata: AnnData | str) -> bool:
     uns_key = _constants._ADATA_MINIFY_TYPE_UNS_KEY
     if isinstance(adata, AnnData):
         return adata.uns.get(uns_key, None) is not None

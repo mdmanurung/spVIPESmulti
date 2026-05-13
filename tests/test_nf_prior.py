@@ -3,8 +3,6 @@
 import importlib.util
 import os
 
-import numpy as np
-import pytest
 import torch
 from torch.distributions import Normal
 
@@ -108,9 +106,9 @@ class TestNFPrior:
         z = qz.rsample()
 
         # Standard KL
-        standard_kl = torch.distributions.kl_divergence(
-            qz, Normal(torch.zeros_like(mu), torch.ones_like(std))
-        ).sum(dim=1)
+        standard_kl = torch.distributions.kl_divergence(qz, Normal(torch.zeros_like(mu), torch.ones_like(std))).sum(
+            dim=1
+        )
 
         # NF KL (MC)
         flow = zuko.flows.NSF(features=latent_dim, context=0, transforms=2)

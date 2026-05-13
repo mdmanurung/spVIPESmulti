@@ -6,7 +6,7 @@ import torch
 from spVIPESmulti.module.spVIPESmultimodule import _within_stratum_corr_norm
 
 
-@pytest.mark.skip(reason="NAT-001 pending: native/compiled implementation has not landed")
+@pytest.mark.skip(reason="NAT-001 closed without native code; keep as future parity placeholder")
 def test_nat_001_parity_python_vs_native_placeholder() -> None:
     """Exercise the Python path that a future native implementation must match."""
 

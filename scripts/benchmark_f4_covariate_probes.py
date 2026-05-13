@@ -23,7 +23,6 @@ from sklearn.model_selection import train_test_split
 
 import spVIPESmulti as sv
 
-
 ROOT = Path(__file__).resolve().parent.parent
 AUDIT_DIR = ROOT / "audits" / "F4"
 METRICS_CSV = AUDIT_DIR / "metrics.csv"
@@ -205,10 +204,14 @@ def train_variant(cfg: Config, prepared, group_indices_list, variant: str) -> tu
     wall = perf_counter() - start
 
     latents = model.get_latent_representation(group_indices_list=group_indices_list, batch_size=cfg.batch_size)
-    return {
-        "shared": _stitch(latents["shared"], group_indices_list, prepared.n_obs),
-        "private": _stitch(latents["private"], group_indices_list, prepared.n_obs),
-    }, wall, "ok"
+    return (
+        {
+            "shared": _stitch(latents["shared"], group_indices_list, prepared.n_obs),
+            "private": _stitch(latents["private"], group_indices_list, prepared.n_obs),
+        },
+        wall,
+        "ok",
+    )
 
 
 def _probe_one(x: np.ndarray, y: np.ndarray, seed: int) -> tuple[float | None, float | None, str]:
@@ -233,7 +236,9 @@ def _probe_one(x: np.ndarray, y: np.ndarray, seed: int) -> tuple[float | None, f
         return None, None, f"failed: {type(exc).__name__}: {exc}"
 
 
-def probe_rows(cfg: Config, prepared, latents: dict[str, np.ndarray], variant: str, seed: int, wall_time: float, note: str):
+def probe_rows(
+    cfg: Config, prepared, latents: dict[str, np.ndarray], variant: str, seed: int, wall_time: float, note: str
+):
     base = {
         "run_id": cfg.run_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -259,27 +264,31 @@ def probe_rows(cfg: Config, prepared, latents: dict[str, np.ndarray], variant: s
     if not latents:
         for target_name in targets:
             for latent_name in ("shared", "private"):
-                rows.append({
-                    **base,
-                    "target": target_name,
-                    "latent": latent_name,
-                    "accuracy": None,
-                    "balanced_accuracy": None,
-                    "notes": note,
-                })
+                rows.append(
+                    {
+                        **base,
+                        "target": target_name,
+                        "latent": latent_name,
+                        "accuracy": None,
+                        "balanced_accuracy": None,
+                        "notes": note,
+                    }
+                )
         return rows
 
     for target_name, target_values in targets.items():
         for latent_name, x in latents.items():
             acc, bacc, probe_note = _probe_one(x, target_values, seed)
-            rows.append({
-                **base,
-                "target": target_name,
-                "latent": latent_name,
-                "accuracy": acc,
-                "balanced_accuracy": bacc,
-                "notes": f"{note}; probe={probe_note}",
-            })
+            rows.append(
+                {
+                    **base,
+                    "target": target_name,
+                    "latent": latent_name,
+                    "accuracy": acc,
+                    "balanced_accuracy": bacc,
+                    "notes": f"{note}; probe={probe_note}",
+                }
+            )
     return rows
 
 

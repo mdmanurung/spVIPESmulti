@@ -52,7 +52,6 @@ import spVIPESmulti as sv
 from spVIPESmulti.interventions import metrics as f10_metrics
 from spVIPESmulti.interventions import transfer_condition
 
-
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_AUDIT_DIR = ROOT / "audits" / "F10"
 DEFAULT_KANG_NOTE_DIR = ROOT / "audits" / "kang_ifnb"
@@ -304,9 +303,7 @@ def split_to_cell_type(adata, cfg: Config, split: str) -> str:
         return exact[0]
 
     partial = [
-        value
-        for value in cell_types
-        if alias_norm in _normalize_label(value) or _normalize_label(value) in alias_norm
+        value for value in cell_types if alias_norm in _normalize_label(value) or _normalize_label(value) in alias_norm
     ]
     if partial:
         return sorted(partial, key=len)[0]
@@ -361,9 +358,8 @@ def run_spvipesmulti_split(cfg: Config, adata, seed: int, split: str) -> list[di
         group_src = groups.index(condition_from)
         group_dst = groups.index(condition_to)
 
-        source_mask = (
-            (prepared.obs[cfg.label_key].astype(str).to_numpy() == target_cell_type)
-            & (prepared.obs[cfg.condition_key].astype(str).to_numpy() == condition_from)
+        source_mask = (prepared.obs[cfg.label_key].astype(str).to_numpy() == target_cell_type) & (
+            prepared.obs[cfg.condition_key].astype(str).to_numpy() == condition_from
         )
         source_obs_names = prepared.obs_names[source_mask].to_numpy()
         if source_obs_names.size == 0:

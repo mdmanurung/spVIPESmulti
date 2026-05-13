@@ -7,7 +7,6 @@ from typing import Any
 import numpy as np
 import torch
 
-
 ArrayLike = np.ndarray | torch.Tensor
 
 

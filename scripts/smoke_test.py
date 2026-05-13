@@ -1,12 +1,14 @@
 """Smoke test: run full spVIPESmulti multimodal + NF-prior path on a tiny subsample."""
+
 import warnings
+
 warnings.filterwarnings("ignore")
+import anndata as ad
 import numpy as np
 import pandas as pd
-import scanpy as sc
 import scvi
 import torch
-import anndata as ad
+
 import spVIPESmulti
 
 np.random.seed(0)
@@ -15,6 +17,7 @@ torch.manual_seed(0)
 # Load
 adata_all = scvi.data.spleen_lymph_cite_seq(save_path="./data/", remove_outliers=True)
 print("Loaded:", adata_all.shape, "proteins:", adata_all.obsm["protein_expression"].shape[1])
+
 
 # Build a stable 3-group label
 def g_label(row):
@@ -30,6 +33,7 @@ def g_label(row):
     if donor == "SLN208" and t == "Spleen":
         return "SLN208_Spleen"
     return None
+
 
 adata_all.obs["group"] = adata_all.obs.apply(g_label, axis=1)
 adata_all = adata_all[~adata_all.obs["group"].isna()].copy()
@@ -52,9 +56,10 @@ print("After subsample:", adata_small.shape)
 
 # HVG: select top-500 genes by variance of raw counts (simple + robust on tiny subsamples)
 import scipy.sparse as sp
+
 X = adata_small.X
 if sp.issparse(X):
-    gene_var = np.asarray(X.power(2).mean(axis=0)).flatten() - np.asarray(X.mean(axis=0)).flatten()**2
+    gene_var = np.asarray(X.power(2).mean(axis=0)).flatten() - np.asarray(X.mean(axis=0)).flatten() ** 2
 else:
     gene_var = X.var(axis=0)
 top = np.argsort(gene_var)[::-1][:500]

@@ -4,12 +4,11 @@ For more details on Mixin classes, see
 https://docs.scvi-tools.org/en/0.9.0/user_guide/notebooks/model_user_guide.html#Mixing-in-pre-coded-features
 """
 
-
-from typing import Literal, Optional
 import warnings
+from typing import Literal
 
 import numpy as np
-from scvi.train import TrainingPlan, TrainRunner
+from scvi.train import TrainingPlan
 from scvi.train._trainrunner import TrainRunner as OrigTrainRunner
 
 
@@ -44,10 +43,12 @@ class SpVIPESmultiTrainingPlan(TrainingPlan):
         self._lr_cosine_T_max = lr_cosine_T_max
 
     def configure_optimizers(self):
+        """Configure optimizers and optional learning-rate scheduler behavior."""
         config = super().configure_optimizers()
 
         if self._lr_scheduler_type == "cosine":
             from torch.optim.lr_scheduler import CosineAnnealingLR
+
             scheduler = CosineAnnealingLR(
                 config["optimizer"],
                 T_max=self._lr_cosine_T_max,
@@ -66,18 +67,26 @@ class SpVIPESmultiTrainingPlan(TrainingPlan):
 
 
 class PatchedTrainRunner(OrigTrainRunner):
+    """TrainRunner compatibility shim for Lightning 1.x and 2.x fit calls."""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def __call__(self):
+        """Run training and mirror scvi-tools post-fit bookkeeping."""
         import lightning as pl
         from packaging import version
+
         # Validate training_plan
         if not hasattr(self, "training_plan") or self.training_plan is None:
-            raise RuntimeError("PatchedTrainRunner: training_plan is not set. Ensure TrainingPlan is constructed correctly.")
+            raise RuntimeError(
+                "PatchedTrainRunner: training_plan is not set. Ensure TrainingPlan is constructed correctly."
+            )
         # Validate data_splitter
         if not hasattr(self, "data_splitter") or self.data_splitter is None:
-            raise RuntimeError("PatchedTrainRunner: data_splitter is not set. Ensure DataSplitter is constructed correctly.")
+            raise RuntimeError(
+                "PatchedTrainRunner: data_splitter is not set. Ensure DataSplitter is constructed correctly."
+            )
 
         # Pre-fit: propagate dataset sizes to the training plan
         if hasattr(self.data_splitter, "n_train"):
@@ -95,8 +104,10 @@ class PatchedTrainRunner(OrigTrainRunner):
                     ckpt_path=getattr(self, "ckpt_path", None),
                 )
             except TypeError as e:
-                raise RuntimeError(f"PatchedTrainRunner: Trainer.fit argument mismatch (Lightning {lightning_version}): {e}\n"
-                                   f"training_plan={type(self.training_plan)}, data_splitter={type(self.data_splitter)}")
+                raise RuntimeError(
+                    f"PatchedTrainRunner: Trainer.fit argument mismatch (Lightning {lightning_version}): {e}\n"
+                    f"training_plan={type(self.training_plan)}, data_splitter={type(self.data_splitter)}"
+                ) from e
         else:
             try:
                 self.trainer.fit(
@@ -105,8 +116,10 @@ class PatchedTrainRunner(OrigTrainRunner):
                     ckpt_path=getattr(self, "ckpt_path", None),
                 )
             except TypeError as e:
-                raise RuntimeError(f"PatchedTrainRunner: Trainer.fit argument mismatch (Lightning {lightning_version}): {e}\n"
-                                   f"training_plan={type(self.training_plan)}, data_splitter={type(self.data_splitter)}")
+                raise RuntimeError(
+                    f"PatchedTrainRunner: Trainer.fit argument mismatch (Lightning {lightning_version}): {e}\n"
+                    f"training_plan={type(self.training_plan)}, data_splitter={type(self.data_splitter)}"
+                ) from e
 
         # Post-fit bookkeeping (mirrors TrainRunner.__call__)
         self._update_history()
@@ -118,6 +131,7 @@ class PatchedTrainRunner(OrigTrainRunner):
         self.model.to_device(self.device)
         self.model.trainer = self.trainer
 
+
 from spVIPESmulti.data._multi_datasplitter import MultiGroupDataSplitter
 from spVIPESmulti.utils import resolve_group_indices_list
 
@@ -127,15 +141,15 @@ class MultiGroupTrainingMixin:
 
     def train(
         self,
-        group_indices_list: Optional[list[list[int]]] = None,
-        batch_size: Optional[int] = 128,
-        max_epochs: Optional[int] = None,
+        group_indices_list: list[list[int]] | None = None,
+        batch_size: int | None = 128,
+        max_epochs: int | None = None,
         train_size: float = 0.9,
-        validation_size: Optional[float] = None,
+        validation_size: float | None = None,
         early_stopping: bool = False,
-        plan_kwargs: Optional[dict] = None,
-        n_steps_kl_warmup: Optional[int] = None,
-        n_epochs_kl_warmup: Optional[int] = 400,
+        plan_kwargs: dict | None = None,
+        n_steps_kl_warmup: int | None = None,
+        n_epochs_kl_warmup: int | None = 400,
         num_workers: int = 0,
         **trainer_kwargs,
     ) -> None:
@@ -263,8 +277,7 @@ class MultiGroupTrainingMixin:
         if getattr(self, "_group_indices_auto_infer_warned", False):
             return
         warnings.warn(
-            "group_indices_list was not provided to "
-            f"{caller}(); inferred from adata.uns['groups_obs_indices'].",
+            f"group_indices_list was not provided to {caller}(); inferred from adata.uns['groups_obs_indices'].",
             UserWarning,
             stacklevel=2,
         )

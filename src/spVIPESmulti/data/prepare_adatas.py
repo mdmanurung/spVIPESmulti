@@ -1,11 +1,10 @@
-from typing import Optional
+from typing import Any
 
 import anndata as ad
 import numpy as np
-from scipy.sparse import issparse
 
 
-def _apply_selected_layer(adata: ad.AnnData, layer: Optional[str], *, context: str) -> ad.AnnData:
+def _apply_selected_layer(adata: ad.AnnData, layer: str | None, *, context: str) -> ad.AnnData:
     if layer is None:
         return adata
     if layer not in adata.layers:
@@ -22,7 +21,7 @@ def _validate_requested_groups(adatas: dict, layers: dict, *, context: str = "la
 
 def prepare_adatas(
     adatas: dict[str, ad.AnnData],
-    layers: Optional[dict[str, Optional[str]]] = None,
+    layers: dict[str, str | None] | None = None,
 ):
     """
     Prepare and concatenate multiple AnnData objects for spVIPESmulti integration.
@@ -103,11 +102,11 @@ def prepare_adatas(
     >>> combined = spVIPESmulti.data.prepare_adatas({"batch1": adata1, "batch2": adata2})
     >>> print(f"Combined: {combined.n_vars} genes")  # Union of all genes
     """
-    groups_obs_names = []
-    groups_obs = {}
-    groups_lengths = {}
-    groups_var_names = {}  # Changed to dictionary
-    groups_mapping = {}
+    groups_obs_names: list[Any] = []
+    groups_obs: dict[str, Any] = {}
+    groups_lengths: dict[int, int] = {}
+    groups_var_names: dict[str, Any] = {}  # Changed to dictionary
+    groups_mapping: dict[int, str] = {}
     if len(adatas) < 2:
         raise ValueError("At least 2 groups are required")
     layers = {} if layers is None else dict(layers)
@@ -158,8 +157,8 @@ def prepare_adatas(
     multigroups_adata.uns["groups_mapping"] = groups_mapping
 
     # Create indices column
-    indices = []
-    for _, group_indices in zip(adatas.keys(), multigroups_adata.uns["groups_obs_indices"]):
+    indices: list[int] = []
+    for _, group_indices in zip(adatas.keys(), multigroups_adata.uns["groups_obs_indices"], strict=False):
         group_size = len(group_indices)
         indices.extend(np.arange(group_size, dtype=np.int32))
     multigroups_adata.obs["indices"] = indices
@@ -169,8 +168,8 @@ def prepare_adatas(
 
 def prepare_multimodal_adatas(
     adatas: dict[str, dict[str, ad.AnnData]],
-    modality_likelihoods: Optional[dict[str, str]] = None,
-    layers: Optional[dict[str, dict[str, Optional[str]]]] = None,
+    modality_likelihoods: dict[str, str] | None = None,
+    layers: dict[str, dict[str, str | None]] | None = None,
 ):
     """
     Prepare and concatenate multimodal AnnData objects for spVIPESmulti integration.
@@ -248,7 +247,7 @@ def prepare_multimodal_adatas(
 
     # Set default likelihoods
     if modality_likelihoods is None:
-        modality_likelihoods = {m: "nb" for m in modality_names}
+        modality_likelihoods = dict.fromkeys(modality_names, "nb")
     else:
         for m in modality_names:
             if m not in modality_likelihoods:
@@ -261,14 +260,14 @@ def prepare_multimodal_adatas(
             raise ValueError(f"Unsupported likelihood '{lk}' for modality '{m}'. Must be one of {valid_likelihoods}")
 
     # Build per-group combined AnnData (concatenating modalities along var axis)
-    combined_adatas = {}
-    groups_obs_names = []
-    groups_mapping = {}
-    groups_lengths = {}
-    groups_var_names = {}
-    groups_modality_lengths = {}
+    combined_adatas: dict[str, ad.AnnData] = {}
+    groups_obs_names: list[Any] = []
+    groups_mapping: dict[int, str] = {}
+    groups_lengths: dict[int, int] = {}
+    groups_var_names: dict[str, Any] = {}
+    groups_modality_lengths: dict[int, dict[str, int]] = {}
     # Track var name prefixes for modality-level indices after final concatenation
-    group_modality_var_prefixes = {}
+    group_modality_var_prefixes: dict[int, dict[str, str]] = {}
 
     for i, group_name in enumerate(group_names):
         groups_mapping[i] = group_name
@@ -279,9 +278,7 @@ def prepare_multimodal_adatas(
         requested_group_layers = dict(requested_group_layers)
         unknown_modalities = sorted(set(requested_group_layers) - set(mod_dict))
         if unknown_modalities:
-            raise ValueError(
-                f"layers for group '{group_name}' contains unknown modalities: {unknown_modalities}"
-            )
+            raise ValueError(f"layers for group '{group_name}' contains unknown modalities: {unknown_modalities}")
         mod_adatas = []
         groups_modality_lengths[i] = {}
         group_modality_var_prefixes[i] = {}
@@ -302,7 +299,9 @@ def prepare_multimodal_adatas(
             )
 
             if not mod_adata.obs_names.equals(first_obs_names):
-                if len(mod_adata.obs_names) == len(first_obs_names) and set(mod_adata.obs_names) == set(first_obs_names):
+                if len(mod_adata.obs_names) == len(first_obs_names) and set(mod_adata.obs_names) == set(
+                    first_obs_names
+                ):
                     mod_adata = mod_adata[first_obs_names].copy()
                 else:
                     raise ValueError(
@@ -336,23 +335,21 @@ def prepare_multimodal_adatas(
     # using `==` avoids the prefix-overlap trap that bit prepare_adatas
     # (group names like "cat" and "category" must not cross-match).
     multigroups_adata.uns["groups_var_indices"] = [
-        np.where(multigroups_adata.var_names.str.startswith(f"{group_names[i]}_"))[0]
-        for i in range(len(group_names))
+        np.where(multigroups_adata.var_names.str.startswith(f"{group_names[i]}_"))[0] for i in range(len(group_names))
     ]
     multigroups_adata.uns["groups_obs_indices"] = [
-        np.where(multigroups_adata.obs["groups"].values == group_names[i])[0]
-        for i in range(len(group_names))
+        np.where(multigroups_adata.obs["groups"].values == group_names[i])[0] for i in range(len(group_names))
     ]
 
     # Compute per-group, per-modality var indices in the concatenated adata
-    groups_modality_var_indices = {}
-    for i, group_name in enumerate(group_names):
+    groups_modality_var_indices: dict[int, dict[str, np.ndarray]] = {}
+    for i, _group_name in enumerate(group_names):
         groups_modality_var_indices[i] = {}
         for modality in modality_names:
-            prefix = group_modality_var_prefixes[i].get(modality)
-            if prefix is not None:
-                indices = np.where(multigroups_adata.var_names.str.startswith(prefix))[0]
-                groups_modality_var_indices[i][modality] = indices
+            modality_prefix = group_modality_var_prefixes[i].get(modality)
+            if modality_prefix is not None:
+                modality_indices = np.where(multigroups_adata.var_names.str.startswith(modality_prefix))[0]
+                groups_modality_var_indices[i][modality] = modality_indices
 
     # Boolean mask: groups_modality_masks[group_idx][modality] = True if present
     groups_modality_masks = {
@@ -373,8 +370,8 @@ def prepare_multimodal_adatas(
     multigroups_adata.uns["groups_mapping"] = groups_mapping
 
     # Create indices column (within-group cell indices)
-    indices = []
-    for _, group_indices in zip(group_names, multigroups_adata.uns["groups_obs_indices"]):
+    indices: list[int] = []
+    for _, group_indices in zip(group_names, multigroups_adata.uns["groups_obs_indices"], strict=False):
         group_size = len(group_indices)
         indices.extend(np.arange(group_size, dtype=np.int32))
     multigroups_adata.obs["indices"] = indices

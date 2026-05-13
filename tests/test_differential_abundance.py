@@ -4,7 +4,6 @@ import warnings
 import anndata as ad
 import numpy as np
 import pandas as pd
-import pytest
 
 import spVIPESmulti
 
@@ -113,9 +112,5 @@ def test_differential_abundance_warns_when_alignment_is_weak(monkeypatch):
         warnings.simplefilter("always")
         _ = model.differential_abundance(group_a=0, group_b=1)
 
-    msg = [
-        w
-        for w in caught
-        if "without explicit shared-latent alignment" in str(w.message)
-    ]
+    msg = [w for w in caught if "without explicit shared-latent alignment" in str(w.message)]
     assert len(msg) == 1

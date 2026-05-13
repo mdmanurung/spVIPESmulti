@@ -12,8 +12,8 @@
 | spVIPESmulti | cd14_mono | top_de_cosine | 0.732405 | ok | ok; target_cell_type=CD14+ Monocytes; condition=ctrl->stim; train_wall_time_sec=0.2762; n_ctrl=19; n_true=19 |
 | spVIPESmulti | cd14_mono | wasserstein_mean_all | 7.12873 | ok | ok; target_cell_type=CD14+ Monocytes; condition=ctrl->stim; train_wall_time_sec=0.2762; n_ctrl=19; n_true=19 |
 | spVIPESmulti | cd14_mono | wasserstein_mean_top | 45.4553 | ok | ok; target_cell_type=CD14+ Monocytes; condition=ctrl->stim; train_wall_time_sec=0.2762; n_ctrl=19; n_true=19 |
-| CellDISECT | cd14_mono | counterfactual_pearson |  | skipped | external install unavailable (celldisect: ModuleNotFoundError: No module named 'celldisect'; CellDISECT: ModuleNotFoundError: No module named 'CellDISECT') |
-| CellDISECT | cd14_mono | delta_pearson |  | skipped | external install unavailable (celldisect: ModuleNotFoundError: No module named 'celldisect'; CellDISECT: ModuleNotFoundError: No module named 'CellDISECT') |
-| CellDISECT | cd14_mono | top_de_cosine |  | skipped | external install unavailable (celldisect: ModuleNotFoundError: No module named 'celldisect'; CellDISECT: ModuleNotFoundError: No module named 'CellDISECT') |
-| CellDISECT | cd14_mono | wasserstein_mean_all |  | skipped | external install unavailable (celldisect: ModuleNotFoundError: No module named 'celldisect'; CellDISECT: ModuleNotFoundError: No module named 'CellDISECT') |
-| CellDISECT | cd14_mono | wasserstein_mean_top |  | skipped | external install unavailable (celldisect: ModuleNotFoundError: No module named 'celldisect'; CellDISECT: ModuleNotFoundError: No module named 'CellDISECT') |
+| CellDISECT | cd14_mono | counterfactual_pearson | | skipped | external install unavailable (celldisect: ModuleNotFoundError: No module named 'celldisect'; CellDISECT: ModuleNotFoundError: No module named 'CellDISECT') |
+| CellDISECT | cd14_mono | delta_pearson | | skipped | external install unavailable (celldisect: ModuleNotFoundError: No module named 'celldisect'; CellDISECT: ModuleNotFoundError: No module named 'CellDISECT') |
+| CellDISECT | cd14_mono | top_de_cosine | | skipped | external install unavailable (celldisect: ModuleNotFoundError: No module named 'celldisect'; CellDISECT: ModuleNotFoundError: No module named 'CellDISECT') |
+| CellDISECT | cd14_mono | wasserstein_mean_all | | skipped | external install unavailable (celldisect: ModuleNotFoundError: No module named 'celldisect'; CellDISECT: ModuleNotFoundError: No module named 'CellDISECT') |
+| CellDISECT | cd14_mono | wasserstein_mean_top | | skipped | external install unavailable (celldisect: ModuleNotFoundError: No module named 'celldisect'; CellDISECT: ModuleNotFoundError: No module named 'CellDISECT') |

@@ -1,7 +1,6 @@
 import logging
 import warnings
 from collections.abc import Sequence
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -181,21 +180,21 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         nf_transforms: int = 3,
         nf_target: str = "shared",
         disentangle_preset: str = "off",
-        disentangle_group_shared_weight: Optional[float] = None,
-        disentangle_label_shared_weight: Optional[float] = None,
-        disentangle_group_private_weight: Optional[float] = None,
-        disentangle_label_private_weight: Optional[float] = None,
-        disentangle_batch_shared_weight: Optional[float] = None,
-        disentangle_donor_shared_weight: Optional[float] = None,
-        disentangle_donor_private_weight: Optional[float] = None,
-        contrastive_weight: Optional[float] = None,
-        orthogonality_weight: Optional[float] = None,
+        disentangle_group_shared_weight: float | None = None,
+        disentangle_label_shared_weight: float | None = None,
+        disentangle_group_private_weight: float | None = None,
+        disentangle_label_private_weight: float | None = None,
+        disentangle_batch_shared_weight: float | None = None,
+        disentangle_donor_shared_weight: float | None = None,
+        disentangle_donor_private_weight: float | None = None,
+        contrastive_weight: float | None = None,
+        orthogonality_weight: float | None = None,
         contrastive_temperature: float = 0.1,
         disentangle_warmup: bool = True,
-        modality_loss_weights: Optional[dict] = None,
+        modality_loss_weights: dict | None = None,
         use_jeffreys_integ: bool = False,
         jeffreys_integ_weight: float = 1.0,
-        group_loss_weights: Optional[list] = None,
+        group_loss_weights: list | None = None,
         **model_kwargs,
     ):
         super().__init__(adata)
@@ -216,13 +215,9 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         use_condition = "condition" in self.adata_manager.data_registry
         use_donor = "donor" in self.adata_manager.data_registry
         n_conditions = (
-            len(self.adata_manager.get_state_registry("condition").categorical_mapping)
-            if use_condition else None
+            len(self.adata_manager.get_state_registry("condition").categorical_mapping) if use_condition else None
         )
-        n_donors = (
-            len(self.adata_manager.get_state_registry("donor").categorical_mapping)
-            if use_donor else None
-        )
+        n_donors = len(self.adata_manager.get_state_registry("donor").categorical_mapping) if use_donor else None
         setup_args = self.adata_manager.registry.get("setup_args", {})
         use_batch_covariate = setup_args.get("batch_key") is not None and n_batch > 1
 
@@ -230,16 +225,14 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         # Computed once at init from the full dataset label distribution so that
         # minority cell types (e.g. Activated MZ n≈200 vs Atypical n≈3155)
         # receive proportionally larger gradient signals.
-        label_class_weights: Optional[torch.Tensor] = None
+        label_class_weights: torch.Tensor | None = None
         if use_labels and n_labels is not None:
             label_codes = self.adata_manager.get_from_registry("labels")
             codes_arr = np.asarray(label_codes).astype(int).ravel()
             counts = np.bincount(codes_arr, minlength=n_labels).astype(float)
             inv_freq = 1.0 / np.maximum(counts, 1.0)
             # Normalize so weights sum to n_labels (keeps loss scale stable)
-            label_class_weights = torch.tensor(
-                inv_freq / inv_freq.sum() * n_labels, dtype=torch.float32
-            )
+            label_class_weights = torch.tensor(inv_freq / inv_freq.sum() * n_labels, dtype=torch.float32)
 
         # Multimodal parameters (if available)
         groups_modality_lengths = adata.uns.get("groups_modality_lengths")
@@ -337,13 +330,13 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         cls,
         adata: AnnData,
         groups_key: str,
-        label_key: Optional[str] = None,
-        sample_key: Optional[str] = None,
-        condition_key: Optional[str] = None,
-        donor_key: Optional[str] = None,
-        batch_key: Optional[str] = None,
-        layer: Optional[str] = None,
-        modality_likelihoods: Optional[dict[str, str]] = None,
+        label_key: str | None = None,
+        sample_key: str | None = None,
+        condition_key: str | None = None,
+        donor_key: str | None = None,
+        batch_key: str | None = None,
+        layer: str | None = None,
+        modality_likelihoods: dict[str, str] | None = None,
         **kwargs,
     ) -> None:
         """
@@ -419,14 +412,14 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
     @torch.no_grad()
     def get_latent_representation(
         self,
-        group_indices_list: Optional[list[list[int]]] = None,
-        adata: Optional[AnnData] = None,
-        indices: Optional[Sequence[int]] = None,
+        group_indices_list: list[list[int]] | None = None,
+        adata: AnnData | None = None,
+        indices: Sequence[int] | None = None,
         normalized: bool = False,
         give_mean: bool = True,
         mc_samples: int = 5000,
-        batch_size: Optional[int] = None,
-        drop_last: Optional[bool] = None,
+        batch_size: int | None = None,
+        drop_last: bool | None = None,
     ) -> dict[str, dict]:
         """
         Return latent representations for each selected cell.
@@ -478,8 +471,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             if subset.dtype == np.dtype("bool"):
                 if subset.size != adata.n_obs:
                     raise ValueError(
-                        "Boolean indices must have length equal to adata.n_obs "
-                        f"({adata.n_obs}), got {subset.size}."
+                        f"Boolean indices must have length equal to adata.n_obs ({adata.n_obs}), got {subset.size}."
                     )
                 subset = np.flatnonzero(subset)
             if not np.issubdtype(subset.dtype, np.integer):
@@ -491,14 +483,12 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
 
             selected = set(map(int, subset.tolist()))
             group_indices_list = [
-                [idx for idx in group_indices if idx in selected]
-                for group_indices in group_indices_list
+                [idx for idx in group_indices if idx in selected] for group_indices in group_indices_list
             ]
             empty_groups = [g for g, group_indices in enumerate(group_indices_list) if len(group_indices) == 0]
             if empty_groups:
                 raise ValueError(
-                    "indices must select at least one cell from every group; "
-                    f"empty groups: {empty_groups}."
+                    f"indices must select at least one cell from every group; empty groups: {empty_groups}."
                 )
 
         n_groups = len(group_indices_list)
@@ -525,9 +515,9 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
     @torch.no_grad()
     def embed(
         self,
-        group_indices_list: Optional[list[list[int]]] = None,
-        adata: Optional[AnnData] = None,
-        batch_size: Optional[int] = None,
+        group_indices_list: list[list[int]] | None = None,
+        adata: AnnData | None = None,
+        batch_size: int | None = None,
         prefix: str = "spvm",
         overwrite: bool = False,
         normalized: bool = False,
@@ -592,8 +582,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         existing = [k for k in target_keys if k in adata.obsm]
         if existing and not overwrite:
             raise ValueError(
-                "Refusing to overwrite existing adata.obsm keys: "
-                f"{existing}. Set overwrite=True to replace them."
+                f"Refusing to overwrite existing adata.obsm keys: {existing}. Set overwrite=True to replace them."
             )
 
         latents = self.get_latent_representation(
@@ -634,10 +623,10 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
     @torch.no_grad()
     def get_shared_posterior(
         self,
-        group_indices_list: Optional[list[list[int]]] = None,
-        adata: Optional[AnnData] = None,
-        batch_size: Optional[int] = None,
-        drop_last: Optional[bool] = None,
+        group_indices_list: list[list[int]] | None = None,
+        adata: AnnData | None = None,
+        batch_size: int | None = None,
+        drop_last: bool | None = None,
     ) -> dict[str, object]:
         """Return shared posterior parameters for each group.
 
@@ -689,7 +678,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         self,
         adata: AnnData,
         shared_posterior: dict[str, object],
-        sample_subset: Optional[Sequence[str]] = None,
+        sample_subset: Sequence[str] | None = None,
     ) -> tuple[pd.DataFrame, dict[str, object]]:
         """Aggregate shared posterior by (group, sample)."""
         group_indices_list = shared_posterior["group_indices_list"]
@@ -752,10 +741,10 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
     @torch.no_grad()
     def get_aggregated_posterior(
         self,
-        group_indices_list: Optional[list[list[int]]] = None,
-        adata: Optional[AnnData] = None,
-        batch_size: Optional[int] = None,
-        sample_subset: Optional[Sequence[str]] = None,
+        group_indices_list: list[list[int]] | None = None,
+        adata: AnnData | None = None,
+        batch_size: int | None = None,
+        sample_subset: Sequence[str] | None = None,
     ) -> dict[str, object]:
         """Aggregate shared posterior by sample within each group.
 
@@ -793,12 +782,12 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
     @torch.no_grad()
     def differential_abundance(
         self,
-        group_a: Optional[int] = None,
-        group_b: Optional[int] = None,
-        group_indices_list: Optional[list[list[int]]] = None,
-        adata: Optional[AnnData] = None,
-        batch_size: Optional[int] = None,
-        sample_subset: Optional[Sequence[str]] = None,
+        group_a: int | None = None,
+        group_b: int | None = None,
+        group_indices_list: list[list[int]] | None = None,
+        adata: AnnData | None = None,
+        batch_size: int | None = None,
+        sample_subset: Sequence[str] | None = None,
     ) -> dict[str, object]:
         """Compute per-cell differential abundance score in shared latent space.
 
@@ -844,13 +833,10 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             group_a, group_b = 0, 1
 
         if not (0 <= int(group_a) < n_groups and 0 <= int(group_b) < n_groups):
-            raise ValueError(
-                f"Invalid group comparison ({group_a}, {group_b}) for n_groups={n_groups}."
-            )
+            raise ValueError(f"Invalid group comparison ({group_a}, {group_b}) for n_groups={n_groups}.")
 
-        if (
-            float(getattr(self.module, "disentangle_group_shared_weight", 0.0)) == 0.0
-            and not bool(getattr(self.module, "use_jeffreys_integ", False))
+        if float(getattr(self.module, "disentangle_group_shared_weight", 0.0)) == 0.0 and not bool(
+            getattr(self.module, "use_jeffreys_integ", False)
         ):
             warnings.warn(
                 "differential_abundance() is running without explicit shared-latent alignment "
@@ -892,8 +878,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
 
         group_mapping = adata.uns.get("groups_mapping", {})
         group_label_by_idx = {
-            gi: str(group_mapping.get(gi, gi)) if isinstance(group_mapping, dict) else str(gi)
-            for gi in range(n_groups)
+            gi: str(group_mapping.get(gi, gi)) if isinstance(group_mapping, dict) else str(gi) for gi in range(n_groups)
         }
         cell_group = np.empty(adata.n_obs, dtype=object)
         for gi, idxs in enumerate(group_indices_list):
@@ -920,8 +905,8 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         self,
         network: pd.DataFrame,
         *,
-        adata: Optional[AnnData] = None,
-        methods: Optional[Sequence[str]] = None,
+        adata: AnnData | None = None,
+        methods: Sequence[str] | None = None,
         source_col: str = "source",
         target_col: str = "target",
         weight_col: str = "weight",
@@ -981,9 +966,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         allowed_methods = {"ora", "gsea", "ulm"}
         invalid = sorted(set(method_list) - allowed_methods)
         if invalid:
-            raise ValueError(
-                f"Unsupported method(s): {invalid}. Supported methods: {sorted(allowed_methods)}."
-            )
+            raise ValueError(f"Unsupported method(s): {invalid}. Supported methods: {sorted(allowed_methods)}.")
 
         normalized_network, network_stats = validate_enrichment_network(
             network,
@@ -1014,8 +997,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
                 existing.append(normalized_uns_key)
             if existing and not overwrite:
                 raise ValueError(
-                    "Refusing to overwrite existing AnnData keys: "
-                    f"{existing}. Set overwrite=True to replace them."
+                    f"Refusing to overwrite existing AnnData keys: {existing}. Set overwrite=True to replace them."
                 )
 
         try:
@@ -1031,9 +1013,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         for method in method_list:
             run_fn = getattr(dc.mt, method, None)
             if run_fn is None:
-                raise ValueError(
-                    f"decoupler.mt.{method} is unavailable in the installed decoupler version."
-                )
+                raise ValueError(f"decoupler.mt.{method} is unavailable in the installed decoupler version.")
 
             tmp = adata.copy()
             run_kwargs = {
@@ -1068,9 +1048,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
                     columns=[f"{method}_{i}" for i in range(score_values.shape[1])],
                 )
             else:
-                raise RuntimeError(
-                    f"decoupler did not write '{score_key}' to AnnData outputs."
-                )
+                raise RuntimeError(f"decoupler did not write '{score_key}' to AnnData outputs.")
 
             score_df = score_df.add_prefix(f"{method}__")
             per_method_scores.append(score_df)
@@ -1108,7 +1086,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         scores_df: pd.DataFrame,
         groupby: str,
         *,
-        adata: Optional[AnnData] = None,
+        adata: AnnData | None = None,
         agg: str = "mean",
     ) -> pd.DataFrame:
         """Aggregate enrichment scores by an ``adata.obs`` grouping column.
@@ -1130,18 +1108,12 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             Aggregated scores with one row per group.
         """
         if not isinstance(scores_df, pd.DataFrame):
-            raise TypeError(
-                f"scores_df must be a pandas DataFrame, got {type(scores_df).__name__}."
-            )
+            raise TypeError(f"scores_df must be a pandas DataFrame, got {type(scores_df).__name__}.")
         adata = self._validate_anndata(adata)
         if groupby not in adata.obs:
-            raise KeyError(
-                f"'{groupby}' not found in adata.obs. Available columns: {list(adata.obs.columns)}"
-            )
+            raise KeyError(f"'{groupby}' not found in adata.obs. Available columns: {list(adata.obs.columns)}")
         if not scores_df.index.equals(adata.obs_names):
-            raise ValueError(
-                "scores_df index must exactly match adata.obs_names for aggregation."
-            )
+            raise ValueError("scores_df index must exactly match adata.obs_names for aggregation.")
         merged = scores_df.copy()
         merged[groupby] = adata.obs[groupby].astype(str).values
         return merged.groupby(groupby, observed=True).agg(agg)
@@ -1151,11 +1123,11 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         scores_df: pd.DataFrame,
         groupby: str,
         *,
-        adata: Optional[AnnData] = None,
+        adata: AnnData | None = None,
         agg: str = "mean",
         top_n: int = 5,
         z_shared_key: str = "X_spvm_shared",
-        label_key: Optional[str] = None,
+        label_key: str | None = None,
         k: int = 20,
         leiden_resolution: float = 0.8,
     ) -> dict[str, object]:
@@ -1219,10 +1191,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         integration_metrics = None
         report_warnings: list[str] = []
         can_compute_metrics = (
-            z_shared_key in adata.obsm
-            and label_key is not None
-            and label_key in adata.obs
-            and "groups" in adata.obs
+            z_shared_key in adata.obsm and label_key is not None and label_key in adata.obs and "groups" in adata.obs
         )
         if can_compute_metrics:
             from spVIPESmulti.metrics import integration_report
@@ -1250,11 +1219,11 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
     def evaluate(
         self,
         *,
-        adata: Optional[AnnData] = None,
-        group_indices_list: Optional[list[list[int]]] = None,
-        batch_size: Optional[int] = None,
-        label_key: Optional[str] = None,
-        z_shared_key: Optional[str] = None,
+        adata: AnnData | None = None,
+        group_indices_list: list[list[int]] | None = None,
+        batch_size: int | None = None,
+        label_key: str | None = None,
+        z_shared_key: str | None = None,
         k: int = 20,
         leiden_resolution: float = 0.8,
         include_private: bool = False,
@@ -1328,8 +1297,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         else:
             if z_shared_key is not None:
                 eval_warnings.append(
-                    f"z_shared_key='{z_shared_key}' not found in adata.obsm; "
-                    "extracting embeddings from model instead."
+                    f"z_shared_key='{z_shared_key}' not found in adata.obsm; extracting embeddings from model instead."
                 )
             latents = self.get_latent_representation(
                 group_indices_list=group_indices_list,
@@ -1352,9 +1320,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             group_labels = np.empty(adata.n_obs, dtype=object)
             for gi, idxs in enumerate(group_indices_list):
                 group_labels[np.asarray(idxs)] = str(gi)
-            eval_warnings.append(
-                "adata.obs['groups'] not found; using inferred integer group labels."
-            )
+            eval_warnings.append("adata.obs['groups'] not found; using inferred integer group labels.")
 
         # ── Cell-type labels ─────────────────────────────────────────────────
         if label_key is not None and label_key in adata.obs:
@@ -1369,18 +1335,14 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             cell_labels = np.array(["unknown"] * adata.n_obs, dtype=object)
 
         # ── Private latents ──────────────────────────────────────────────────
-        z_private_dict: Optional[dict[str, np.ndarray]] = None
+        z_private_dict: dict[str, np.ndarray] | None = None
         if include_private:
             if not used_precomputed:
                 # latents was already computed above
                 group_mapping = adata.uns.get("groups_mapping", {})
                 z_private_dict = {}
-                for gi, idxs in enumerate(group_indices_list):
-                    token = (
-                        str(group_mapping.get(gi, gi))
-                        if isinstance(group_mapping, dict)
-                        else str(gi)
-                    )
+                for gi, _idxs in enumerate(group_indices_list):
+                    token = str(group_mapping.get(gi, gi)) if isinstance(group_mapping, dict) else str(gi)
                     z_private_dict[token] = latents["private_reordered"][gi]
             else:
                 # Need a fresh extraction for private latents
@@ -1394,12 +1356,8 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
                 )
                 group_mapping = adata.uns.get("groups_mapping", {})
                 z_private_dict = {}
-                for gi, idxs in enumerate(group_indices_list):
-                    token = (
-                        str(group_mapping.get(gi, gi))
-                        if isinstance(group_mapping, dict)
-                        else str(gi)
-                    )
+                for gi, _idxs in enumerate(group_indices_list):
+                    token = str(group_mapping.get(gi, gi)) if isinstance(group_mapping, dict) else str(gi)
                     z_private_dict[token] = latents["private_reordered"][gi]
 
         metrics_df = integration_report(
@@ -1438,7 +1396,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
                     value = history[key].iloc[-1]
                     try:
                         value = float(value.iloc[0]) if hasattr(value, "iloc") else float(value)
-                    except Exception:
+                    except (IndexError, TypeError, ValueError):
                         value = float(np.asarray(value).ravel()[0])
                     held_out_metrics[key] = value
                 if "reconstruction_loss_validation" in held_out_metrics:
@@ -1469,9 +1427,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         was_training = self.module.training
         self.module.eval()
         try:
-            return self._process_batches_impl(
-                dataloader, normalized, give_mean, mc_samples, n_groups
-            )
+            return self._process_batches_impl(dataloader, normalized, give_mean, mc_samples, n_groups)
         finally:
             self.module.train(was_training)
 
@@ -1642,7 +1598,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         loadings_dict = {}
 
         if self.module.is_multimodal:
-            for (group, modality) in self.module.decoders:
+            for group, modality in self.module.decoders:
                 mod_var_indices = self.module.groups_modality_var_indices[group][modality]
                 var_names = adata[:, mod_var_indices].var_names
                 cols_private = [f"Z_private_{n}" for n in range(self.module.n_dimensions_private)]

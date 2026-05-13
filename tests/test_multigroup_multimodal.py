@@ -2,13 +2,11 @@
 
 import importlib.util
 import os
-import sys
 
+import anndata as ad
 import numpy as np
 import pytest
 from scipy.sparse import csr_matrix
-
-import anndata as ad
 
 # Direct module loaders to avoid triggering spVIPESmulti.__init__ (which requires scvi-tools >=1.0)
 _SRC = os.path.join(os.path.dirname(__file__), "..", "src")
@@ -22,9 +20,7 @@ def _load_module(module_name, filepath):
     return mod
 
 
-_prepare_adatas_mod = _load_module(
-    "prepare_adatas", os.path.join(_SRC, "spVIPESmulti", "data", "prepare_adatas.py")
-)
+_prepare_adatas_mod = _load_module("prepare_adatas", os.path.join(_SRC, "spVIPESmulti", "data", "prepare_adatas.py"))
 prepare_adatas = _prepare_adatas_mod.prepare_adatas
 prepare_multimodal_adatas = _prepare_adatas_mod.prepare_multimodal_adatas
 
@@ -346,7 +342,6 @@ class TestPoEGeneralization:
     def test_poe_n_two_groups_matches_formula(self):
         """Verify _poe_n produces correct results for 2 groups with equal batch sizes."""
         import torch
-        from torch.distributions import Normal
 
         # We can't easily instantiate spVIPESmultimodule without all the scvi deps,
         # but we can test _product_of_experts directly since it's pure math
@@ -460,8 +455,8 @@ class TestLikelihoodFactory:
         try:
             mod = _load_module("spvipesmulti_utils", os.path.join(_SRC, "spVIPESmulti", "module", "utils.py"))
             self.build_likelihood = mod.build_likelihood
-        except Exception:
-            pytest.skip("scvi-tools version incompatible with this environment")
+        except (AttributeError, ImportError, RuntimeError, TypeError) as exc:
+            pytest.skip(f"scvi-tools version incompatible with this environment: {exc}")
 
     def test_nb_likelihood(self):
         """NB likelihood should return NegativeBinomialMixture."""
@@ -492,8 +487,9 @@ class TestLikelihoodFactory:
         px_scale = torch.rand(batch_size, n_genes)
         log_scale = torch.nn.Parameter(torch.zeros(n_genes))
 
-        dist = self.build_likelihood("gaussian", px_rate_private, px_rate_shared, px_r, px_mixing,
-                                     px_scale=px_scale, log_scale=log_scale)
+        dist = self.build_likelihood(
+            "gaussian", px_rate_private, px_rate_shared, px_r, px_mixing, px_scale=px_scale, log_scale=log_scale
+        )
         sample = torch.randn(batch_size, n_genes)
         log_prob = dist.log_prob(sample)
         assert log_prob.shape == (batch_size, n_genes)

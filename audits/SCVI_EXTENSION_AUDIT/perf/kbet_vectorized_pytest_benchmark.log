@@ -1,0 +1,18 @@
+.                                                                        [100%]
+=============================== warnings summary ===============================
+tests/bench/test_audit_metrics_benchmark.py::test_perf_001_kbet_vectorized_benchmark
+  /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/lib/python3.11/site-packages/anndata/experimental/__init__.py:48: FutureWarning: Importing read_elem from `anndata.experimental` is deprecated. Import anndata.io.read_elem instead.
+    return module_get_attr_redirect(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+
+------------------------------------------------------- benchmark: 1 tests -------------------------------------------------------
+Name (time in ms)                              Min     Max    Mean  StdDev  Median     IQR  Outliers       OPS  Rounds  Iterations
+----------------------------------------------------------------------------------------------------------------------------------
+test_perf_001_kbet_vectorized_benchmark     6.8924  7.1705  6.9879  0.0791  6.9699  0.1063       6;0  143.1047      21           1
+----------------------------------------------------------------------------------------------------------------------------------
+
+Legend:
+  Outliers: 1 Standard Deviation from Mean; 1.5 IQR (InterQuartile Range) from 1st Quartile and 3rd Quartile.
+  OPS: Operations Per Second, computed as 1 / Mean
+1 passed, 1 warning in 13.38s

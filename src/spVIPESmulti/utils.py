@@ -16,10 +16,11 @@ repeats manually:
 7. :func:`score_cells_on_factor` — project a single latent dimension into
    ``adata.obs``.
 """
+
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -34,13 +35,13 @@ if TYPE_CHECKING:
 
 
 def highly_variable_genes_union(
-    adata: "AnnData",
+    adata: AnnData,
     group_key: str,
     n_top_genes: int = 2000,
     flavor: str = "seurat_v3",
     subset: bool = True,
     **hvg_kwargs,
-) -> "AnnData":
+) -> AnnData:
     """Select highly variable genes (HVGs) per group and return their union.
 
     Runs :func:`scanpy.pp.highly_variable_genes` independently on each group
@@ -84,10 +85,7 @@ def highly_variable_genes_union(
     import scanpy as sc
 
     if group_key not in adata.obs.columns:
-        raise KeyError(
-            f"'{group_key}' not found in adata.obs. "
-            f"Available columns: {list(adata.obs.columns)}"
-        )
+        raise KeyError(f"'{group_key}' not found in adata.obs. Available columns: {list(adata.obs.columns)}")
 
     import numpy as np
     import scipy.sparse as sp_sparse
@@ -112,9 +110,7 @@ def highly_variable_genes_union(
         group_hvg: set = set()
         for batch in batches:
             adata_b = (
-                adata_group[adata_group.obs[batch_key] == batch].copy()
-                if batch is not None
-                else adata_group.copy()
+                adata_group[adata_group.obs[batch_key] == batch].copy() if batch is not None else adata_group.copy()
             )
             # Keep only genes expressed in at least min_cells cells within this
             # (group, batch) slice.  sum > 0 is insufficient: near-constant genes
@@ -174,8 +170,8 @@ def sanitize_obsm_token(value: object) -> str:
 
 
 def resolve_group_indices_list(
-    adata: "AnnData",
-    group_indices_list: Optional[list[Union[np.ndarray, list[int], tuple[int, ...]]]] = None,
+    adata: AnnData,
+    group_indices_list: list[np.ndarray | list[int] | tuple[int, ...]] | None = None,
 ) -> tuple[list[list[int]], bool]:
     """Resolve and validate group indices for training/latent APIs.
 
@@ -211,9 +207,7 @@ def resolve_group_indices_list(
         group_indices_list = adata.uns["groups_obs_indices"]
 
     if not isinstance(group_indices_list, (list, tuple)) or len(group_indices_list) == 0:
-        raise ValueError(
-            "group_indices_list must be a non-empty list of per-group index lists."
-        )
+        raise ValueError("group_indices_list must be a non-empty list of per-group index lists.")
 
     normalized: list[list[int]] = []
     for gi, group in enumerate(group_indices_list):
@@ -225,9 +219,7 @@ def resolve_group_indices_list(
         if arr.size == 0:
             raise ValueError(f"group_indices_list[{gi}] is empty; each group must contain at least one cell.")
         if not np.issubdtype(arr.dtype, np.integer):
-            raise ValueError(
-                f"group_indices_list[{gi}] must contain integer indices, got dtype {arr.dtype}."
-            )
+            raise ValueError(f"group_indices_list[{gi}] must contain integer indices, got dtype {arr.dtype}.")
         int_group = arr.astype(np.int64).tolist()
         normalized.append(int_group)
 
@@ -254,7 +246,7 @@ def validate_enrichment_network(
     source_col: str = "source",
     target_col: str = "target",
     weight_col: str = "weight",
-    adata: Optional["AnnData"] = None,
+    adata: AnnData | None = None,
     tmin: int = 5,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
     """Validate and normalize a decoupler-style long network table.
@@ -287,19 +279,14 @@ def validate_enrichment_network(
         If required columns are missing or the normalized table is empty.
     """
     if not isinstance(network, pd.DataFrame):
-        raise TypeError(
-            f"network must be a pandas DataFrame, got {type(network).__name__}."
-        )
+        raise TypeError(f"network must be a pandas DataFrame, got {type(network).__name__}.")
     if tmin < 1:
         raise ValueError(f"tmin must be >= 1, got {tmin}.")
 
     required = [source_col, target_col]
     missing = [c for c in required if c not in network.columns]
     if missing:
-        raise ValueError(
-            "network is missing required column(s): "
-            f"{missing}. Expected at least {required}."
-        )
+        raise ValueError(f"network is missing required column(s): {missing}. Expected at least {required}.")
 
     keep_cols = [source_col, target_col]
     has_weight = weight_col in network.columns
@@ -309,9 +296,7 @@ def validate_enrichment_network(
     df = network[keep_cols].copy()
     df = df.dropna(subset=[source_col, target_col])
     if df.empty:
-        raise ValueError(
-            "network is empty after dropping rows with missing source/target values."
-        )
+        raise ValueError("network is empty after dropping rows with missing source/target values.")
 
     df[source_col] = df[source_col].astype(str)
     df[target_col] = df[target_col].astype(str)
@@ -321,17 +306,14 @@ def validate_enrichment_network(
     df = df[df[source_col].isin(valid_sources)].copy()
     if df.empty:
         raise ValueError(
-            "No sources satisfy the tmin threshold. "
-            f"Lower tmin (current: {tmin}) or provide a denser network."
+            f"No sources satisfy the tmin threshold. Lower tmin (current: {tmin}) or provide a denser network."
         )
 
     warnings_list: list[str] = []
     if not has_weight:
-        warnings_list.append(
-            f"weight column '{weight_col}' not found; weighted methods may be less informative."
-        )
+        warnings_list.append(f"weight column '{weight_col}' not found; weighted methods may be less informative.")
 
-    overlap_stats = {
+    overlap_stats: dict[str, object] = {
         "n_targets_in_adata": None,
         "n_targets_overlap": None,
         "target_overlap_ratio": None,
@@ -347,13 +329,9 @@ def validate_enrichment_network(
             "target_overlap_ratio": overlap_ratio,
         }
         if len(overlap) == 0:
-            warnings_list.append(
-                "No target overlap between network and adata.var_names; enrichment will likely fail."
-            )
+            warnings_list.append("No target overlap between network and adata.var_names; enrichment will likely fail.")
         elif overlap_ratio < 0.05:
-            warnings_list.append(
-                f"Low network target overlap with adata.var_names ({overlap_ratio:.1%})."
-            )
+            warnings_list.append(f"Low network target overlap with adata.var_names ({overlap_ratio:.1%}).")
 
     stats = {
         "n_rows_input": int(network.shape[0]),
@@ -388,9 +366,7 @@ def _validate_loadings_df(df: pd.DataFrame, latent_type: str) -> None:
         indices.
     """
     if not isinstance(df, pd.DataFrame):
-        raise TypeError(
-            f"loadings_df must be a pandas DataFrame, got {type(df).__name__}."
-        )
+        raise TypeError(f"loadings_df must be a pandas DataFrame, got {type(df).__name__}.")
     if df.isnull().any().any():
         raise ValueError("loadings_df contains NaN values.")
     if not all(isinstance(c, str) for c in df.columns):
@@ -399,30 +375,23 @@ def _validate_loadings_df(df: pd.DataFrame, latent_type: str) -> None:
     prefix = f"Z_{latent_type}_"
     bad_cols = [c for c in df.columns if not c.startswith(prefix)]
     if bad_cols:
-        raise ValueError(
-            f"All columns must start with '{prefix}'. "
-            f"Unexpected columns: {bad_cols[:5]}"
-        )
+        raise ValueError(f"All columns must start with '{prefix}'. Unexpected columns: {bad_cols[:5]}")
 
     try:
-        indices = [int(c[len(prefix):]) for c in df.columns]
-    except ValueError:
+        indices = [int(c[len(prefix) :]) for c in df.columns]
+    except ValueError as exc:
         raise ValueError(
-            f"Column suffixes after '{prefix}' must be integers, "
-            f"e.g. '{prefix}0', '{prefix}1', ..."
-        )
+            f"Column suffixes after '{prefix}' must be integers, e.g. '{prefix}0', '{prefix}1', ..."
+        ) from exc
 
     expected = list(range(len(indices)))
     if indices != expected:
-        raise ValueError(
-            f"Column indices must be contiguous [0, 1, ..., n-1]. "
-            f"Got: {indices[:10]}"
-        )
+        raise ValueError(f"Column indices must be contiguous [0, 1, ..., n-1]. Got: {indices[:10]}")
 
 
 def _resolve_loadings(
-    loadings_df: Optional[pd.DataFrame],
-    model: object,
+    loadings_df: pd.DataFrame | None,
+    model: Any,
     group_idx: int,
     latent_type: str,
 ) -> pd.DataFrame:
@@ -430,8 +399,7 @@ def _resolve_loadings(
     if loadings_df is None:
         if model is None:
             raise ValueError(
-                "Provide either 'loadings_df' (pre-computed) or 'model' "
-                "(to call model.get_loadings() automatically)."
+                "Provide either 'loadings_df' (pre-computed) or 'model' (to call model.get_loadings() automatically)."
             )
         loadings_df = model.get_loadings()[(group_idx, latent_type)]
     _validate_loadings_df(loadings_df, latent_type)
@@ -441,8 +409,8 @@ def _resolve_loadings(
 def _get_group_gene_prefix(
     gene_names: pd.Index,
     model: object = None,
-    group_idx: Union[int, tuple] = 0,
-) -> Optional[str]:
+    group_idx: int | tuple = 0,
+) -> str | None:
     """Return the group prefix used in prepared var names, when identifiable."""
     if model is not None:
         adata = getattr(model, "adata", None)
@@ -467,16 +435,16 @@ def _get_group_gene_prefix(
     if len(prefixes) != 1:
         return None
     prefix = f"{next(iter(prefixes))}_"
-    stripped = [name[len(prefix):] for name in names]
+    stripped = [name[len(prefix) :] for name in names]
     if any(not name for name in stripped) or len(set(stripped)) != len(stripped):
         return None
     return prefix
 
 
-def _strip_group_gene_prefix(genes: list[str], prefix: Optional[str]) -> list[str]:
+def _strip_group_gene_prefix(genes: list[str], prefix: str | None) -> list[str]:
     if prefix is None:
         return genes
-    return [gene[len(prefix):] if str(gene).startswith(prefix) else gene for gene in genes]
+    return [gene[len(prefix) :] if str(gene).startswith(prefix) else gene for gene in genes]
 
 
 # ---------------------------------------------------------------------------
@@ -485,11 +453,11 @@ def _strip_group_gene_prefix(genes: list[str], prefix: Optional[str]) -> list[st
 
 
 def store_latents(
-    adata: "AnnData",
+    adata: AnnData,
     latents: dict,
     group_indices_list: list[np.ndarray],
     obsm_prefix: str = "X_spVIPESmulti",
-) -> "AnnData":
+) -> AnnData:
     """Stitch per-group latent arrays back into ``adata.obsm`` (original cell order).
 
     Consolidates the manual concatenation pattern used in every tutorial
@@ -560,11 +528,11 @@ def store_latents(
 
 
 def add_latent_dims_to_obs(
-    adata: "AnnData",
+    adata: AnnData,
     obsm_key: str,
-    prefix: Optional[str] = None,
-    max_dims: Optional[int] = None,
-) -> "AnnData":
+    prefix: str | None = None,
+    max_dims: int | None = None,
+) -> AnnData:
     """Copy latent dimensions from ``adata.obsm`` into ``adata.obs`` columns.
 
     After calling this, latent dimensions can be used directly as ``color=``
@@ -593,10 +561,7 @@ def add_latent_dims_to_obs(
     >>> sc.pl.violin(adata_g0, "spVIPESmulti_private_g0_1", groupby="cell_type")
     """
     if obsm_key not in adata.obsm:
-        raise KeyError(
-            f"'{obsm_key}' not found in adata.obsm. "
-            f"Available keys: {list(adata.obsm.keys())}"
-        )
+        raise KeyError(f"'{obsm_key}' not found in adata.obsm. Available keys: {list(adata.obsm.keys())}")
     arr = adata.obsm[obsm_key]
     if prefix is None:
         prefix = obsm_key[2:] if obsm_key.startswith("X_") else obsm_key
@@ -612,12 +577,12 @@ def add_latent_dims_to_obs(
 
 
 def compute_shared_umap(
-    adata: "AnnData",
+    adata: AnnData,
     obsm_key: str = "X_spVIPESmulti_shared",
     n_neighbors: int = 15,
     min_dist: float = 0.3,
     umap_key: str = "X_umap_spvipesmulti_shared",
-) -> "AnnData":
+) -> AnnData:
     """Compute UMAP on the shared latent and store it under a named key.
 
     Wraps :func:`scanpy.pp.neighbors` + :func:`scanpy.tl.umap` with a
@@ -652,8 +617,7 @@ def compute_shared_umap(
 
     if obsm_key not in adata.obsm:
         raise KeyError(
-            f"'{obsm_key}' not found in adata.obsm. "
-            f"Run store_latents() first or provide the correct obsm_key."
+            f"'{obsm_key}' not found in adata.obsm. Run store_latents() first or provide the correct obsm_key."
         )
     nn_key = "_spvipesmulti_nn_shared"
     sc.pp.neighbors(adata, use_rep=obsm_key, key_added=nn_key, n_neighbors=n_neighbors)
@@ -663,12 +627,12 @@ def compute_shared_umap(
 
 
 def compute_private_umaps(
-    adatas_per_group: dict[str, "AnnData"],
+    adatas_per_group: dict[str, AnnData],
     obsm_key: str = "X_spVIPESmulti_private",
     n_neighbors: int = 15,
     min_dist: float = 0.3,
     umap_key: str = "X_umap_spvipesmulti_private",
-) -> dict[str, "AnnData"]:
+) -> dict[str, AnnData]:
     """Compute UMAP on each group's private latent.
 
     Parameters
@@ -701,8 +665,7 @@ def compute_private_umaps(
     for name, adata in adatas_per_group.items():
         if obsm_key not in adata.obsm:
             raise KeyError(
-                f"Group '{name}': '{obsm_key}' not found in adata.obsm. "
-                f"Available keys: {list(adata.obsm.keys())}"
+                f"Group '{name}': '{obsm_key}' not found in adata.obsm. Available keys: {list(adata.obsm.keys())}"
             )
         nn_key = "_spvipesmulti_nn_private"
         sc.pp.neighbors(adata, use_rep=obsm_key, key_added=nn_key, n_neighbors=n_neighbors)
@@ -717,7 +680,7 @@ def compute_private_umaps(
 
 
 def get_top_genes(
-    loadings_df: Optional[pd.DataFrame] = None,
+    loadings_df: pd.DataFrame | None = None,
     *,
     model: object = None,
     group_idx: int = 0,
@@ -787,11 +750,11 @@ def get_top_genes(
 
 
 def score_cells_on_factor(
-    adata: "AnnData",
+    adata: AnnData,
     dim_idx: int,
     obsm_key: str,
-    col_name: Optional[str] = None,
-) -> "AnnData":
+    col_name: str | None = None,
+) -> AnnData:
     """Write a single latent dimension from ``adata.obsm`` into ``adata.obs``.
 
     Useful when you want to colour a UMAP or violin plot by a specific factor
@@ -820,16 +783,10 @@ def score_cells_on_factor(
     >>> sc.pl.violin(adata_g0, "spVIPESmulti_private_g0_2", groupby="cell_type")
     """
     if obsm_key not in adata.obsm:
-        raise KeyError(
-            f"'{obsm_key}' not found in adata.obsm. "
-            f"Available keys: {list(adata.obsm.keys())}"
-        )
+        raise KeyError(f"'{obsm_key}' not found in adata.obsm. Available keys: {list(adata.obsm.keys())}")
     arr = adata.obsm[obsm_key]
     if dim_idx >= arr.shape[1]:
-        raise ValueError(
-            f"dim_idx={dim_idx} is out of range for obsm '{obsm_key}' "
-            f"with {arr.shape[1]} dimensions."
-        )
+        raise ValueError(f"dim_idx={dim_idx} is out of range for obsm '{obsm_key}' with {arr.shape[1]} dimensions.")
     if col_name is None:
         stripped = obsm_key[2:] if obsm_key.startswith("X_") else obsm_key
         col_name = f"{stripped}_{dim_idx}"

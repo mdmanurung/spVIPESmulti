@@ -23,6 +23,7 @@ Outputs:
   scripts/pilot_results_celltype.json   raw numeric results
   scripts/pilot_results_celltype.md     human-readable comparison table
 """
+
 from __future__ import annotations
 
 import argparse
@@ -56,7 +57,7 @@ OUT_DIR = Path(__file__).resolve().parent
 SEED = 0
 PILOT_EPOCHS = 150
 BATCH_SIZE = 1024
-KL_WARMUP = 30          # scaled down from 75 proportionally to reduced budget
+KL_WARMUP = 30  # scaled down from 75 proportionally to reduced budget
 N_HIDDEN = 256
 N_SHARED = 20
 N_PRIVATE = 20
@@ -67,6 +68,7 @@ CHECK_VAL_EVERY = 5
 
 
 # ── Data loading ──────────────────────────────────────────────────────────────
+
 
 def load_raw_adata() -> ad.AnnData:
     """Load malaria B-cell data (RNA + obs) without HVG selection."""
@@ -81,17 +83,13 @@ def load_raw_adata() -> ad.AnnData:
 
 def select_hvg_global(adata: ad.AnnData) -> ad.AnnData:
     """Global seurat_v3 HVG (batch-aware) — baseline feature set."""
-    sc.pp.highly_variable_genes(
-        adata, n_top_genes=N_TOP_GENES, flavor="seurat_v3", batch_key="batch"
-    )
+    sc.pp.highly_variable_genes(adata, n_top_genes=N_TOP_GENES, flavor="seurat_v3", batch_key="batch")
     return adata[:, adata.var["highly_variable"]].copy()
 
 
 def select_hvg_union(adata: ad.AnnData) -> ad.AnnData:
     """Per-antigen-group HVG union — variant C feature set."""
-    return highly_variable_genes_union(
-        adata, group_key="antigen_specific", n_top_genes=N_TOP_GENES
-    )
+    return highly_variable_genes_union(adata, group_key="antigen_specific", n_top_genes=N_TOP_GENES)
 
 
 def prepare_for_training(
@@ -120,6 +118,7 @@ def prepare_for_training(
 
 # ── Training ──────────────────────────────────────────────────────────────────
 
+
 def train_and_score(
     adata_spv: ad.AnnData,
     group_indices_list: list[list[int]],
@@ -134,7 +133,7 @@ def train_and_score(
     torch.manual_seed(SEED)
 
     group_sizes = [len(g) for g in group_indices_list]
-    group_loss_weights = [1 / n ** 0.5 for n in group_sizes]
+    group_loss_weights = [1 / n**0.5 for n in group_sizes]
 
     t0 = perf_counter()
     model = spVIPESmulti.model.spVIPESmulti(
@@ -177,8 +176,7 @@ def train_and_score(
     z_shared = adata_spv.obsm["X_spVIPESmulti_shared"]
     groups_map = adata_spv.uns["groups_mapping"]
     z_private_dict = {
-        str(groups_map.get(gi, gi)): latents["private_reordered"][gi]
-        for gi in range(len(group_indices_list))
+        str(groups_map.get(gi, gi)): latents["private_reordered"][gi] for gi in range(len(group_indices_list))
     }
 
     report = integration_report(
@@ -204,7 +202,7 @@ def train_and_score(
                 dtype=float,
             )
             history[short] = round(float(arr[-1]), 2)
-            history[f"{short.replace('_final','_epochs')}"] = len(arr)
+            history[f"{short.replace('_final', '_epochs')}"] = len(arr)
         else:
             history[short] = None
 
@@ -220,6 +218,7 @@ def train_and_score(
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
 
 def main(max_epochs: int = PILOT_EPOCHS) -> None:
     print(f"\n{'=' * 70}")
@@ -238,12 +237,10 @@ def main(max_epochs: int = PILOT_EPOCHS) -> None:
     for label, kwargs in [
         ("baseline (label_shared=2.0, jeffreys=0.5, global HVG)", {}),
         ("variant_A (label_shared=4.0)", {"disentangle_label_shared_weight": 4.0}),
-        ("variant_B (jeffreys=0.2)",     {"jeffreys_integ_weight": 0.2}),
+        ("variant_B (jeffreys=0.2)", {"jeffreys_integ_weight": 0.2}),
     ]:
         print(f"── {label} ──")
-        res = train_and_score(
-            adata_spv_global, gil_global, label=label, max_epochs=max_epochs, **kwargs
-        )
+        res = train_and_score(adata_spv_global, gil_global, label=label, max_epochs=max_epochs, **kwargs)
         results.append(res)
         print(
             f"  knn_purity={res['knn_purity']:.3f}  leiden_ari={res['leiden_ari']:.3f}"
@@ -255,11 +252,14 @@ def main(max_epochs: int = PILOT_EPOCHS) -> None:
     print("Loading data with per-group HVG union …")
     adata_union = select_hvg_union(adata_raw.copy())
     adata_spv_union, gil_union = prepare_for_training(adata_union)
-    print(f"  shape: {adata_spv_union.shape}  (extra genes vs global HVG: {adata_spv_union.shape[1] - adata_global.shape[1]})\n")
+    print(
+        f"  shape: {adata_spv_union.shape}  (extra genes vs global HVG: {adata_spv_union.shape[1] - adata_global.shape[1]})\n"
+    )
 
     print("── variant_C (per-group HVG union) ──")
     res_c = train_and_score(
-        adata_spv_union, gil_union,
+        adata_spv_union,
+        gil_union,
         label="variant_C (per-group HVG union)",
         max_epochs=max_epochs,
     )
@@ -272,8 +272,16 @@ def main(max_epochs: int = PILOT_EPOCHS) -> None:
 
     # ── Results table ──────────────────────────────────────────────────────────
     df = pd.DataFrame(results)
-    cols_display = ["label", "knn_purity", "leiden_ari", "clisi", "ilisi", "kbet",
-                    "recon_train_final", "elbo_train_final"]
+    cols_display = [
+        "label",
+        "knn_purity",
+        "leiden_ari",
+        "clisi",
+        "ilisi",
+        "kbet",
+        "recon_train_final",
+        "elbo_train_final",
+    ]
     df_disp = df[[c for c in cols_display if c in df.columns]]
 
     print(f"\n{'=' * 70}")
@@ -292,7 +300,7 @@ def main(max_epochs: int = PILOT_EPOCHS) -> None:
 
     # ── Save outputs ───────────────────────────────────────────────────────────
     json_path = OUT_DIR / "pilot_results_celltype.json"
-    md_path   = OUT_DIR / "pilot_results_celltype.md"
+    md_path = OUT_DIR / "pilot_results_celltype.md"
 
     with json_path.open("w") as f:
         json.dump(results, f, indent=2, default=str)
@@ -302,8 +310,10 @@ def main(max_epochs: int = PILOT_EPOCHS) -> None:
         f.write(f"Epochs per variant: {max_epochs}\n\n")
         f.write(df_disp.to_markdown(index=False, floatfmt=".3f"))
         f.write("\n\n")
-        f.write("**Decision guide**: knn_purity/leiden_ari ↑ = better separation; "
-                "clisi ↓ = tighter clusters; ilisi/kbet stable = integration preserved.\n")
+        f.write(
+            "**Decision guide**: knn_purity/leiden_ari ↑ = better separation; "
+            "clisi ↓ = tighter clusters; ilisi/kbet stable = integration preserved.\n"
+        )
 
     print(f"Results saved:\n  {json_path}\n  {md_path}\n")
 
@@ -311,7 +321,9 @@ def main(max_epochs: int = PILOT_EPOCHS) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--epochs", type=int, default=PILOT_EPOCHS,
+        "--epochs",
+        type=int,
+        default=PILOT_EPOCHS,
         help=f"Max epochs per variant (default: {PILOT_EPOCHS})",
     )
     args = parser.parse_args()

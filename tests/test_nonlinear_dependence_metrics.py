@@ -4,8 +4,8 @@ import math
 
 import numpy as np
 import pytest
-
 from scripts.benchmark_f11_nonlinear_diagnostics import recommend_f11_diagnostics
+
 from spVIPESmulti.metrics import hsic_rbf, partial_corr_residualized
 
 

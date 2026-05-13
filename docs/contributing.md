@@ -5,7 +5,7 @@ This document will not reproduce the entire content from there. Instead, it aims
 information to get you started on contributing.
 
 We assume that you are already familiar with git and with making pull requests on GitHub. If not, please refer
-to the [scanpy developer guide][].
+to the [scanpy developer guide].
 
 ## Installing dev dependencies
 
@@ -19,7 +19,7 @@ pip install -e ".[dev,test,doc]"
 
 ## Code-style
 
-This template uses [pre-commit][] to enforce consistent code-styles. On every commit, pre-commit checks will either
+This template uses [pre-commit] to enforce consistent code-styles. On every commit, pre-commit checks will either
 automatically fix issues with the code, or raise an error message. See [pre-commit checks](template_usage.md#pre-commit-checks) for
 a full list of checks enabled for this repository.
 
@@ -31,7 +31,7 @@ pre-commit install
 
 in the root of the repository. Pre-commit will automatically download all dependencies when it is run for the first time.
 
-Alternatively, you can rely on the [pre-commit.ci][] service enabled on GitHub. If you didn't run `pre-commit` before
+Alternatively, you can rely on the [pre-commit.ci] service enabled on GitHub. If you didn't run `pre-commit` before
 pushing changes to GitHub it will automatically commit fixes to your pull request, or show an error message.
 
 If pre-commit.ci added a commit on a branch you still have been working on locally, simply use
@@ -41,13 +41,10 @@ git pull --rebase
 ```
 
 to integrate the changes into yours.
-While the [pre-commit.ci][] is useful, we strongly encourage installing and running pre-commit locally first to understand its usage.
+While the [pre-commit.ci] is useful, we strongly encourage installing and running pre-commit locally first to understand its usage.
 
 Finally, most editors have an _autoformat on save_ feature. Consider enabling this option for [black][black-editors]
 and [prettier][prettier-editors].
-
-[black-editors]: https://black.readthedocs.io/en/stable/integrations/editors.html
-[prettier-editors]: https://prettier.io/docs/en/editors.html
 
 ## Writing tests
 
@@ -55,7 +52,7 @@ and [prettier][prettier-editors].
 Remember to first install the package with `pip install '-e[dev,test]'`
 ```
 
-This package uses the [pytest][] for automated testing. Please [write tests][scanpy-test-docs] for every function added
+This package uses the [pytest] for automated testing. Please [write tests][scanpy-test-docs] for every function added
 to the package.
 
 Most IDEs integrate with pytest and provide a GUI to run tests. Alternatively, you can run all tests from the
@@ -67,8 +64,6 @@ pytest
 
 in the root of the repository. Continuous integration will automatically run the tests on all pull requests.
 
-[scanpy-test-docs]: https://scanpy.readthedocs.io/en/latest/dev/testing.html#writing-tests
-
 ## Publishing a release
 
 ### Updating the version number
@@ -77,19 +72,19 @@ Before making a release, you need to update the version number in the `pyproject
 
 > Given a version number MAJOR.MINOR.PATCH, increment the:
 >
-> 1.  MAJOR version when you make incompatible API changes,
-> 2.  MINOR version when you add functionality in a backwards compatible manner, and
-> 3.  PATCH version when you make backwards compatible bug fixes.
+> 1. MAJOR version when you make incompatible API changes,
+> 1. MINOR version when you add functionality in a backwards compatible manner, and
+> 1. PATCH version when you make backwards compatible bug fixes.
 >
 > Additional labels for pre-release and build metadata are available as extensions to the MAJOR.MINOR.PATCH format.
 
 Once you are done, run
 
-```
+```bash
 git push --tags
 ```
 
-to publish the created tag on GitHub. Alternatively, it is possible to create a tag through the Github web interface. For more information, see [managing Github releases][]. This will automatically trigger a Github workflow that creates a release on PyPI.
+to publish the created tag on GitHub. Alternatively, it is possible to create a tag through the Github web interface. For more information, see [managing Github releases]. This will automatically trigger a Github workflow that creates a release on PyPI.
 
 ### The release Github workflow
 
@@ -102,9 +97,9 @@ Python packages are not distributed as source code, but as _distributions_. The 
 python -m build
 ```
 
-This command creates a _source archive_ and a _wheel_, which are required for publishing your package to [PyPI][]. These files are created directly in the root of the repository.
+This command creates a _source archive_ and a _wheel_, which are required for publishing your package to [PyPI]. These files are created directly in the root of the repository.
 
-Before uploading them to [PyPI][] you can check that your _distribution_ is valid by running:
+Before uploading them to [PyPI] you can check that your _distribution_ is valid by running:
 
 ```bash
 twine check dist/*
@@ -116,39 +111,33 @@ and finally publishing it with:
 twine upload dist/*
 ```
 
-Provide your username and password when requested and then go check out your package on [PyPI][]!
+Provide your username and password when requested and then go check out your package on [PyPI]!
 
-For more information, follow the [Python packaging tutorial][].
+For more information, follow the [Python packaging tutorial].
 
 #### Configuring the Github workflow
 
-Tags adhering to `"*.*.*"` that are pushed to the `main` branch will trigger the release Github workflow that automatically builds and uploads the Python package to [PyPI][].
-For this to work, the `PYPI_API_TOKEN` Github secret needs to be set to the value of the [PyPI][] token.
-See [Creating PyPI tokens][] for instructions on how to create a [PyPI][] token.
-Finally, set your `PYPI_API_TOKEN` Github secret equal to the value of the just created [PyPI][] token by following [creating Github secrets][].
-
-[creating github secrets]: https://docs.github.com/en/actions/security-guides/encrypted-secrets
-[creating pypi tokens]: https://pypi.org/help/#apitoken
-[managing github releases]: https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository
-[python packaging tutorial]: https://packaging.python.org/en/latest/tutorials/packaging-projects/#generating-distribution-archives
-[pypi-feature-request]: https://github.com/scverse/cookiecutter-scverse/issues/88
+Tags adhering to `"*.*.*"` that are pushed to the `main` branch will trigger the release Github workflow that automatically builds and uploads the Python package to [PyPI].
+For this to work, the `PYPI_API_TOKEN` Github secret needs to be set to the value of the [PyPI] token.
+See [Creating PyPI tokens] for instructions on how to create a [PyPI] token.
+Finally, set your `PYPI_API_TOKEN` Github secret equal to the value of the just created [PyPI] token by following [creating Github secrets].
 
 ## Writing documentation
 
-Please write documentation for new or changed features and use-cases. This project uses [sphinx][] with the following features:
+Please write documentation for new or changed features and use-cases. This project uses [sphinx] with the following features:
 
--   the [myst][] extension allows to write documentation in markdown/Markedly Structured Text
--   [Numpy-style docstrings][numpydoc] (through the [napoloen][numpydoc-napoleon] extension).
--   Jupyter notebooks as tutorials through [myst-nb][] (See [Tutorials with myst-nb](#tutorials-with-myst-nb-and-jupyter-notebooks))
--   [Sphinx autodoc typehints][], to automatically reference annotated input and output types
--   Citations (like {cite:p}`Virshup_2023`) can be included with [sphinxcontrib-bibtex](https://sphinxcontrib-bibtex.readthedocs.io/)
+- the [myst] extension allows to write documentation in markdown/Markedly Structured Text
+- [Numpy-style docstrings][numpydoc] (through the [napoloen][numpydoc-napoleon] extension).
+- Jupyter notebooks as tutorials through [myst-nb] (See [Tutorials with myst-nb](#tutorials-with-myst-nb-and-jupyter-notebooks))
+- [Sphinx autodoc typehints], to automatically reference annotated input and output types
+- Citations (like {cite:p}`Virshup_2023`) can be included with [sphinxcontrib-bibtex](https://sphinxcontrib-bibtex.readthedocs.io/)
 
 See the [scanpy developer docs](https://scanpy.readthedocs.io/en/latest/dev/documentation.html) for more information
 on how to write documentation.
 
 ### Tutorials with myst-nb and jupyter notebooks
 
-The documentation is set-up to render jupyter notebooks stored in the `docs/notebooks` directory using [myst-nb][].
+The documentation is set-up to render jupyter notebooks stored in the `docs/notebooks` directory using [myst-nb].
 Currently, only notebooks in `.ipynb` format are supported that will be included with both their input and output cells.
 It is your responsibility to update and re-run the notebook whenever necessary.
 
@@ -158,10 +147,10 @@ repository.
 
 #### Hints
 
--   If you refer to objects from other packages, please add an entry to `intersphinx_mapping` in `docs/conf.py`. Only
-    if you do so can sphinx automatically create a link to the external documentation.
--   If building the documentation fails because of a missing link that is outside your control, you can add an entry to
-    the `nitpick_ignore` list in `docs/conf.py`
+- If you refer to objects from other packages, please add an entry to `intersphinx_mapping` in `docs/conf.py`. Only
+  if you do so can sphinx automatically create a link to the external documentation.
+- If building the documentation fails because of a missing link that is outside your control, you can add an entry to
+  the `nitpick_ignore` list in `docs/conf.py`
 
 #### Building the docs locally
 
@@ -173,25 +162,22 @@ open _build/html/index.html
 
 <!-- Links -->
 
-[scanpy developer guide]: https://scanpy.readthedocs.io/en/latest/dev/index.html
-[cookiecutter-scverse-instance]: https://cookiecutter-scverse-instance.readthedocs.io/en/latest/template_usage.html
-[github quickstart guide]: https://docs.github.com/en/get-started/quickstart/create-a-repo?tool=webui
-[codecov]: https://about.codecov.io/sign-up/
-[codecov docs]: https://docs.codecov.com/docs
-[codecov bot]: https://docs.codecov.com/docs/team-bot
-[codecov app]: https://github.com/apps/codecov
-[pre-commit.ci]: https://pre-commit.ci/
-[readthedocs.org]: https://readthedocs.org/
+[black-editors]: https://black.readthedocs.io/en/stable/integrations/editors.html
+[creating github secrets]: https://docs.github.com/en/actions/security-guides/encrypted-secrets
+[creating pypi tokens]: https://pypi.org/help/#apitoken
+[managing github releases]: https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository
+[myst]: https://myst-parser.readthedocs.io/en/latest/intro.html
 [myst-nb]: https://myst-nb.readthedocs.io/en/latest/
-[jupytext]: https://jupytext.readthedocs.io/en/latest/
+[numpydoc]: https://numpydoc.readthedocs.io/en/latest/format.html
+[numpydoc-napoleon]: https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html
 [pre-commit]: https://pre-commit.com/
-[anndata]: https://github.com/scverse/anndata
-[mudata]: https://github.com/scverse/mudata
+[pre-commit.ci]: https://pre-commit.ci/
+[prettier-editors]: https://prettier.io/docs/en/editors.html
+[pypi]: https://pypi.org/
 [pytest]: https://docs.pytest.org/
+[python packaging tutorial]: https://packaging.python.org/en/latest/tutorials/packaging-projects/#generating-distribution-archives
+[scanpy developer guide]: https://scanpy.readthedocs.io/en/latest/dev/index.html
+[scanpy-test-docs]: https://scanpy.readthedocs.io/en/latest/dev/testing.html#writing-tests
 [semver]: https://semver.org/
 [sphinx]: https://www.sphinx-doc.org/en/master/
-[myst]: https://myst-parser.readthedocs.io/en/latest/intro.html
-[numpydoc-napoleon]: https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html
-[numpydoc]: https://numpydoc.readthedocs.io/en/latest/format.html
 [sphinx autodoc typehints]: https://github.com/tox-dev/sphinx-autodoc-typehints
-[pypi]: https://pypi.org/

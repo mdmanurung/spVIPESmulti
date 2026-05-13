@@ -8,4 +8,4 @@
 ## Candidates
 
 - weight `0.01`: FAIL, orthogonality reduction -1.08%
-  failures: orthogonality reduction <20%, leiden_ari worsened >5% or missing, wall-time overhead >10% or missing
+  failures: orthogonality reduction \<20%, leiden_ari worsened >5% or missing, wall-time overhead >10% or missing

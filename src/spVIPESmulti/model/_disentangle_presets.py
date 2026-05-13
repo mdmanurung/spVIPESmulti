@@ -129,21 +129,21 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
     },
 }
 
-_REQUIRED_PRESET_KEYS = frozenset({
-    "disentangle_group_shared_weight",
-    "disentangle_label_shared_weight",
-    "disentangle_group_private_weight",
-    "disentangle_label_private_weight",
-    "disentangle_batch_shared_weight",
-    "disentangle_donor_shared_weight",
-    "disentangle_donor_private_weight",
-    "contrastive_weight",
-    "orthogonality_weight",
-})
+_REQUIRED_PRESET_KEYS = frozenset(
+    {
+        "disentangle_group_shared_weight",
+        "disentangle_label_shared_weight",
+        "disentangle_group_private_weight",
+        "disentangle_label_private_weight",
+        "disentangle_batch_shared_weight",
+        "disentangle_donor_shared_weight",
+        "disentangle_donor_private_weight",
+        "contrastive_weight",
+        "orthogonality_weight",
+    }
+)
 
 for _preset_name, _preset_vals in DISENTANGLE_PRESETS.items():
     _missing = _REQUIRED_PRESET_KEYS - _preset_vals.keys()
     if _missing:
-        raise RuntimeError(
-            f"DISENTANGLE_PRESETS['{_preset_name}'] is missing required keys: {_missing}"
-        )
+        raise RuntimeError(f"DISENTANGLE_PRESETS['{_preset_name}'] is missing required keys: {_missing}")

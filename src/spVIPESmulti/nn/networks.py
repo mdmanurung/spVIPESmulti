@@ -82,8 +82,7 @@ class Encoder(nn.Module):
         _act_key = encoder_activation.lower()
         if _act_key not in _ACTIVATIONS:
             raise ValueError(
-                f"encoder_activation={encoder_activation!r} is not supported. "
-                f"Choose from: {list(_ACTIVATIONS)}."
+                f"encoder_activation={encoder_activation!r} is not supported. Choose from: {list(_ACTIVATIONS)}."
             )
         self.relu = _ACTIVATIONS[_act_key]()
         self.drop = nn.Dropout(dropout)
@@ -130,7 +129,7 @@ class Encoder(nn.Module):
             - **qz** : torch.distributions.Normal - Latent distribution object
         """
         one_hot_cat_list = []
-        for n_cat, cat in zip(self.n_cat_list, cat_list):
+        for n_cat, cat in zip(self.n_cat_list, cat_list, strict=False):
             if n_cat > 1:  # only proceed if there's more than one batch, if no batch key is specified this value == 1.
                 if cat.size(1) != n_cat:
                     one_hot_cat = one_hot(cat, n_cat)
@@ -370,9 +369,7 @@ class LinearDecoderSPVIPE(nn.Module):
             px_mixing = self.mixture(p_mixing_cat_z, *cat_list)
 
         mixing = torch.sigmoid(px_mixing)
-        px_scale = torch.nn.functional.normalize(
-            mixing * px_rate_private + (1 - mixing) * px_rate_shared, p=1, dim=-1
-        )
+        px_scale = torch.nn.functional.normalize(mixing * px_rate_private + (1 - mixing) * px_rate_shared, p=1, dim=-1)
 
         # raw_px_scale_private_shared = self.factor_regressor_private_shared(z_private_shared, *cat_list)
         # px_scale_private_shared = torch.softmax(raw_px_scale_private_shared, dim=-1)

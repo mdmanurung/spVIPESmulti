@@ -1,6 +1,6 @@
 # API Reference
 
-spVIPESmulti v1.0.0 — shared-private Variational Inference with Product of Experts and Supervision.
+spVIPESmulti v1.0.1 — shared-private Variational Inference with Product of Experts and Supervision.
 
 **Authors:** Mikhael Dito Manurung · Claudio Novella Rausell · D.J.M. Peters · A. Mahfouz
 
@@ -54,7 +54,7 @@ spVIPESmulti v1.0.0 — shared-private Variational Inference with Product of Exp
 | `LinearDecoderSPVIPE` | Neural network | `spVIPESmulti.nn.LinearDecoderSPVIPE` |
 | `ConcatDataLoader` | DataLoader | `spVIPESmulti.dataloaders.ConcatDataLoader` |
 
----
+______________________________________________________________________
 
 ## Model
 
@@ -126,7 +126,7 @@ latents = model.get_latent_representation(batch_size=512)
 > `spVIPESmulti(adata, disentangle_preset="full", contrastive_weight=0.0)` enables
 > all classifiers but turns off the InfoNCE term.
 
----
+______________________________________________________________________
 
 ### `setup_anndata`
 
@@ -167,7 +167,7 @@ Registers fields on `adata` via `AnnDataManager` and selects the PoE strategy.
 
 For multimodal data or N > 2 groups, label-based PoE is recommended.
 
----
+______________________________________________________________________
 
 ### `evaluate`
 
@@ -190,7 +190,7 @@ When validation metrics are present, `report["held_out_metrics"]["held_out_nll"]
 
 `kbet` is the kBET acceptance rate, so higher values indicate better group mixing. Other shared-latent diagnostics follow their standard direction: iLISI higher, cLISI lower, kNN purity higher, Leiden ARI higher.
 
----
+______________________________________________________________________
 
 ### `train`
 
@@ -225,7 +225,7 @@ model.train(
 
 The training method also consumes orthogonality-control kwargs before constructing the Trainer: `compute_orthogonality_metric`, `orthogonality_groupby_keys`, and `orthogonality_min_cells_per_stratum`. `compute_orthogonality_metric` controls F1 metric logging only; F3 loss is controlled by constructor-level `orthogonality_weight`.
 
----
+______________________________________________________________________
 
 ### `embed`
 
@@ -256,7 +256,7 @@ Return value keys:
 - `payload["shared"]`: full shared matrix
 - `payload["private"]`: per-group private matrices
 
----
+______________________________________________________________________
 
 ### `get_latent_representation`
 
@@ -297,7 +297,7 @@ latents = model.get_latent_representation(
 | `"private_multimodal"` | `{(g, mod): (n_g, n_private)}` | Per-(group, modality) private latent, dataloader order. **Multimodal only.** |
 | `"private_multimodal_reordered"` | `{(g, mod): (n_g, n_private)}` | Per-(group, modality) private latent, original cell order. **Multimodal only.** |
 
----
+______________________________________________________________________
 
 ### `get_shared_posterior`
 
@@ -311,7 +311,7 @@ Returns per-group posterior parameters for the shared latent:
 - `posterior["loc_reordered"]`, `posterior["scale_reordered"]` in original cell order
 - `posterior["group_indices_list"]`
 
----
+______________________________________________________________________
 
 ### `get_aggregated_posterior`
 
@@ -326,7 +326,7 @@ Aggregates shared posterior statistics by `(group, sample)` and returns:
 
 Requires `sample_key` in `setup_anndata(...)` for sample-aware aggregation.
 
----
+______________________________________________________________________
 
 ### `differential_abundance`
 
@@ -345,7 +345,7 @@ Returns:
 When only two groups exist, `group_a`/`group_b` can be omitted and default to
 `0` and `1`.
 
----
+______________________________________________________________________
 
 ### `get_loadings`
 
@@ -360,7 +360,7 @@ batch-normalisation-scaled weights from the linear decoder.
 In multimodal mode, keys are `((group_idx, modality), "shared")` and
 `((group_idx, modality), "private")`.
 
----
+______________________________________________________________________
 
 ### `get_enrichment_scores`
 
@@ -381,7 +381,7 @@ Runs optional decoupler-backed enrichment methods and returns:
 If `write_to_adata=True` (default), scores are written to `adata.obsm[obsm_key]`
 and provenance to `adata.uns[uns_key]`.
 
----
+______________________________________________________________________
 
 ### `summarize_enrichment`
 
@@ -392,7 +392,7 @@ summary = model.summarize_enrichment(payload["scores_df"], groupby="groups")
 Aggregates enrichment scores by any `adata.obs` grouping column using a pandas
 aggregation function (`mean` by default).
 
----
+______________________________________________________________________
 
 ### `interpretation_report`
 
@@ -411,7 +411,7 @@ Returns a compact dictionary with:
 - `integration_metrics`: optional integration table (when shared latent and labels are available)
 - `warnings`: informational warnings
 
----
+______________________________________________________________________
 
 ## Data preparation
 
@@ -459,7 +459,7 @@ for spVIPESmulti. At least 2 groups are required.
 .. autofunction:: spVIPESmulti.data.prepare_adatas.prepare_adatas
 ```
 
----
+______________________________________________________________________
 
 ### `prepare_multimodal_adatas`
 
@@ -520,7 +520,7 @@ model.train(group_indices_list=group_indices_list, max_epochs=100, batch_size=51
 .. autofunction:: spVIPESmulti.data.prepare_adatas.prepare_multimodal_adatas
 ```
 
----
+______________________________________________________________________
 
 ## Disentanglement presets
 
@@ -582,7 +582,7 @@ model = spVIPESmulti.model.spVIPESmulti(
 )
 ```
 
----
+______________________________________________________________________
 
 ## Normalizing-flow prior
 
@@ -590,7 +590,7 @@ When `use_nf_prior=True`, the standard N(0, I) prior on the selected latent is
 replaced by a Zuko normalizing-flow distribution. The KL divergence is computed
 by Monte Carlo:
 
-```
+```text
 KL(q(z|x) || p_flow(z)) ≈ log q(z|x) − log p_flow(z)
 ```
 
@@ -603,7 +603,7 @@ single ELBO objective — no separate warm-up schedule is required.
 | `nf_transforms` | int ≥ 1 | Number of sequential transforms. More transforms → more flexible prior but more parameters. Typical range: 3–8. |
 | `nf_target` | `"shared"`, `"private"`, `"both"` | `"both"` fits independent flows on shared and private, doubling flow parameter count. |
 
----
+______________________________________________________________________
 
 ## PyTorch module
 
@@ -638,7 +638,7 @@ parameters. Access via `model.module` after construction.
 | `module.is_multimodal` | `True` if built from multimodal data. |
 | `module.group_modalities` | `dict[int, list[str]]` — modalities present per group index. |
 
----
+______________________________________________________________________
 
 ## Neural network components
 
@@ -680,7 +680,7 @@ reconstructions via a learned mixing weight `px_mixing`.
     :special-members: __init__
 ```
 
----
+______________________________________________________________________
 
 ## Utilities
 
@@ -725,7 +725,7 @@ adata_hvg = spVIPESmulti.utils.highly_variable_genes_union(
 )
 ```
 
----
+______________________________________________________________________
 
 ### `store_latents`
 
@@ -763,7 +763,7 @@ spVIPESmulti.utils.store_latents(adata, latents, group_indices_list)
 # adata.obsm["X_spVIPESmulti_shared"] is now populated
 ```
 
----
+______________________________________________________________________
 
 ### `add_latent_dims_to_obs`
 
@@ -793,7 +793,7 @@ spVIPESmulti.utils.add_latent_dims_to_obs(adata_g0, "X_spVIPESmulti_private_g0",
 sc.pl.violin(adata_g0, "spVIPESmulti_private_g0_1", groupby="cell_type")
 ```
 
----
+______________________________________________________________________
 
 ### `compute_shared_umap`
 
@@ -823,7 +823,7 @@ spVIPESmulti.utils.compute_shared_umap(adata)
 spVIPESmulti.pl.umap_shared(adata, color="cell_type")
 ```
 
----
+______________________________________________________________________
 
 ### `compute_private_umaps`
 
@@ -854,7 +854,7 @@ spVIPESmulti.utils.compute_private_umaps(adatas)
 spVIPESmulti.pl.umap_private(adatas, color="cell_type")
 ```
 
----
+______________________________________________________________________
 
 ### `get_top_genes`
 
@@ -883,6 +883,7 @@ a pre-computed DataFrame or directly from a fitted model.
 | `signed` | `bool` | `True` | If `True`, return top positive and top negative genes separately. If `False`, rank by absolute value. |
 
 **Returns** `pd.DataFrame` with columns:
+
 - `dim` — dimension name (e.g. `"Z_shared_0"`)
 - `pos_genes`, `neg_genes` — when `signed=True`
 - `top_genes` — when `signed=False`
@@ -892,7 +893,7 @@ top = spVIPESmulti.utils.get_top_genes(model=model, n_top=5)
 print(top[["dim", "pos_genes"]].to_string(index=False))
 ```
 
----
+______________________________________________________________________
 
 ### `score_cells_on_factor`
 
@@ -920,7 +921,7 @@ spVIPESmulti.utils.score_cells_on_factor(adata_g0, dim_idx=2, obsm_key="X_spVIPE
 sc.pl.violin(adata_g0, "spVIPESmulti_private_g0_2", groupby="cell_type")
 ```
 
----
+______________________________________________________________________
 
 ## Plotting
 
@@ -967,7 +968,7 @@ ax = spVIPESmulti.pl.heatmap_loadings(model=model, n_top=10)
 ax.figure.savefig("loadings.pdf")
 ```
 
----
+______________________________________________________________________
 
 ### `umap_shared`
 
@@ -989,7 +990,7 @@ written by `compute_shared_umap`. All extra keyword arguments are forwarded.
 spVIPESmulti.pl.umap_shared(adata, color=["cell_type", "groups"])
 ```
 
----
+______________________________________________________________________
 
 ### `umap_private`
 
@@ -1021,7 +1022,7 @@ fig = spVIPESmulti.pl.umap_private(adatas, color="cell_type")
 fig.savefig("private_umaps.pdf")
 ```
 
----
+______________________________________________________________________
 
 ### `factor_violin`
 
@@ -1057,7 +1058,7 @@ spVIPESmulti.pl.factor_violin(
 )
 ```
 
----
+______________________________________________________________________
 
 ### `training_curves`
 
@@ -1080,7 +1081,7 @@ fig = spVIPESmulti.pl.training_curves(model)
 fig.savefig("training.pdf")
 ```
 
----
+______________________________________________________________________
 
 ### `loadings_dotplot`
 
@@ -1119,7 +1120,7 @@ loadings are collected and passed as `var_names`.
 spVIPESmulti.pl.loadings_dotplot(adata, dims=[0, 2, 4], groupby="cell_type", model=model)
 ```
 
----
+______________________________________________________________________
 
 ### Additional plotting helpers
 
@@ -1146,7 +1147,7 @@ spVIPESmulti.pl.loadings_dotplot(adata, dims=[0, 2, 4], groupby="cell_type", mod
     pl.differential_vars_heatmap
 ```
 
----
+______________________________________________________________________
 
 ## Metrics
 
@@ -1190,7 +1191,7 @@ recon = spVIPESmulti.metrics.reconstruction_error(model)
     metrics.reconstruction_error
 ```
 
----
+______________________________________________________________________
 
 ## Latent Traversal
 
@@ -1215,7 +1216,7 @@ fig = spVIPESmulti.pl.differential_vars_heatmap(traversal)
 .. autofunction:: spVIPESmulti.traversal.calculate_differential_vars
 ```
 
----
+______________________________________________________________________
 
 ## Interventions
 
@@ -1267,7 +1268,7 @@ F10a audit helpers live under `spVIPESmulti.interventions.metrics` and implement
 CellDISECT-style Pearson, delta-Pearson, top-DE cosine, Wasserstein, CAG, and
 MIG-proxy metrics without requiring external benchmark packages.
 
----
+______________________________________________________________________
 
 ## Internals
 

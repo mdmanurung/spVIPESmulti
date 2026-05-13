@@ -1,13 +1,12 @@
 """Tests for the F10b CellDISECT parity runner helpers."""
 
+import csv
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
-import csv
-import json
 import numpy as np
-
 
 _SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "benchmark_kang_celldisect_parity.py"
 _SCRIPT_SPEC = importlib.util.spec_from_file_location("benchmark_kang_celldisect_parity", _SCRIPT_PATH)

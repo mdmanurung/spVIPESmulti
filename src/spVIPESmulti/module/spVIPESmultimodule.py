@@ -1,5 +1,6 @@
 """Main module."""
-from typing import Literal, Optional
+
+from typing import Literal
 
 import numpy as np
 import torch
@@ -8,12 +9,12 @@ import zuko.flows
 from scvi import REGISTRY_KEYS
 from scvi.distributions import NegativeBinomialMixture
 from scvi.module.base import BaseModuleClass, LossOutput, auto_move_data
+from scvi.nn import FCLayers
 from torch.distributions import Normal
 from torch.distributions import kl_divergence as kl
 
-from scvi.nn import FCLayers
-from spVIPESmulti.nn.networks import Encoder, LinearDecoderSPVIPE
 from spVIPESmulti.module.utils import gradient_reversal
+from spVIPESmulti.nn.networks import Encoder, LinearDecoderSPVIPE
 
 
 def _to_float_tensor(x: torch.Tensor | np.ndarray, device: torch.device) -> torch.Tensor:
@@ -185,11 +186,7 @@ def _orthogonality_strata_ids(
     if len(groupby_keys) == 0:
         return torch.zeros(n_obs, device=device, dtype=torch.long)
 
-    strata_parts = [
-        _to_1d_tensor(tensors[key], device)
-        for key in groupby_keys
-        if key in tensors
-    ]
+    strata_parts = [_to_1d_tensor(tensors[key], device) for key in groupby_keys if key in tensors]
     if not strata_parts:
         return None
     if len(strata_parts) == 1:
@@ -275,11 +272,11 @@ class spVIPESmultimodule(BaseModuleClass):
         groups_obs_indices,
         groups_var_indices,
         use_labels: bool = False,
-        n_labels: Optional[int] = None,
+        n_labels: int | None = None,
         use_condition: bool = False,
-        n_conditions: Optional[int] = None,
+        n_conditions: int | None = None,
         use_donor: bool = False,
-        n_donors: Optional[int] = None,
+        n_donors: int | None = None,
         use_batch_covariate: bool = False,
         n_batch: int = 0,
         n_hidden: int = 128,
@@ -292,12 +289,12 @@ class spVIPESmultimodule(BaseModuleClass):
         log_variational_generative: bool = True,
         dispersion: Literal["gene", "gene-batch", "gene-cell"] = "gene",
         # Multimodal parameters
-        groups_modality_lengths: Optional[dict] = None,
-        groups_modality_var_indices: Optional[dict] = None,
-        modality_likelihoods: Optional[dict[str, str]] = None,
-        modality_names: Optional[list[str]] = None,
-        groups_modality_masks: Optional[dict] = None,
-        modality_loss_weights: Optional[dict[str, float]] = None,
+        groups_modality_lengths: dict | None = None,
+        groups_modality_var_indices: dict | None = None,
+        modality_likelihoods: dict[str, str] | None = None,
+        modality_names: list[str] | None = None,
+        groups_modality_masks: dict | None = None,
+        modality_loss_weights: dict[str, float] | None = None,
         use_jeffreys_integ: bool = False,
         jeffreys_integ_weight: float = 1.0,
         # Normalizing flow prior parameters
@@ -318,13 +315,13 @@ class spVIPESmultimodule(BaseModuleClass):
         orthogonality_weight: float = 0.0,
         contrastive_temperature: float = 0.1,
         disentangle_warmup: bool = True,
-        group_loss_weights: Optional[list[float]] = None,
+        group_loss_weights: list[float] | None = None,
         strict_likelihood_support: bool = False,
         validate_observations: bool = False,
         encoder_activation: str = "silu",
         use_low_rank_mixer: bool = False,
         low_rank_mixer_rank: int = 4,
-        label_class_weights: Optional[torch.Tensor] = None,
+        label_class_weights: torch.Tensor | None = None,
         compute_orthogonality_metric: bool = False,
         orthogonality_groupby_keys: tuple[str, ...] = ("sample",),
         orthogonality_min_cells_per_stratum: int = 16,
@@ -408,22 +405,32 @@ class spVIPESmultimodule(BaseModuleClass):
 
                     self.encoders[(group, modality)] = {
                         "shared": Encoder(
-                            n_features, n_dimensions_shared,
-                            hidden=n_hidden, dropout=dropout_rate,
-                            n_cat_list=cat_list, groups=group,
+                            n_features,
+                            n_dimensions_shared,
+                            hidden=n_hidden,
+                            dropout=dropout_rate,
+                            n_cat_list=cat_list,
+                            groups=group,
                             encoder_activation=encoder_activation,
                         ),
                         "private": Encoder(
-                            n_features, n_dimensions_private,
-                            hidden=n_hidden, dropout=dropout_rate,
-                            n_cat_list=cat_list, groups=group,
+                            n_features,
+                            n_dimensions_private,
+                            hidden=n_hidden,
+                            dropout=dropout_rate,
+                            n_cat_list=cat_list,
+                            groups=group,
                             encoder_activation=encoder_activation,
                         ),
                     }
                     self.decoders[(group, modality)] = LinearDecoderSPVIPE(
-                        n_dimensions_private, n_dimensions_shared, n_features,
-                        n_cat_list=cat_list, use_batch_norm=True,
-                        use_layer_norm=False, bias=False,
+                        n_dimensions_private,
+                        n_dimensions_shared,
+                        n_features,
+                        n_cat_list=cat_list,
+                        use_batch_norm=True,
+                        use_layer_norm=False,
+                        bias=False,
                         use_low_rank_mixer=use_low_rank_mixer,
                         low_rank_mixer_rank=low_rank_mixer_rank,
                     )
@@ -442,15 +449,21 @@ class spVIPESmultimodule(BaseModuleClass):
             self.encoders = {
                 groups: {
                     "shared": Encoder(
-                        x_dim, n_dimensions_shared,
-                        hidden=n_hidden, dropout=dropout_rate,
-                        n_cat_list=cat_list, groups=groups,
+                        x_dim,
+                        n_dimensions_shared,
+                        hidden=n_hidden,
+                        dropout=dropout_rate,
+                        n_cat_list=cat_list,
+                        groups=groups,
                         encoder_activation=encoder_activation,
                     ),
                     "private": Encoder(
-                        x_dim, n_dimensions_private,
-                        hidden=n_hidden, dropout=dropout_rate,
-                        n_cat_list=cat_list, groups=groups,
+                        x_dim,
+                        n_dimensions_private,
+                        hidden=n_hidden,
+                        dropout=dropout_rate,
+                        n_cat_list=cat_list,
+                        groups=groups,
                         encoder_activation=encoder_activation,
                     ),
                 }
@@ -458,9 +471,13 @@ class spVIPESmultimodule(BaseModuleClass):
             }
             self.decoders = {
                 groups: LinearDecoderSPVIPE(
-                    n_dimensions_private, n_dimensions_shared, x_dim,
-                    n_cat_list=cat_list, use_batch_norm=True,
-                    use_layer_norm=False, bias=False,
+                    n_dimensions_private,
+                    n_dimensions_shared,
+                    x_dim,
+                    n_cat_list=cat_list,
+                    use_batch_norm=True,
+                    use_layer_norm=False,
+                    bias=False,
                     use_low_rank_mixer=use_low_rank_mixer,
                     low_rank_mixer_rank=low_rank_mixer_rank,
                 )
@@ -468,7 +485,9 @@ class spVIPESmultimodule(BaseModuleClass):
             }
 
             # Register sub-modules
-            for (groups, values_encoder), (_, values_decoder) in zip(self.encoders.items(), self.decoders.items()):
+            for (groups, values_encoder), (_, values_decoder) in zip(
+                self.encoders.items(), self.decoders.items(), strict=False
+            ):
                 self.add_module(f"encoder_{groups}_shared", values_encoder["shared"])
                 self.add_module(f"encoder_{groups}_private", values_encoder["private"])
                 self.add_module(f"decoder_{groups}", values_decoder)
@@ -558,9 +577,7 @@ class spVIPESmultimodule(BaseModuleClass):
                 "disentangle_batch_shared_weight=0.0."
             )
         if orthogonality_weight < 0:
-            raise ValueError(
-                f"orthogonality_weight must be >= 0, got {orthogonality_weight}."
-            )
+            raise ValueError(f"orthogonality_weight must be >= 0, got {orthogonality_weight}.")
 
         n_groups = len(groups_lengths)
         self.disentangle_group_shared_weight = disentangle_group_shared_weight
@@ -576,43 +593,50 @@ class spVIPESmultimodule(BaseModuleClass):
         self.disentangle_warmup = disentangle_warmup
         if group_loss_weights is not None:
             s = sum(group_loss_weights)
-            self.group_loss_weights: Optional[list[float]] = [w / s for w in group_loss_weights]
+            self.group_loss_weights: list[float] | None = [w / s for w in group_loss_weights]
         else:
             self.group_loss_weights = None
 
-        _clf_kwargs = dict(n_layers=2, n_hidden=64, dropout_rate=0.1, use_batch_norm=True)
+        _clf_kwargs = {"n_layers": 2, "n_hidden": 64, "dropout_rate": 0.1, "use_batch_norm": True}
 
         # Classifier 2: adversarial — erase group info from z_shared
         self.q_group_shared = (
             FCLayers(n_in=n_dimensions_shared, n_out=n_groups, **_clf_kwargs)
-            if disentangle_group_shared_weight > 0 else None
+            if disentangle_group_shared_weight > 0
+            else None
         )
         # Classifier 1: supervised — preserve label info in z_shared
         self.q_label_shared = (
             FCLayers(n_in=n_dimensions_shared, n_out=n_labels, **_clf_kwargs)
-            if disentangle_label_shared_weight > 0 and use_labels else None
+            if disentangle_label_shared_weight > 0 and use_labels
+            else None
         )
         # Classifier 3: supervised — preserve group info in z_private
         self.q_group_private = (
             FCLayers(n_in=n_dimensions_private, n_out=n_groups, **_clf_kwargs)
-            if disentangle_group_private_weight > 0 else None
+            if disentangle_group_private_weight > 0
+            else None
         )
         # Classifier 4: adversarial — erase label info from z_private
         self.q_label_private = (
             FCLayers(n_in=n_dimensions_private, n_out=n_labels, **_clf_kwargs)
-            if disentangle_label_private_weight > 0 and use_labels else None
+            if disentangle_label_private_weight > 0 and use_labels
+            else None
         )
         self.q_batch_shared = (
             FCLayers(n_in=n_dimensions_shared, n_out=n_batch, **_clf_kwargs)
-            if disentangle_batch_shared_weight > 0 and use_batch_covariate else None
+            if disentangle_batch_shared_weight > 0 and use_batch_covariate
+            else None
         )
         self.q_donor_shared = (
             FCLayers(n_in=n_dimensions_shared, n_out=n_donors, **_clf_kwargs)
-            if disentangle_donor_shared_weight > 0 and use_donor else None
+            if disentangle_donor_shared_weight > 0 and use_donor
+            else None
         )
         self.q_donor_private = (
             FCLayers(n_in=n_dimensions_private, n_out=n_donors, **_clf_kwargs)
-            if disentangle_donor_private_weight > 0 and use_donor else None
+            if disentangle_donor_private_weight > 0 and use_donor
+            else None
         )
 
         # Optional prototype buffer for contrastive InfoNCE on z_shared.
@@ -631,7 +655,6 @@ class spVIPESmultimodule(BaseModuleClass):
         if self.q_batch_shared is None and self.q_donor_shared is None:
             return 0.0
         return float(np.clip(float(kl_weight), 0.0, 1.0))
-
 
     def _cluster_based_poe(self, *args, **kwargs):
         raise NotImplementedError("Cluster-based PoE has been removed. Use label-based PoE (label_key=...) instead.")
@@ -699,7 +722,6 @@ class spVIPESmultimodule(BaseModuleClass):
             }
 
         return result
-
 
     def _split_tensors_by_group(self, tensors):
         """Split a merged minibatch dict into a list of per-group dicts.
@@ -810,7 +832,7 @@ class spVIPESmultimodule(BaseModuleClass):
         private_stats = {}
         shared_stats = {}
 
-        for group, (item, batch) in enumerate(zip(x.values(), batch_index)):
+        for group, (item, batch) in enumerate(zip(x.values(), batch_index, strict=False)):
             private_encoder = self.encoders[group]["private"]
             shared_encoder = self.encoders[group]["shared"]
 
@@ -842,8 +864,8 @@ class spVIPESmultimodule(BaseModuleClass):
 
         # Step 1: Per-(group, modality) encoding
         per_modality_private = {}  # keyed by (group, modality)
-        per_modality_shared = {}   # keyed by (group, modality)
-        library = {}               # keyed by (group, modality)
+        per_modality_shared = {}  # keyed by (group, modality)
+        library = {}  # keyed by (group, modality)
 
         for group in range(n_groups):
             x_group = x[group]  # full concatenated features for this group
@@ -935,7 +957,7 @@ class spVIPESmultimodule(BaseModuleClass):
     def _supervised_poe(
         self,
         shared_stats,
-        labels: Optional[dict[int, torch.Tensor]],
+        labels: dict[int, torch.Tensor] | None,
     ):
         if self.use_labels and labels is not None:
             return self._label_based_poe(shared_stats, labels)
@@ -1038,7 +1060,7 @@ class spVIPESmultimodule(BaseModuleClass):
         """
         stat_keys = ["logtheta_loc", "logtheta_logvar", "logtheta_scale"]
         group_keys = sorted(shared_stats.keys())
-        n_groups = len(group_keys)
+        len(group_keys)
 
         # Extract per-group stats and labels
         per_group_stats = {}
@@ -1089,9 +1111,7 @@ class spVIPESmultimodule(BaseModuleClass):
                 for g in groups_without_label:
                     latent_dim = poe_result[groups_with_label[0]]["logtheta_loc"].shape[-1]
                     device = poe_result[groups_with_label[0]]["logtheta_loc"].device
-                    poe_result[g] = {
-                        k: torch.empty((0, latent_dim), device=device) for k in stat_keys
-                    }
+                    poe_result[g] = {k: torch.empty((0, latent_dim), device=device) for k in stat_keys}
 
                 poe_stats_per_label[label] = poe_result
             else:
@@ -1129,7 +1149,9 @@ class spVIPESmultimodule(BaseModuleClass):
         concat_poe_stats = {}
         for g in group_keys:
             n_cells = per_group_stats[g]["logtheta_loc"].shape[0]
-            group_output = {k: torch.empty(n_cells, latent_dim, dtype=torch.float32, device=ref_device) for k in stat_keys}
+            group_output = {
+                k: torch.empty(n_cells, latent_dim, dtype=torch.float32, device=ref_device) for k in stat_keys
+            }
 
             # Vectorized scatter: O(n_labels) boolean-mask ops instead of
             # O(n_cells) .item() calls — eliminates GPU→CPU syncs per cell.
@@ -1179,7 +1201,7 @@ class spVIPESmultimodule(BaseModuleClass):
         shared_stats_out = {}
 
         poe_stats_out = {}
-        for (group, stats), batch in zip(private_poe.items(), batch_index):
+        for (group, stats), batch in zip(private_poe.items(), batch_index, strict=False):
             key = str(group)
             decoder = self.decoders[group]
             px_scale_private, px_scale_shared, px_rate_private, px_rate_shared, px_mixing, px_scale = decoder(
@@ -1215,7 +1237,7 @@ class spVIPESmultimodule(BaseModuleClass):
         for group in range(n_groups):
             batch = batch_index[group]
             poe_log_z = poe_stats[group]["logtheta_log_z"]
-            poe_theta = poe_stats[group]["logtheta_theta"]
+            poe_stats[group]["logtheta_theta"]
 
             for modality in self.group_modalities[group]:
                 # Get modality-specific private latent
@@ -1225,7 +1247,7 @@ class spVIPESmultimodule(BaseModuleClass):
                     mod_private = private_stats[group]
 
                 private_log_z = mod_private["log_z"]
-                private_theta = mod_private["theta"]
+                mod_private["theta"]
 
                 # Concatenate private + shared PoE
                 combined_log_z = torch.cat((private_log_z, poe_log_z), dim=-1)
@@ -1245,7 +1267,9 @@ class spVIPESmultimodule(BaseModuleClass):
                 px_r = torch.exp(self.px_r[px_r_key])
                 likelihood_type = self.modality_likelihoods.get(modality, "nb")
                 log_scale = self.log_scale_gaussian.get(px_r_key) if likelihood_type == "gaussian" else None
-                px = build_likelihood(likelihood_type, px_rate_private, px_rate_shared, px_r, px_mixing, px_scale, log_scale=log_scale)
+                px = build_likelihood(
+                    likelihood_type, px_rate_private, px_rate_shared, px_r, px_mixing, px_scale, log_scale=log_scale
+                )
                 pz = Normal(torch.zeros_like(combined_log_z), torch.ones_like(combined_log_z))
 
                 key = f"{group}_{modality}"
@@ -1330,44 +1354,33 @@ class spVIPESmultimodule(BaseModuleClass):
         """
         # Quick exit when no disentanglement component is enabled
         enabled = (
-            self.q_group_shared, self.q_label_shared,
-            self.q_group_private, self.q_label_private,
-            self.q_batch_shared, self.q_donor_shared, self.q_donor_private,
+            self.q_group_shared,
+            self.q_label_shared,
+            self.q_group_private,
+            self.q_label_private,
+            self.q_batch_shared,
+            self.q_donor_shared,
+            self.q_donor_private,
             self.prototypes,
         )
-        if (
-            all(x is None for x in enabled)
-            and not self.compute_orthogonality_metric
-            and self.orthogonality_weight == 0
-        ):
+        if all(x is None for x in enabled) and not self.compute_orthogonality_metric and self.orthogonality_weight == 0:
             return 0.0
 
         # Labels are needed only by the label-using components
         needs_labels = (
-            self.q_label_shared is not None
-            or self.q_label_private is not None
-            or self.prototypes is not None
+            self.q_label_shared is not None or self.q_label_private is not None or self.prototypes is not None
         )
         labels_by_group = None
         if needs_labels:
             # Key by the loop index (position in `tensors_by_group`), not by
             # the categorical code, so this stays correct even if group codes
             # are not contiguous starting at 0 (e.g. after subsetting an adata).
-            labels_by_group = {
-                gi: grp["labels"].flatten()
-                for gi, grp in enumerate(tensors_by_group)
-            }
+            labels_by_group = {gi: grp["labels"].flatten() for gi, grp in enumerate(tensors_by_group)}
 
-        needs_donor = (
-            self.q_donor_shared is not None
-            or self.q_donor_private is not None
-        )
+        needs_donor = self.q_donor_shared is not None or self.q_donor_private is not None
         donors_by_group = None
         if needs_donor:
-            donors_by_group = {
-                gi: grp["donor"].flatten()
-                for gi, grp in enumerate(tensors_by_group)
-            }
+            donors_by_group = {gi: grp["donor"].flatten() for gi, grp in enumerate(tensors_by_group)}
 
         disentangle_total = 0.0
 
@@ -1375,12 +1388,11 @@ class spVIPESmultimodule(BaseModuleClass):
         if self.q_group_shared is not None:
             loss_val = sum(
                 F.cross_entropy(
-                    self.q_group_shared(gradient_reversal(
-                        inference_outputs["poe_stats"][g]["logtheta_log_z"]
-                    )),
+                    self.q_group_shared(gradient_reversal(inference_outputs["poe_stats"][g]["logtheta_log_z"])),
                     torch.full(
                         (inference_outputs["poe_stats"][g]["logtheta_log_z"].size(0),),
-                        g, dtype=torch.long,
+                        g,
+                        dtype=torch.long,
                         device=inference_outputs["poe_stats"][g]["logtheta_log_z"].device,
                     ),
                 )
@@ -1410,8 +1422,7 @@ class spVIPESmultimodule(BaseModuleClass):
         def _private_zs(g):
             if self.is_multimodal:
                 return [
-                    inference_outputs["per_modality_private"][(g, mod)]["log_z"]
-                    for mod in self.group_modalities[g]
+                    inference_outputs["per_modality_private"][(g, mod)]["log_z"] for mod in self.group_modalities[g]
                 ]
             return [inference_outputs["private_stats"][g]["log_z"]]
 
@@ -1434,9 +1445,7 @@ class spVIPESmultimodule(BaseModuleClass):
             n_pairs = len(pair_losses)
             loss_val = sum(pair_losses) * (n_groups / n_pairs) if n_pairs else 0.0
             disentangle_total = disentangle_total + self.disentangle_group_private_weight * loss_val
-            extra_metrics["disentangle_group_private_loss"] = (
-                loss_val / n_groups if n_pairs else loss_val
-            )
+            extra_metrics["disentangle_group_private_loss"] = loss_val / n_groups if n_pairs else loss_val
 
         # Component 4 (q_label_private): adversarial label erasure on z_private
         if self.q_label_private is not None:
@@ -1452,9 +1461,7 @@ class spVIPESmultimodule(BaseModuleClass):
             n_pairs = len(pair_losses)
             loss_val = sum(pair_losses) * (n_groups / n_pairs) if n_pairs else 0.0
             disentangle_total = disentangle_total + self.disentangle_label_private_weight * loss_val
-            extra_metrics["disentangle_label_private_loss"] = (
-                loss_val / n_groups if n_pairs else loss_val
-            )
+            extra_metrics["disentangle_label_private_loss"] = loss_val / n_groups if n_pairs else loss_val
 
         # F4-lite: adversarial technical-batch erasure on z_shared.
         if self.q_batch_shared is not None:
@@ -1511,9 +1518,7 @@ class spVIPESmultimodule(BaseModuleClass):
             n_pairs = len(pair_losses)
             loss_val = sum(pair_losses) * (n_groups / n_pairs) if n_pairs else 0.0
             disentangle_total = disentangle_total + self.disentangle_donor_private_weight * loss_val
-            extra_metrics["disentangle_donor_private_loss"] = (
-                loss_val / n_groups if n_pairs else loss_val
-            )
+            extra_metrics["disentangle_donor_private_loss"] = loss_val / n_groups if n_pairs else loss_val
 
         # Component 5 (contrastive): InfoNCE on z_shared via EMA prototypes
         if self.prototypes is not None:
@@ -1524,14 +1529,11 @@ class spVIPESmultimodule(BaseModuleClass):
                     for lbl in labels_g.unique():
                         mask = labels_g == lbl
                         if mask.sum() > 0:
-                            self.prototypes[g, lbl] = (
-                                self.prototype_momentum * self.prototypes[g, lbl]
-                                + (1 - self.prototype_momentum) * z[mask].mean(0)
-                            )
+                            self.prototypes[g, lbl] = self.prototype_momentum * self.prototypes[g, lbl] + (
+                                1 - self.prototype_momentum
+                            ) * z[mask].mean(0)
             if n_groups > 1:
-                other_groups = [
-                    [gg for gg in range(n_groups) if gg != g] for g in range(n_groups)
-                ]
+                other_groups = [[gg for gg in range(n_groups) if gg != g] for g in range(n_groups)]
                 ct_loss = sum(
                     F.cross_entropy(
                         F.normalize(inference_outputs["poe_stats"][g]["logtheta_log_z"], dim=-1)
@@ -1582,8 +1584,10 @@ class spVIPESmultimodule(BaseModuleClass):
                     )
                 ortho_group_losses.append(group_loss)
 
-            loss_val = sum(ortho_group_losses) if ortho_group_losses else (
-                inference_outputs["poe_stats"][0]["logtheta_log_z"].sum() * 0.0
+            loss_val = (
+                sum(ortho_group_losses)
+                if ortho_group_losses
+                else (inference_outputs["poe_stats"][0]["logtheta_log_z"].sum() * 0.0)
             )
             disentangle_total = disentangle_total + self.orthogonality_weight * loss_val
             extra_metrics["orthogonality_loss"] = loss_val.detach() / n_groups
@@ -1632,13 +1636,11 @@ class spVIPESmultimodule(BaseModuleClass):
             if ortho_means:
                 metric_device = inference_outputs["poe_stats"][0]["logtheta_log_z"].device
                 # Canonical F1 instrumentation names.
-                extra_metrics["orthogonality_within_stratum"] = torch.tensor(
-                    np.mean(ortho_means), device=metric_device
+                extra_metrics["orthogonality_within_stratum"] = torch.tensor(np.mean(ortho_means), device=metric_device)
+                extra_metrics["orthogonality_worst_stratum"] = torch.tensor(np.max(ortho_worsts), device=metric_device)
+                extra_metrics["orthogonality_excluded_strata"] = torch.tensor(
+                    float(excluded_total), device=metric_device
                 )
-                extra_metrics["orthogonality_worst_stratum"] = torch.tensor(
-                    np.max(ortho_worsts), device=metric_device
-                )
-                extra_metrics["orthogonality_excluded_strata"] = torch.tensor(float(excluded_total), device=metric_device)
 
         return disentangle_total
 
@@ -1660,15 +1662,13 @@ class spVIPESmultimodule(BaseModuleClass):
         if self.validate_observations:
             if not torch.isfinite(x_obs).all():
                 raise ValueError(
-                    f"Invalid observations in {context}: expected finite values for "
-                    f"likelihood '{likelihood_type}'."
+                    f"Invalid observations in {context}: expected finite values for likelihood '{likelihood_type}'."
                 )
 
             if likelihood_type == "nb":
                 if (x_obs < 0).any():
                     raise ValueError(
-                        f"Invalid observations in {context}: NegativeBinomial likelihood "
-                        "requires non-negative targets."
+                        f"Invalid observations in {context}: NegativeBinomial likelihood requires non-negative targets."
                     )
 
         if likelihood_type == "nb" and self.strict_likelihood_support and not transformed_for_nb:

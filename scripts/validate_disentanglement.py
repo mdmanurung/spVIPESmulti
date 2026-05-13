@@ -22,6 +22,7 @@ Outputs:
     scripts/validation_results.json   numeric results per preset/ablation
     scripts/validation_results.md     human-readable report with tables
 """
+
 from __future__ import annotations
 
 import json
@@ -67,14 +68,12 @@ def set_seeds(seed: int = SEED) -> None:
     torch.manual_seed(seed)
 
 
-def load_data() -> "anndata.AnnData":
+def load_data() -> anndata.AnnData:
     """Load SLN CITE-seq RNA, define 2 donor groups, subsample, HVG."""
     adata = scvi.data.spleen_lymph_cite_seq(save_path="./data/", remove_outliers=True)
     adata.obs_names_make_unique()
 
-    adata.obs["donor"] = adata.obs["batch"].astype(str).map(
-        lambda b: "SLN111" if "111" in b else "SLN208"
-    )
+    adata.obs["donor"] = adata.obs["batch"].astype(str).map(lambda b: "SLN111" if "111" in b else "SLN208")
 
     # Drop rare cell types (<25 cells in either group) so ARI is meaningful.
     counts = adata.obs.groupby(["donor", "cell_types"], observed=True).size().unstack("donor", fill_value=0)
@@ -106,13 +105,9 @@ def load_data() -> "anndata.AnnData":
 
 
 def prepare(adata):
-    groups_dict = {
-        d: adata[adata.obs["donor"] == d].copy() for d in sorted(adata.obs["donor"].unique())
-    }
+    groups_dict = {d: adata[adata.obs["donor"] == d].copy() for d in sorted(adata.obs["donor"].unique())}
     prepared = spVIPESmulti.data.prepare_adatas(groups_dict)
-    spVIPESmulti.model.spVIPESmulti.setup_anndata(
-        prepared, groups_key="groups", label_key="cell_types"
-    )
+    spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
     return prepared
 
 
@@ -160,10 +155,7 @@ def kbet_like(rep, groups, k=20):
     chi = np.empty(rep.shape[0])
     for i in range(rep.shape[0]):
         observed = (
-            pd.Series(groups[idx[i]])
-            .value_counts(normalize=True)
-            .reindex(np.unique(groups), fill_value=0)
-            .values
+            pd.Series(groups[idx[i]]).value_counts(normalize=True).reindex(np.unique(groups), fill_value=0).values
         )
         chi[i] = ((observed - expected) ** 2 / (expected + 1e-9)).sum()
     return float(np.exp(-chi.mean()))
@@ -263,9 +255,7 @@ def train_and_score(adata, *, label, **disentangle_kwargs):
     )
     train_secs = perf_counter() - t0
 
-    latents = model.get_latent_representation(
-        group_indices_list=group_indices_list, batch_size=BATCH_SIZE
-    )
+    latents = model.get_latent_representation(group_indices_list=group_indices_list, batch_size=BATCH_SIZE)
     n_obs = adata.n_obs
     z_shared = stitch(latents, "shared", group_indices_list, n_obs)
     z_private = stitch(latents, "private", group_indices_list, n_obs)
@@ -305,7 +295,14 @@ def write_report(rows: list[dict]) -> None:
         "shared__label_ari",
     ]
     private_cols = ["private__group_silhouette", "private__label_purity_knn"]
-    train_cols = ["recon_train_final", "recon_train_drop", "elbo_train_final", "kl_train_final", "recon_train_finite", "train_secs"]
+    train_cols = [
+        "recon_train_final",
+        "recon_train_drop",
+        "elbo_train_final",
+        "kl_train_final",
+        "recon_train_finite",
+        "train_secs",
+    ]
 
     def md_table(cols):
         sub = df[cols].copy()
@@ -315,8 +312,8 @@ def write_report(rows: list[dict]) -> None:
     md = [
         "# Disentanglement Validation Results",
         "",
-        f"**Dataset:** `scvi.data.spleen_lymph_cite_seq` (RNA only)  ",
-        f"**Groups (donor):** SLN111 vs SLN208  ",
+        "**Dataset:** `scvi.data.spleen_lymph_cite_seq` (RNA only)  ",
+        "**Groups (donor):** SLN111 vs SLN208  ",
         f"**Labels (cell_types):** {df['n_cell_types'].iloc[0]} types kept (>=25 cells per donor)  ",
         f"**Cells per group:** {N_PER_GROUP}  HVG: {N_HVG}  ",
         f"**Architecture:** n_hidden={N_HIDDEN}, n_shared={N_SHARED}, n_private={N_PRIVATE}  ",
@@ -368,12 +365,10 @@ def main():
     adata = prepare(adata)
 
     rows = []
-    presets = ["off", "shared_only", "private_only", "adversarial_only",
-               "supervised_only", "no_contrastive", "full"]
+    presets = ["off", "shared_only", "private_only", "adversarial_only", "supervised_only", "no_contrastive", "full"]
     for preset in presets:
         print(f"\n--- preset = {preset} ---")
-        rows.append(train_and_score(adata, label=f"preset={preset}",
-                                    disentangle_preset=preset))
+        rows.append(train_and_score(adata, label=f"preset={preset}", disentangle_preset=preset))
         print("  ", {k: v for k, v in rows[-1].items() if "shared__" in k or "private__" in k})
 
     ablate = [
@@ -385,8 +380,7 @@ def main():
     ]
     for comp in ablate:
         print(f"\n--- full minus {comp} ---")
-        rows.append(train_and_score(adata, label=f"full minus {comp}",
-                                    disentangle_preset="full", **{comp: 0.0}))
+        rows.append(train_and_score(adata, label=f"full minus {comp}", disentangle_preset="full", **{comp: 0.0}))
         print("  ", {k: v for k, v in rows[-1].items() if "shared__" in k or "private__" in k})
 
     write_report(rows)

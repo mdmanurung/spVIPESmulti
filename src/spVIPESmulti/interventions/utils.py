@@ -151,12 +151,14 @@ def _select_group_positions(
         return group_obs, positions
 
     requested = _cells_to_global_indices(adata, cells)
+    if requested is None:
+        raise AssertionError("requested cells cannot be None when cells is provided")
     lookup = {int(obs_idx): i for i, obs_idx in enumerate(group_obs)}
     outside = [int(idx) for idx in requested if int(idx) not in lookup]
     if outside:
         raise ValueError(f"cells contains observations outside group_idx={group_idx}: {outside[:5]}")
-    positions = np.asarray([lookup[int(idx)] for idx in requested], dtype=int)
-    return np.asarray(requested, dtype=int), positions
+    positions = np.asarray([lookup[int(idx)] for idx in requested], dtype=np.int_)
+    return np.asarray(requested, dtype=np.int_), positions
 
 
 def _library_from_adata(adata: Any, cells: Sequence[int | str] | np.ndarray | None, n_cells: int) -> np.ndarray:
@@ -168,7 +170,9 @@ def _library_from_adata(adata: Any, cells: Sequence[int | str] | np.ndarray | No
     return np.log(lib).astype(np.float32, copy=False)
 
 
-def _batch_from_adata(model: Any, adata: Any, cells: Sequence[int | str] | np.ndarray | None, n_cells: int) -> np.ndarray:
+def _batch_from_adata(
+    model: Any, adata: Any, cells: Sequence[int | str] | np.ndarray | None, n_cells: int
+) -> np.ndarray:
     if int(getattr(model.module, "n_batch", 1)) <= 1:
         return np.zeros((n_cells, 1), dtype=np.int64)
     global_idx = _cells_to_global_indices(adata, cells)

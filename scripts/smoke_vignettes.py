@@ -20,6 +20,7 @@ report PASS/FAIL. Vignettes mapped to each combination are listed in `MAPPING`.
 Usage:
     python scripts/smoke_vignettes.py [--epochs N] [--cells_per_group N]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -161,24 +162,29 @@ def split_modalities(adata):
 
 def build_and_train(prepared, *, epochs, batch_size, **model_kwargs):
     set_seeds(0)
-    model = spVIPESmulti.model.spVIPESmulti(prepared, n_hidden=64, n_dimensions_shared=12,
-                                  n_dimensions_private=6, dropout_rate=0.1,
-                                  **model_kwargs)
+    model = spVIPESmulti.model.spVIPESmulti(
+        prepared, n_hidden=64, n_dimensions_shared=12, n_dimensions_private=6, dropout_rate=0.1, **model_kwargs
+    )
     gi = [list(map(int, g)) for g in prepared.uns["groups_obs_indices"]]
     model.train(
-        group_indices_list=gi, max_epochs=epochs, batch_size=batch_size,
-        train_size=0.85, n_epochs_kl_warmup=min(3, epochs),
+        group_indices_list=gi,
+        max_epochs=epochs,
+        batch_size=batch_size,
+        train_size=0.85,
+        n_epochs_kl_warmup=min(3, epochs),
     )
     latents = model.get_latent_representation(group_indices_list=gi, batch_size=batch_size)
     n_per_group = [len(g) for g in gi]
-    assert sum(latents["shared"][i].shape[0] for i in range(len(gi))) == sum(n_per_group), \
+    assert sum(latents["shared"][i].shape[0] for i in range(len(gi))) == sum(n_per_group), (
         "Shared latent shape doesn't match group cell counts."
+    )
     return model
 
 
 # ----------------------------------------------------------------------
 # Cases
 # ----------------------------------------------------------------------
+
 
 def case_single_2g_label_off(adata2, args):
     prepared = spVIPESmulti.data.prepare_adatas(make_groups_dict(adata2, "donor"))
@@ -189,17 +195,31 @@ def case_single_2g_label_off(adata2, args):
 def case_single_2g_nsf_off(adata2, args):
     prepared = spVIPESmulti.data.prepare_adatas(make_groups_dict(adata2, "donor"))
     spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
-    build_and_train(prepared, epochs=args.epochs, batch_size=128,
-                    use_nf_prior=True, nf_type="NSF", nf_transforms=2, nf_target="shared",
-                    disentangle_preset="off")
+    build_and_train(
+        prepared,
+        epochs=args.epochs,
+        batch_size=128,
+        use_nf_prior=True,
+        nf_type="NSF",
+        nf_transforms=2,
+        nf_target="shared",
+        disentangle_preset="off",
+    )
 
 
 def case_single_2g_nsf_full(adata2, args):
     prepared = spVIPESmulti.data.prepare_adatas(make_groups_dict(adata2, "donor"))
     spVIPESmulti.model.spVIPESmulti.setup_anndata(prepared, groups_key="groups", label_key="cell_types")
-    build_and_train(prepared, epochs=args.epochs, batch_size=128,
-                    use_nf_prior=True, nf_type="NSF", nf_transforms=2, nf_target="shared",
-                    disentangle_preset="full")
+    build_and_train(
+        prepared,
+        epochs=args.epochs,
+        batch_size=128,
+        use_nf_prior=True,
+        nf_type="NSF",
+        nf_transforms=2,
+        nf_target="shared",
+        disentangle_preset="full",
+    )
 
 
 def case_single_3g_label_off(adata3, args):
@@ -220,12 +240,21 @@ def case_multimodal_3g_nsf_off(adata3, args):
         adatas_dict, modality_likelihoods={"rna": "nb", "protein": "nb"}
     )
     spVIPESmulti.model.spVIPESmulti.setup_anndata(
-        prepared, groups_key="groups", label_key="cell_types",
+        prepared,
+        groups_key="groups",
+        label_key="cell_types",
         modality_likelihoods={"rna": "nb", "protein": "nb"},
     )
-    build_and_train(prepared, epochs=args.epochs, batch_size=128,
-                    use_nf_prior=True, nf_type="NSF", nf_transforms=2, nf_target="shared",
-                    disentangle_preset="off")
+    build_and_train(
+        prepared,
+        epochs=args.epochs,
+        batch_size=128,
+        use_nf_prior=True,
+        nf_type="NSF",
+        nf_transforms=2,
+        nf_target="shared",
+        disentangle_preset="off",
+    )
 
 
 def case_multimodal_3g_disentangle_full(adata3, args):
@@ -235,11 +264,12 @@ def case_multimodal_3g_disentangle_full(adata3, args):
         adatas_dict, modality_likelihoods={"rna": "nb", "protein": "nb"}
     )
     spVIPESmulti.model.spVIPESmulti.setup_anndata(
-        prepared, groups_key="groups", label_key="cell_types",
+        prepared,
+        groups_key="groups",
+        label_key="cell_types",
         modality_likelihoods={"rna": "nb", "protein": "nb"},
     )
-    build_and_train(prepared, epochs=args.epochs, batch_size=128,
-                    disentangle_preset="full")
+    build_and_train(prepared, epochs=args.epochs, batch_size=128, disentangle_preset="full")
 
 
 CASES = [
@@ -278,7 +308,9 @@ def main():
         except Exception as e:
             status = "FAIL"
             err = f"{type(e).__name__}: {e}"
-            import traceback; traceback.print_exc()
+            import traceback
+
+            traceback.print_exc()
         secs = round(perf_counter() - t0, 1)
         summary.append({"case": name, "status": status, "secs": secs, "error": err})
         print(f"  [{status}]  {secs:6.1f}s   {name}")

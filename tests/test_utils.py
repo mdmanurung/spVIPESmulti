@@ -3,6 +3,7 @@
 These tests are unit tests that do NOT require a trained model or scvi-tools
 integration. They use synthetic numpy arrays and mock objects.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -141,7 +142,9 @@ class TestValidateLoadingsDf:
             utils._validate_loadings_df(df, "shared")
 
     def test_wrong_prefix_raises(self, loadings_df_shared):
-        df = loadings_df_shared.rename(columns={c: c.replace("Z_shared_", "Z_private_") for c in loadings_df_shared.columns})
+        df = loadings_df_shared.rename(
+            columns={c: c.replace("Z_shared_", "Z_private_") for c in loadings_df_shared.columns}
+        )
         with pytest.raises(ValueError, match="Z_shared_"):
             utils._validate_loadings_df(df, "shared")
 
@@ -193,6 +196,7 @@ class TestResolveLoadings:
 class TestStoreLatents:
     def test_shared_written(self, adata, fake_latents, group_indices_list):
         import anndata as ad
+
         fresh = ad.AnnData(X=adata.X, obs=adata.obs.copy(), var=adata.var.copy())
         result = utils.store_latents(fresh, fake_latents, group_indices_list)
         assert "X_spVIPESmulti_shared" in result.obsm
@@ -200,6 +204,7 @@ class TestStoreLatents:
 
     def test_private_per_group_written(self, adata, fake_latents, group_indices_list):
         import anndata as ad
+
         fresh = ad.AnnData(X=adata.X, obs=adata.obs.copy(), var=adata.var.copy())
         utils.store_latents(fresh, fake_latents, group_indices_list)
         for gi in range(3):
@@ -209,12 +214,14 @@ class TestStoreLatents:
 
     def test_custom_prefix(self, adata, fake_latents, group_indices_list):
         import anndata as ad
+
         fresh = ad.AnnData(X=adata.X, obs=adata.obs.copy(), var=adata.var.copy())
         utils.store_latents(fresh, fake_latents, group_indices_list, obsm_prefix="X_custom")
         assert "X_custom_shared" in fresh.obsm
 
     def test_multimodal_keys_written(self, rng, group_indices_list):
         import anndata as ad
+
         n = N_CELLS
         fresh = ad.AnnData(X=np.zeros((n, 5)))
         latents = {
@@ -233,6 +240,7 @@ class TestStoreLatents:
     def test_cell_order_preserved(self, rng, group_indices_list):
         """Cells at specific indices should receive the correct latent vector."""
         import anndata as ad
+
         n = N_CELLS
         fresh = ad.AnnData(X=np.zeros((n, 5)))
         # Build latents where each group's values are distinguishable
@@ -559,10 +567,12 @@ class TestKbet:
 
     def test_segregated_lower_than_mixed(self, rng):
         z_mixed = rng.standard_normal((200, 5))
-        z_seg = np.vstack([
-            rng.standard_normal((100, 5)) + np.array([10, 0, 0, 0, 0]),
-            rng.standard_normal((100, 5)) + np.array([-10, 0, 0, 0, 0]),
-        ])
+        z_seg = np.vstack(
+            [
+                rng.standard_normal((100, 5)) + np.array([10, 0, 0, 0, 0]),
+                rng.standard_normal((100, 5)) + np.array([-10, 0, 0, 0, 0]),
+            ]
+        )
         g = np.array(["g0"] * 100 + ["g1"] * 100)
         assert metrics.kbet(z_mixed, g, k=10) > metrics.kbet(z_seg, g, k=10)
 
@@ -590,12 +600,14 @@ class TestKnnPurity:
 
     def test_perfect_clustering_gives_1(self):
         # Each label in its own corner
-        z = np.vstack([
-            np.zeros((50, 2)) + [0, 0],
-            np.zeros((50, 2)) + [100, 0],
-            np.zeros((50, 2)) + [0, 100],
-            np.zeros((50, 2)) + [100, 100],
-        ])
+        z = np.vstack(
+            [
+                np.zeros((50, 2)) + [0, 0],
+                np.zeros((50, 2)) + [100, 0],
+                np.zeros((50, 2)) + [0, 100],
+                np.zeros((50, 2)) + [100, 100],
+            ]
+        )
         labels = np.repeat(["A", "B", "C", "D"], 50)
         score = metrics.knn_purity(z, labels, k=5)
         assert score == pytest.approx(1.0)
@@ -617,10 +629,12 @@ class TestPerGroupSilhouette:
         assert np.isnan(score)
 
     def test_well_separated_groups_positive(self):
-        z = np.vstack([
-            np.zeros((100, 2)) + [0, 0],
-            np.zeros((100, 2)) + [100, 100],
-        ])
+        z = np.vstack(
+            [
+                np.zeros((100, 2)) + [0, 0],
+                np.zeros((100, 2)) + [100, 100],
+            ]
+        )
         g = np.array(["g0"] * 100 + ["g1"] * 100)
         score = metrics.per_group_silhouette(z, g)
         assert score > 0.9

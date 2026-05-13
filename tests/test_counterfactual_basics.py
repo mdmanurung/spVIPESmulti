@@ -4,12 +4,11 @@ import os
 
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 
+import anndata as ad
 import numpy as np
 import pytest
 import torch
 from scipy.sparse import csr_matrix
-
-import anndata as ad
 
 import spVIPESmulti as sv
 

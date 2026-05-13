@@ -23,6 +23,9 @@ __pycache__/
 # docs
 /docs/generated/
 /docs/_build/
+/audits/SCVI_EXTENSION_AUDIT/docs_build_html/
+/audits/SCVI_EXTENSION_AUDIT/jupyter_execute/
+/audits/SCVI_EXTENSION_AUDIT/.jupyter_cache/
 
 # IDEs
 /.idea/

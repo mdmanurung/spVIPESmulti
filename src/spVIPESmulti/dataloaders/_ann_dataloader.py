@@ -1,7 +1,6 @@
 import copy
 import logging
 from collections.abc import Sequence
-from typing import Optional, Union
 
 import numpy as np
 from torch.utils.data import BatchSampler, DataLoader, RandomSampler, Sampler, SequentialSampler, WeightedRandomSampler
@@ -46,10 +45,10 @@ class AnnDataLoader(DataLoader):
         adata_manager: AnnDataManager,
         shuffle: bool = False,
         use_labels: bool = False,
-        indices: Union[Sequence[int], Sequence[bool]] = None,
+        indices: Sequence[int] | Sequence[bool] = None,
         batch_size: int = 128,
-        sampler: Optional[Sampler] = None,
-        data_and_attributes: Optional[Union[list[str], dict[str, np.dtype]]] = None,
+        sampler: Sampler | None = None,
+        data_and_attributes: list[str] | dict[str, np.dtype] | None = None,
         drop_last: bool = False,
         iter_ndarray: bool = False,
         **data_loader_kwargs,

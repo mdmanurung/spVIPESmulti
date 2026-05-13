@@ -3,7 +3,7 @@
 ## Version Manifest
 
 - Python 3.11.15
-- spVIPESmulti 1.0.0
+- spVIPESmulti 1.0.0 audit baseline; 1.0.1 release target
 - scvi-tools 1.4.2
 - torch 2.11.0+cu128
 - lightning 2.6.1
@@ -12,42 +12,41 @@
 - scipy 1.17.1
 - pytest 9.0.3
 
-All findings are relative to this manifest and the current dirty worktree.
+All findings were opened against the 1.0.0 audit baseline. The correctness
+fixes are now implemented and guarded by passing regression tests for the
+1.0.1 release target.
 
-## Top Findings
+## Fixed Findings
 
-1. INT-005: NB reconstruction loss uses `log1p` targets by default. This is the
-   highest scientific-risk finding because NB likelihoods should evaluate raw
-   count targets.
-1. INT-002: `get_latent_representation(indices=...)` silently ignores
-   `indices`.
-1. INT-003: posterior calls with a provided `adata` validate it but still pass
-   `self.adata_manager` to the loader.
-1. INT-004: single-modal all-zero cells produce `-inf` library tensors.
-1. INT-001: `spVIPESmulti.dataloaders.__all__` contains non-importable names.
+1. INT-005: NB reconstruction loss now uses raw count targets.
+1. INT-002: `get_latent_representation(indices=...)` now subsets per-group
+   loader indices.
+1. INT-003: posterior calls with a provided `adata` now use that validated
+   AnnData manager.
+1. INT-004: single-modal all-zero cells now produce finite library tensors.
+1. INT-001: `spVIPESmulti.dataloaders.__all__` now contains only importable
+   names.
 
-## Dependency-ordered Fix Plan
+## Completed Fixes
 
-1. Fix INT-001 independently by aligning `dataloaders.__all__` with real
-   imports or adding real compatibility bindings.
-1. Fix INT-002 and INT-003 together in posterior loading. Both touch
-   `get_latent_representation` loader construction and returned ordering.
-1. Fix INT-004 by introducing a shared clamped library helper for single-modal
-   and multimodal inference.
-1. Fix INT-005 after deciding whether `log_variational_generative` should be
-   deprecated or repurposed. Use raw NB targets first; keep encoder log
-   transformation separate.
-1. Only after correctness fixes, optimize PERF-001 and PERF-002 with vectorized
-   NumPy parity tests.
+1. INT-001 was fixed by aligning `dataloaders.__all__` with real imports.
+1. INT-002 and INT-003 were fixed together in posterior loading.
+1. INT-004 was fixed with shared finite observed-library handling.
+1. INT-005 was fixed by separating encoder log transformation from NB
+   reconstruction targets.
+1. PERF-001 and PERF-002 are fixed by the shared NumPy neighbour-count helper
+   used by `kbet`, `ilisi`, and `clisi`.
 
 ## Native-port Roadmap
 
 - Do not start native ports yet.
-- First optimize `kbet` with NumPy and benchmark it.
+- `kbet` and LISI metrics now use the NumPy path; keep native extensions out
+  of scope unless a fresh benchmark shows a remaining isolated numerical
+  kernel.
 - Consider `torch.compile` only after Lightning profiling shows module
   inference/loss dominates runtime and after graph-break risks are isolated.
 
-## Changelog Draft
+## Changelog
 
 ### Fixed
 
@@ -86,21 +85,20 @@ All findings are relative to this manifest and the current dirty worktree.
 - GPU-only behavior and CUDA profiling were not audited.
 - MuData variants were not audited beyond source inventory.
 - Full notebook execution was not audited.
-- Sphinx build could not pass due environment `GLIBCXX_3.4.29`/`libzmq`
-  incompatibility.
+- Sphinx notebook execution remains disabled; docs now build with the conda
+  environment library path used to resolve `GLIBCXX_3.4.29`.
 
 ## Safety Net Confirmation
 
 - Additive audit tests are under `tests/test_audit_*.py`.
-- New-test Ruff format and Ruff lint checks pass.
-- Audit Markdown `mdformat --check` and `markdownlint` checks pass.
-- Full pytest with audit tests passes: 284 passed, 3 skipped, 5 xfailed,
-  213 warnings.
-- Baseline status remains: ruff FAIL, mypy FAIL, mdformat FAIL, markdownlint
-  FAIL, Sphinx FAIL, build PASS, pytest PASS.
+- The audit tests for INT-001 through INT-005 are now normal passing regression
+  tests, not `xfail` placeholders.
+- Audit test slice passes: 6 passed, 1 skipped, 1 warning.
+- Full pytest passes: 294 passed, 3 skipped, 185 warnings.
+- Quality gates now pass: ruff, mypy, mdformat on tracked Markdown,
+  markdownlint on tracked Markdown, Sphinx, build, and pytest.
 
-Audit complete. Safety net is in place. pytest, ruff, mypy, and markdown lint
-status: pytest PASS; new-file ruff PASS; audit Markdown lint PASS; repo-wide
-ruff/mypy/Markdown lint WARN from baseline failures. Awaiting approval to
-proceed with fixes - please specify which findings by ID to address and in what
-order, and whether to attempt any Phase 5 native ports.
+Audit correctness fixes are complete for the 1.0.1 release target. pytest
+status: PASS. PERF-001 and PERF-002 are closed by the current vectorized
+metrics implementation. PERF-003 and NAT-002 remain deferred performance
+follow-ups, not 1.0.1 release blockers.

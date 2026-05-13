@@ -1,9 +1,9 @@
-import pytest
-import numpy as np
 import anndata as ad
+import numpy as np
 import torch
+
 from spVIPESmulti.model.spvipesmulti import spVIPESmulti
-from spVIPESmulti.model.base.training_mixin import MultiGroupTrainingMixin
+
 
 def make_dummy_adata(n_obs=20, n_vars=10, seed=0):
     rng = np.random.default_rng(seed)
@@ -12,6 +12,7 @@ def make_dummy_adata(n_obs=20, n_vars=10, seed=0):
     var = {"gene_symbols": [f"gene{i}" for i in range(n_vars)]}
     return ad.AnnData(X=X, obs=obs, var=var)
 
+
 def test_multigroup_training_runs(monkeypatch):
     # Keep this compatibility test independent of local CUDA driver state.
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
@@ -19,6 +20,7 @@ def test_multigroup_training_runs(monkeypatch):
     adata1 = make_dummy_adata(20, 10, seed=1)
     adata2 = make_dummy_adata(18, 10, seed=2)
     from spVIPESmulti.data.prepare_adatas import prepare_adatas
+
     adata = prepare_adatas({"g1": adata1, "g2": adata2})
     spVIPESmulti.setup_anndata(adata, groups_key="groups")
     model = spVIPESmulti(adata, n_hidden=8, n_dimensions_shared=2, n_dimensions_private=2, dropout_rate=0.1)
@@ -36,6 +38,7 @@ def test_multigroup_training_runs(monkeypatch):
     assert "elbo_validation" in model.history
     assert "reconstruction_loss_validation" in model.history
 
+
 def test_cosine_lr_scheduler(monkeypatch):
     """CosineAnnealingLR decays LR and completes training without errors."""
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
@@ -43,6 +46,7 @@ def test_cosine_lr_scheduler(monkeypatch):
     adata1 = make_dummy_adata(20, 10, seed=3)
     adata2 = make_dummy_adata(18, 10, seed=4)
     from spVIPESmulti.data.prepare_adatas import prepare_adatas
+
     adata = prepare_adatas({"g1": adata1, "g2": adata2})
     spVIPESmulti.setup_anndata(adata, groups_key="groups")
     model = spVIPESmulti(adata, n_hidden=8, n_dimensions_shared=2, n_dimensions_private=2, dropout_rate=0.1)
@@ -68,9 +72,7 @@ def test_cosine_lr_scheduler(monkeypatch):
     # Cosine schedule must have decayed the LR by the final epoch
     optimizer = model.trainer.optimizers[0]
     final_lr = optimizer.param_groups[0]["lr"]
-    assert final_lr < INITIAL_LR, (
-        f"Expected LR to decay below {INITIAL_LR} with cosine schedule, got {final_lr}"
-    )
+    assert final_lr < INITIAL_LR, f"Expected LR to decay below {INITIAL_LR} with cosine schedule, got {final_lr}"
     # Training history should still be populated
     assert "elbo_train" in model.history
 

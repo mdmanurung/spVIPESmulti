@@ -31,15 +31,15 @@ def build_likelihood(likelihood_type, px_rate_private, px_rate_shared, px_r, px_
         The constructed likelihood distribution.
     """
     if likelihood_type == "nb":
-        return NegativeBinomialMixture(
-            mu1=px_rate_private, mu2=px_rate_shared, theta1=px_r, mixture_logits=px_mixing
-        )
+        return NegativeBinomialMixture(mu1=px_rate_private, mu2=px_rate_shared, theta1=px_r, mixture_logits=px_mixing)
     elif likelihood_type == "gaussian":
         if px_scale is None:
             raise ValueError("px_scale must be provided for Gaussian likelihood")
         if log_scale is None:
-            raise ValueError("log_scale must be provided for Gaussian likelihood; "
-                             "ensure log_scale_gaussian is initialised in the module")
+            raise ValueError(
+                "log_scale must be provided for Gaussian likelihood; "
+                "ensure log_scale_gaussian is initialised in the module"
+            )
         mean = px_scale
         scale = torch.exp(log_scale).clamp(min=1e-4).expand_as(mean)
         return Normal(loc=mean, scale=scale)

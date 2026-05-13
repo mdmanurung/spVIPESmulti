@@ -3,6 +3,8 @@
 ## Finding INT-001: `dataloaders.__all__` Advertises Missing Exports
 
 - Severity: MEDIUM
+- Status: FIXED in 1.0.1. Historical observation describes the 1.0.0 audit
+  baseline.
 - Locations: `src/spVIPESmulti/dataloaders/__init__.py:L1` to
   `src/spVIPESmulti/dataloaders/__init__.py:L4`
 - scvi-tools version contract checked against: 1.4.2
@@ -18,6 +20,8 @@
 ## Finding INT-002: `get_latent_representation(indices=...)` Is Ignored
 
 - Severity: HIGH
+- Status: FIXED in 1.0.1. Historical observation describes the 1.0.0 audit
+  baseline.
 - Locations: `src/spVIPESmulti/model/spvipesmulti.py:L424` to
   `src/spVIPESmulti/model/spvipesmulti.py:L483`
 - scvi-tools version contract checked against: 1.4.2
@@ -34,6 +38,8 @@
 ## Finding INT-003: Posterior Calls With New `adata` Keep Using Original Manager
 
 - Severity: HIGH
+- Status: FIXED in 1.0.1. Historical observation describes the 1.0.0 audit
+  baseline.
 - Locations: `src/spVIPESmulti/model/spvipesmulti.py:L460` to
   `src/spVIPESmulti/model/spvipesmulti.py:L477`
 - scvi-tools version contract checked against: 1.4.2
@@ -53,6 +59,8 @@
 ## Finding INT-004: Single-modal All-zero Cells Produce `-inf` Library Values
 
 - Severity: HIGH
+- Status: FIXED in 1.0.1. Historical observation describes the 1.0.0 audit
+  baseline.
 - Locations: `src/spVIPESmulti/module/spVIPESmultimodule.py:L798` to
   `src/spVIPESmulti/module/spVIPESmultimodule.py:L801`
 - scvi-tools version contract checked against: 1.4.2
@@ -69,6 +77,8 @@
 ## Finding INT-005: NB Reconstruction Uses `log1p` Targets by Default
 
 - Severity: HIGH
+- Status: FIXED in 1.0.1. Historical observation describes the 1.0.0 audit
+  baseline.
 - Locations: `src/spVIPESmulti/module/spVIPESmultimodule.py:L289` to
   `src/spVIPESmulti/module/spVIPESmultimodule.py:L290`,
   `src/spVIPESmulti/module/spVIPESmultimodule.py:L1707` to

@@ -138,11 +138,9 @@ def recommend_f3_variant(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Apply F3 go/no-go gates to tidy benchmark rows."""
     ok_rows = [row for row in rows if row.get("notes") == "ok"]
     baseline_rows = [row for row in ok_rows if float(row.get("orthogonality_weight", -1.0)) == 0.0]
-    candidate_weights = sorted({
-        float(row["orthogonality_weight"])
-        for row in ok_rows
-        if float(row.get("orthogonality_weight", 0.0)) > 0.0
-    })
+    candidate_weights = sorted(
+        {float(row["orthogonality_weight"]) for row in ok_rows if float(row.get("orthogonality_weight", 0.0)) > 0.0}
+    )
 
     if not baseline_rows or not candidate_weights:
         return {
@@ -212,9 +210,9 @@ def recommend_f3_variant(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 and means["active_dims_shared"] >= baseline["active_dims_shared"] - 2
             ),
             "wall_overhead": _relative_worse(
-            means["train_wall_time_sec"],
-            baseline["train_wall_time_sec"],
-            higher_is_better=False,
+                means["train_wall_time_sec"],
+                baseline["train_wall_time_sec"],
+                higher_is_better=False,
             ),
         }
 
@@ -240,18 +238,20 @@ def recommend_f3_variant(rows: list[dict[str, Any]]) -> dict[str, Any]:
             if cv is None or cv > 0.20:
                 failures.append(f"{metric} cross-seed CV >0.20 or missing")
 
-        candidates.append({
-            "weight": weight,
-            "passes": not failures and not incomplete,
-            "orthogonality_reduction": ortho_reduction,
-            "reconstruction_worse": recon_worse,
-            "integration_worse": integration_worse,
-            "cross_seed_cv": cv_by_metric,
-            "incomplete": incomplete,
-            "failures": failures,
-            "diagnostics": diagnostics,
-            "means": means,
-        })
+        candidates.append(
+            {
+                "weight": weight,
+                "passes": not failures and not incomplete,
+                "orthogonality_reduction": ortho_reduction,
+                "reconstruction_worse": recon_worse,
+                "integration_worse": integration_worse,
+                "cross_seed_cv": cv_by_metric,
+                "incomplete": incomplete,
+                "failures": failures,
+                "diagnostics": diagnostics,
+                "means": means,
+            }
+        )
         coverage_failures.extend(f"weight={weight}: {msg}" for msg in incomplete)
 
     if coverage_failures:
@@ -400,7 +400,9 @@ def _shared_metrics(model, prepared, group_indices_list, cfg: Config) -> dict[st
     }
 
 
-def train_variant(cfg: Config, prepared, group_indices_list, *, seed: int, orthogonality_weight: float) -> dict[str, Any]:
+def train_variant(
+    cfg: Config, prepared, group_indices_list, *, seed: int, orthogonality_weight: float
+) -> dict[str, Any]:
     """Train one baseline or F3-weighted variant and return one metrics row."""
     import numpy as np
     import torch
@@ -465,7 +467,7 @@ def train_variant(cfg: Config, prepared, group_indices_list, *, seed: int, ortho
         row["reconstruction_loss_per_cell"] = _extract_final(model.history, "reconstruction_loss_train")
         row["orthogonality_loss"] = _extract_final(model.history, "orthogonality_loss")
         row.update(_shared_metrics(model, prepared, group_indices_list, cfg))
-    except Exception as exc:  # noqa: BLE001  # pragma: no cover - benchmark guardrail
+    except Exception as exc:  # pragma: no cover - benchmark guardrail
         row["notes"] = f"failed: {type(exc).__name__}: {exc}"
     return row
 
@@ -519,13 +521,15 @@ def main() -> None:
         adata = load_kang_subset(cfg, seed)
         prepared, group_indices_list = prepare_model_input(adata)
         for weight in [0.0, *cfg.weights]:
-            rows.append(train_variant(
-                cfg,
-                prepared,
-                group_indices_list,
-                seed=seed,
-                orthogonality_weight=weight,
-            ))
+            rows.append(
+                train_variant(
+                    cfg,
+                    prepared,
+                    group_indices_list,
+                    seed=seed,
+                    orthogonality_weight=weight,
+                )
+            )
 
     recommendation = recommend_f3_variant(rows)
     write_artifacts(rows, recommendation, cfg)

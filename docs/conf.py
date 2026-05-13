@@ -19,12 +19,12 @@ sys.path.insert(0, str(HERE / "extensions"))
 def _ensure_torchvision_nms_schema() -> None:
     """Keep docs importable when torchvision lacks the optional nms op."""
     try:
-        import torch
+        import torchvision  # noqa: F401
 
-        if torch._C._dispatch_has_kernel_for_dispatch_key("torchvision::nms", "Meta"):
+        return
+    except RuntimeError as exc:
+        if "torchvision::nms" not in str(exc):
             return
-    except RuntimeError:
-        pass
     except Exception:
         return
 
@@ -60,6 +60,10 @@ bibtex_bibfiles = ["references.bib"]
 templates_path = ["_templates"]
 nitpicky = True  # Warn about broken links
 needs_sphinx = "4.0"
+suppress_warnings = [
+    "autodoc.duplicate_object",
+    "toc.not_included",
+]
 
 html_context = {
     "display_github": True,  # Integrate GitHub

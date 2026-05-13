@@ -42,9 +42,7 @@ from spVIPESmulti.metrics import (
 try:
     import pertpy as pt
 except Exception as exc:  # pragma: no cover - hard dependency for this script
-    raise RuntimeError(
-        "pertpy is required for Kang IFNB benchmarking. Install pertpy first."
-    ) from exc
+    raise RuntimeError("pertpy is required for Kang IFNB benchmarking. Install pertpy first.") from exc
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -249,7 +247,11 @@ def _common_metric_payload(
         min_cells=min_cells_per_stratum,
     )
 
-    cycle_l2 = float(np.mean((z_shared - z_private[:, : z_shared.shape[1]]) ** 2)) if z_private.shape[1] >= z_shared.shape[1] else float("nan")
+    cycle_l2 = (
+        float(np.mean((z_shared - z_private[:, : z_shared.shape[1]]) ** 2))
+        if z_private.shape[1] >= z_shared.shape[1]
+        else float("nan")
+    )
 
     return {
         "iLISI": float(ilisi(z_shared, groups, k=20)),
@@ -448,7 +450,9 @@ def run_spvipes_original(cfg: BenchmarkConfig, adata, seed: int) -> dict[str, An
                 min_cells_per_stratum=cfg.orthogonality_min_cells_per_stratum,
             )
         )
-        row["reconstruction_loss_per_cell"] = _extract_final(getattr(model, "history", None), "reconstruction_loss_train")
+        row["reconstruction_loss_per_cell"] = _extract_final(
+            getattr(model, "history", None), "reconstruction_loss_train"
+        )
         row["kl_shared"] = _extract_final(getattr(model, "history", None), "kl_local_train")
         row["kl_private"] = _extract_final(getattr(model, "history", None), "kl_local_train")
         row["notes"] = "ok"
