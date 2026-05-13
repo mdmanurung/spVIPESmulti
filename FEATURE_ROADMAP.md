@@ -80,7 +80,7 @@ Cross-cutting hard constraints (apply to every feature):
   (ctrl vs. stim, immune cells from PertPy) via `docs/notebooks/kang_ifn_commit_old.ipynb`
   for benchmarking. This provides a standard two-condition, multi-cell-type baseline
   with known IFN response signatures.
-  
+
   **Data preprocessing note:** Before analysis, remove megakaryocytes from the Kang IFN
   dataset (filter `adata = adata[adata.obs["cell_type"] != "Megakaryocytes"]` or equivalent).
   Megakaryocytes are a small, transcriptionally distinct population that can distort
@@ -1074,6 +1074,15 @@ F10a remains an early audit harness and should be hardened alongside F4/F2 so Ka
 counterfactual and disentanglement metrics are available before promotion decisions.
 F10b external CellDISECT execution starts only after F10a metric helpers and artifact
 schemas are green.
+
+**Implementation update (2026-05-13).** The additive F2 single-modal interventions
+package is in place with deterministic posterior-mean encoding, centroid/arithmetic/
+interpolation/replacement latent operators, direct decoder rollout, OOD flags, leakage
+diagnostics, and explicit multimodal rejection. F10a internal metric helpers are also
+in place for Pearson, delta-Pearson, top-DE cosine, Wasserstein, CAG, MIG-proxy scores,
+and skipped external-baseline artifact rows. F10b now has an optional Kang parity runner
+that writes `audits/F10/` artifacts and explicit skipped rows when external CellDISECT
+is unavailable; the smoke run is informational, not promotion evidence.
 
 ---
 

@@ -31,6 +31,7 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_donor_shared_weight": 0.0,
         "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.0,
+        "orthogonality_weight": 0.0,
     },
     "full": {
         # All 4 classifiers + contrastive at sensible defaults.
@@ -42,6 +43,7 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_donor_shared_weight": 0.0,
         "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.5,
+        "orthogonality_weight": 0.0,
     },
     "shared_only": {
         # Only the z_shared decoupling losses.
@@ -53,6 +55,7 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_donor_shared_weight": 0.0,
         "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.5,
+        "orthogonality_weight": 0.0,
     },
     "private_only": {
         # Only the z_private decoupling losses.
@@ -64,6 +67,7 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_donor_shared_weight": 0.0,
         "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.0,
+        "orthogonality_weight": 0.0,
     },
     "adversarial_only": {
         # Only the GRL-based components.
@@ -75,6 +79,7 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_donor_shared_weight": 0.0,
         "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.0,
+        "orthogonality_weight": 0.0,
     },
     "supervised_only": {
         # Only the non-GRL components (label-shared, group-private, contrastive).
@@ -86,6 +91,7 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_donor_shared_weight": 0.0,
         "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.5,
+        "orthogonality_weight": 0.0,
     },
     "no_contrastive": {
         # Full disentanglement but with contrastive disabled.
@@ -97,6 +103,7 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_donor_shared_weight": 0.0,
         "disentangle_donor_private_weight": 0.0,
         "contrastive_weight": 0.0,
+        "orthogonality_weight": 0.0,
     },
     "minimal_safe_bio": {
         "disentangle_group_shared_weight": 0.0,
@@ -107,6 +114,7 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_donor_shared_weight": 0.0,
         "disentangle_donor_private_weight": 0.5,
         "contrastive_weight": 0.0,
+        "orthogonality_weight": 0.0,
     },
     "full_bio": {
         "disentangle_group_shared_weight": 1.0,
@@ -117,6 +125,7 @@ DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
         "disentangle_donor_shared_weight": 0.5,
         "disentangle_donor_private_weight": 0.5,
         "contrastive_weight": 0.5,
+        "orthogonality_weight": 0.0,
     },
 }
 
@@ -129,6 +138,7 @@ _REQUIRED_PRESET_KEYS = frozenset({
     "disentangle_donor_shared_weight",
     "disentangle_donor_private_weight",
     "contrastive_weight",
+    "orthogonality_weight",
 })
 
 for _preset_name, _preset_vals in DISENTANGLE_PRESETS.items():

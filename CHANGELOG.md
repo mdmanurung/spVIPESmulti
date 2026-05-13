@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+### Added
+
+-   Optional F3 shared-private orthogonality regularizer:
+    `orthogonality_weight` is available on the model/module constructors,
+    remains `0.0` in every existing preset, logs `orthogonality_loss` only
+    when enabled, and is covered by a new `scripts/benchmark_f3_orthogonality.py`
+    audit harness.
+
 ### Changed
 
 -   Documentation sync pass:

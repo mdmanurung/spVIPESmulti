@@ -22,4 +22,5 @@ notebooks/malaria_bcells_recommended_time
 notebooks/malaria_bcells_hparam_explore
 notebooks/multimodal_nf_tutorial
 notebooks/disentangle_ablation
+notebooks/counterfactual_interventions_tutorial
 ```

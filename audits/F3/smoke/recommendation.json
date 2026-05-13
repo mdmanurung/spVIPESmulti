@@ -1,0 +1,66 @@
+{
+  "feature_id": "F3",
+  "verdict": "reject",
+  "recommended_weight": null,
+  "reason": "no tested F3 weight passed all gates",
+  "baseline": {
+    "orthogonality_within_stratum": 0.013606511522084475,
+    "reconstruction_loss_per_cell": 5.636022090911865,
+    "iLISI": 1.8383258146639263,
+    "kBET": 0.84375,
+    "knn_purity": 0.25625,
+    "leiden_ari": null,
+    "active_dims_shared": 16.0,
+    "train_wall_time_sec": 9.9798
+  },
+  "candidates": [
+    {
+      "weight": 0.01,
+      "passes": false,
+      "orthogonality_reduction": -0.010830512953203142,
+      "reconstruction_worse": 0.0,
+      "integration_worse": {
+        "iLISI": 0.0,
+        "kBET": 0.0,
+        "knn_purity": 0.0012195121951217088,
+        "leiden_ari": null
+      },
+      "active_dims_ok": true,
+      "wall_overhead": 0.22217880117838051,
+      "failures": [
+        "orthogonality reduction <20%",
+        "leiden_ari worsened >5% or missing",
+        "wall-time overhead >10% or missing"
+      ],
+      "means": {
+        "orthogonality_within_stratum": 0.013753877021372318,
+        "reconstruction_loss_per_cell": 5.620664596557617,
+        "iLISI": 1.8406380347852216,
+        "kBET": 0.8625,
+        "knn_purity": 0.25593750000000004,
+        "leiden_ari": null,
+        "active_dims_shared": 16.0,
+        "train_wall_time_sec": 12.1971
+      }
+    }
+  ],
+  "config": {
+    "run_id": "f3_orthogonality_20260513T104039Z",
+    "kang_h5ad_path": "docs/notebooks/data/kang_2018.h5ad",
+    "seeds": [
+      0
+    ],
+    "weights": [
+      0.01
+    ],
+    "max_epochs": 2,
+    "batch_size": 128,
+    "max_cells_per_condition": 80,
+    "n_top_genes": 300,
+    "n_shared": 16,
+    "n_private": 16,
+    "n_hidden": 64,
+    "min_cells_per_stratum": 16,
+    "output_dir": "audits/F3/smoke"
+  }
+}

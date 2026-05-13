@@ -93,6 +93,11 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
     contrastive_weight : float or None, default=None
         Override the preset's weight for the prototype InfoNCE loss on
         ``z_shared``. Requires ``label_key``. ``None`` keeps the preset value.
+    orthogonality_weight : float or None, default=None
+        Override the preset's optional F3 shared-private orthogonality
+        regularizer. The loss penalizes aligned-dimension correlation between
+        ``z_shared`` and ``z_private`` within configured strata. ``None`` keeps
+        the preset value; existing presets keep this disabled at ``0.0``.
     contrastive_temperature : float, default=0.1
         Temperature for the InfoNCE softmax denominator.
     disentangle_warmup : bool, default=True
@@ -184,6 +189,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         disentangle_donor_shared_weight: Optional[float] = None,
         disentangle_donor_private_weight: Optional[float] = None,
         contrastive_weight: Optional[float] = None,
+        orthogonality_weight: Optional[float] = None,
         contrastive_temperature: float = 0.1,
         disentangle_warmup: bool = True,
         modality_loss_weights: Optional[dict] = None,
@@ -257,6 +263,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             ("disentangle_donor_shared_weight", disentangle_donor_shared_weight),
             ("disentangle_donor_private_weight", disentangle_donor_private_weight),
             ("contrastive_weight", contrastive_weight),
+            ("orthogonality_weight", orthogonality_weight),
         ):
             if _override is not None:
                 _disentangle_weights[_name] = _override

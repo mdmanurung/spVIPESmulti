@@ -475,9 +475,20 @@ class TestDisentanglePresets:
         sys.path.insert(0, _SRC)
         from spVIPESmulti.model._disentangle_presets import DISENTANGLE_PRESETS, _REQUIRED_PRESET_KEYS
 
+        assert "orthogonality_weight" in _REQUIRED_PRESET_KEYS
         for name, preset in DISENTANGLE_PRESETS.items():
             missing = _REQUIRED_PRESET_KEYS - preset.keys()
             assert not missing, f"Preset '{name}' is missing keys: {missing}"
+
+    def test_existing_presets_keep_orthogonality_loss_disabled(self):
+        import sys
+        sys.path.insert(0, _SRC)
+        from spVIPESmulti.model._disentangle_presets import DISENTANGLE_PRESETS
+
+        for name, preset in DISENTANGLE_PRESETS.items():
+            assert preset["orthogonality_weight"] == 0.0, (
+                f"Preset '{name}' should keep F3 default-off until benchmark promotion"
+            )
 
     def test_preset_values_are_non_negative(self):
         import sys

@@ -1,0 +1,35 @@
+{
+  "run_id": "f10b_smoke_20260513",
+  "feature_id": "F10b",
+  "verdict": "informational",
+  "reason": "spVIPESmulti rows are available; external CellDISECT rows were skipped.",
+  "promotion": "audit harness only; no causal claims, F4 preset promotion, or F3 implementation",
+  "status_counts": {
+    "ok": 5,
+    "skipped": 5
+  },
+  "config": {
+    "run_id": "f10b_smoke_20260513",
+    "kang_h5ad_path": "docs/notebooks/data/kang_2018.h5ad",
+    "seeds": [
+      0
+    ],
+    "max_epochs": 1,
+    "batch_size": 64,
+    "max_cells_per_condition": 80,
+    "n_top_genes": 200,
+    "n_shared": 16,
+    "n_private": 16,
+    "n_hidden": 64,
+    "condition_key": "label",
+    "label_key": "cell_type",
+    "donor_key": "replicate",
+    "splits": [
+      "cd14_mono"
+    ],
+    "condition_from": null,
+    "condition_to": null,
+    "disentangle_preset": "full",
+    "audit_dir": "/exports/para-lipg-hpc/mdmanurung/spVIPESmulti/audits/F10"
+  }
+}

@@ -112,6 +112,7 @@ latents = model.get_latent_representation(batch_size=512)
 | `disentangle_donor_shared_weight` | `float or None` | `None` | Override the preset's weight for adversarial donor erasure on z_shared. Requires `donor_key`. |
 | `disentangle_donor_private_weight` | `float or None` | `None` | Override the preset's weight for supervised donor retention on z_private. Requires `donor_key`. |
 | `contrastive_weight` | `float or None` | `None` | Override the preset's weight for the prototype InfoNCE loss on z_shared. |
+| `orthogonality_weight` | `float or None` | `None` | Override the preset's optional F3 shared-private orthogonality regularizer. Existing presets keep this at `0.0`. |
 | `contrastive_temperature` | `float` | `0.1` | Temperature for the InfoNCE softmax. |
 | `disentangle_warmup` | `bool` | `True` | Warm up covariate GRL strength with KL warmup. |
 | `modality_loss_weights` | `dict[str, float] or None` | `None` | Per-modality scalar multipliers on the reconstruction loss. E.g. `{"rna": 1.0, "protein": 5.0}` to up-weight the protein term. Multimodal mode only. |
@@ -222,7 +223,7 @@ model.train(
 | `plan_kwargs` | `dict or None` | `None` | Extra keyword arguments forwarded to `scvi.train.TrainingPlan`. |
 | `**trainer_kwargs` | | | Forwarded to `pl.Trainer`. Use `accelerator="gpu", devices=1` to select a GPU (replaces the removed `use_gpu=True`). |
 
-The training method also consumes instrumentation-only kwargs before constructing the Trainer: `compute_orthogonality_metric`, `orthogonality_groupby_keys`, and `orthogonality_min_cells_per_stratum`.
+The training method also consumes orthogonality-control kwargs before constructing the Trainer: `compute_orthogonality_metric`, `orthogonality_groupby_keys`, and `orthogonality_min_cells_per_stratum`. `compute_orthogonality_metric` controls F1 metric logging only; F3 loss is controlled by constructor-level `orthogonality_weight`.
 
 ---
 
@@ -539,6 +540,7 @@ override any weight.
 | `disentangle_donor_shared_weight` | z_shared | Adversarial GRL classifier for donor | Erase donor signal from shared latent |
 | `disentangle_donor_private_weight` | z_private | Supervised donor classifier | Preserve donor/private signal in private latent |
 | `contrastive_weight` | z_shared | Prototype InfoNCE (EMA) across groups | Cross-group semantic alignment |
+| `orthogonality_weight` | z_shared and z_private | Differentiable within-stratum aligned correlation penalty | Reduce shared/private latent leakage |
 
 **Available presets:**
 
@@ -558,6 +560,10 @@ The `"minimal_safe_bio"` and `"full_bio"` presets are retained for reproducibili
 and manual experiments. The current F4 probe audit rejected preset promotion, so
 they should not be treated as generally useful recommended defaults; prefer
 explicit per-weight overrides when testing covariate heads.
+
+All presets currently set `orthogonality_weight=0.0`. F3 orthogonality loss is
+experimental and should be enabled explicitly, then audited with
+`scripts/benchmark_f3_orthogonality.py`.
 
 Label-dependent components (`disentangle_label_shared_weight`,
 `disentangle_label_private_weight`, `contrastive_weight`) require `label_key`
@@ -1208,6 +1214,58 @@ fig = spVIPESmulti.pl.differential_vars_heatmap(traversal)
 .. autofunction:: spVIPESmulti.traversal.traverse_latent
 .. autofunction:: spVIPESmulti.traversal.calculate_differential_vars
 ```
+
+---
+
+## Interventions
+
+The interventions API provides additive, single-modal encode/edit/decode helpers
+for diagnostic counterfactual predictions. These outputs are associative
+decoder rollouts, not causal estimates. Multimodal editing is intentionally
+unsupported in the F2 MVP.
+
+```python
+import spVIPESmulti.interventions as svi
+
+result = svi.predict_counterfactual(
+    model,
+    adata,
+    cells=adata.uns["groups_obs_indices"][0][:100],
+    group_idx=0,
+    intervention="centroid_shift",
+    direction=direction,
+)
+result.X
+result.info["ood_flags"]
+```
+
+```{eval-rst}
+.. currentmodule:: spVIPESmulti.interventions
+
+.. autofunction:: encode_cells
+    :no-index:
+
+.. autofunction:: decode_counterfactual
+    :no-index:
+
+.. autofunction:: predict_counterfactual
+    :no-index:
+
+.. autofunction:: transfer_condition
+    :no-index:
+
+.. autofunction:: leakage_score
+    :no-index:
+
+.. autofunction:: integration_report
+    :no-index:
+
+.. currentmodule:: spVIPESmulti
+```
+
+F10a audit helpers live under `spVIPESmulti.interventions.metrics` and implement
+CellDISECT-style Pearson, delta-Pearson, top-DE cosine, Wasserstein, CAG, and
+MIG-proxy metrics without requiring external benchmark packages.
 
 ---
 

@@ -106,6 +106,99 @@ def _within_stratum_corr_norm_multimodal(
     return float(np.mean(means)), float(np.max(worsts)), int(np.max(excluded_counts))
 
 
+def _orthogonality_corr_loss(
+    z_shared: torch.Tensor | np.ndarray,
+    z_private: torch.Tensor | np.ndarray,
+    strata_ids: torch.Tensor | np.ndarray,
+    min_cells: int = 16,
+    eps: float = 1e-8,
+) -> torch.Tensor:
+    """Differentiable F3 shared-private correlation penalty within strata.
+
+    This mirrors the F1 aligned-dimension leakage score but keeps the whole
+    computation in torch so gradients can flow into both latent blocks.
+    """
+    device = z_shared.device if isinstance(z_shared, torch.Tensor) else torch.device("cpu")
+    zs = _to_float_tensor(z_shared, device)
+    zp = _to_float_tensor(z_private, device)
+    strata = _to_1d_tensor(strata_ids, device)
+
+    n_align = min(zs.shape[1], zp.shape[1])
+    if n_align == 0 or zs.shape[0] == 0:
+        return (zs.sum() + zp.sum()) * 0.0
+
+    zs = zs[:, :n_align]
+    zp = zp[:, :n_align]
+    scores: list[torch.Tensor] = []
+    valid: list[torch.Tensor] = []
+
+    for sid in torch.unique(strata):
+        mask = strata == sid
+        mask_f = mask.to(dtype=zs.dtype).unsqueeze(1)
+        n = mask_f.sum().clamp_min(1.0)
+
+        zs_mean = (zs * mask_f).sum(dim=0, keepdim=True) / n
+        zp_mean = (zp * mask_f).sum(dim=0, keepdim=True) / n
+        zs_centered = (zs - zs_mean) * mask_f
+        zp_centered = (zp - zp_mean) * mask_f
+
+        zs_scale = torch.sqrt(zs_centered.pow(2).sum(dim=0, keepdim=True) / n).clamp_min(eps)
+        zp_scale = torch.sqrt(zp_centered.pow(2).sum(dim=0, keepdim=True) / n).clamp_min(eps)
+        corr = ((zs_centered / zs_scale) * (zp_centered / zp_scale)).sum(dim=0) / n
+        scores.append(corr.pow(2).mean())
+        valid.append((mask_f.sum() >= min_cells).to(dtype=zs.dtype))
+
+    if not scores:
+        return (zs.sum() + zp.sum()) * 0.0
+
+    scores_t = torch.stack(scores)
+    valid_t = torch.stack(valid)
+    return (scores_t * valid_t).sum() / valid_t.sum().clamp_min(1.0)
+
+
+def _orthogonality_corr_loss_multimodal(
+    z_shared: torch.Tensor | np.ndarray,
+    z_private_by_modality: dict[int | str, torch.Tensor | np.ndarray],
+    strata_ids: torch.Tensor | np.ndarray,
+    min_cells: int = 16,
+) -> torch.Tensor:
+    """Average differentiable F3 loss across modality-private latents."""
+    device = z_shared.device if isinstance(z_shared, torch.Tensor) else torch.device("cpu")
+    losses = [
+        _orthogonality_corr_loss(z_shared, z_private, strata_ids, min_cells=min_cells)
+        for z_private in z_private_by_modality.values()
+    ]
+    if not losses:
+        zs = _to_float_tensor(z_shared, device)
+        return zs.sum() * 0.0
+    return torch.stack(losses).mean()
+
+
+def _orthogonality_strata_ids(
+    tensors: dict,
+    groupby_keys: tuple[str, ...],
+    device: torch.device,
+    n_obs: int,
+) -> torch.Tensor | None:
+    """Build stratum ids from registered tensors for F1 metrics and F3 loss."""
+    if len(groupby_keys) == 0:
+        return torch.zeros(n_obs, device=device, dtype=torch.long)
+
+    strata_parts = [
+        _to_1d_tensor(tensors[key], device)
+        for key in groupby_keys
+        if key in tensors
+    ]
+    if not strata_parts:
+        return None
+    if len(strata_parts) == 1:
+        return strata_parts[0]
+
+    stacked = torch.stack(strata_parts, dim=1)
+    _, strata_ids = torch.unique(stacked, dim=0, return_inverse=True)
+    return strata_ids
+
+
 class spVIPESmultimodule(BaseModuleClass):
     """
     PyTorch implementation of spVIPESmulti variational autoencoder module.
@@ -219,6 +312,7 @@ class spVIPESmultimodule(BaseModuleClass):
         disentangle_donor_shared_weight: float = 0.0,
         disentangle_donor_private_weight: float = 0.0,
         contrastive_weight: float = 0.0,
+        orthogonality_weight: float = 0.0,
         contrastive_temperature: float = 0.1,
         disentangle_warmup: bool = True,
         group_loss_weights: Optional[list[float]] = None,
@@ -460,6 +554,10 @@ class spVIPESmultimodule(BaseModuleClass):
                 "with at least two batch categories. Either provide batch_key or set "
                 "disentangle_batch_shared_weight=0.0."
             )
+        if orthogonality_weight < 0:
+            raise ValueError(
+                f"orthogonality_weight must be >= 0, got {orthogonality_weight}."
+            )
 
         n_groups = len(groups_lengths)
         self.disentangle_group_shared_weight = disentangle_group_shared_weight
@@ -470,6 +568,7 @@ class spVIPESmultimodule(BaseModuleClass):
         self.disentangle_donor_shared_weight = disentangle_donor_shared_weight
         self.disentangle_donor_private_weight = disentangle_donor_private_weight
         self.contrastive_weight = contrastive_weight
+        self.orthogonality_weight = float(orthogonality_weight)
         self.contrastive_temperature = contrastive_temperature
         self.disentangle_warmup = disentangle_warmup
         if group_loss_weights is not None:
@@ -1229,7 +1328,11 @@ class spVIPESmultimodule(BaseModuleClass):
             self.q_batch_shared, self.q_donor_shared, self.q_donor_private,
             self.prototypes,
         )
-        if all(x is None for x in enabled) and not self.compute_orthogonality_metric:
+        if (
+            all(x is None for x in enabled)
+            and not self.compute_orthogonality_metric
+            and self.orthogonality_weight == 0
+        ):
             return 0.0
 
         # Labels are needed only by the label-using components
@@ -1434,6 +1537,48 @@ class spVIPESmultimodule(BaseModuleClass):
                 disentangle_total = disentangle_total + self.contrastive_weight * ct_loss
                 extra_metrics["contrastive_loss"] = ct_loss / n_groups
 
+        if self.orthogonality_weight > 0:
+            ortho_group_losses: list[torch.Tensor] = []
+            for g in range(n_groups):
+                z_shared = inference_outputs["poe_stats"][g]["logtheta_log_z"]
+                strata_ids = _orthogonality_strata_ids(
+                    tensors_by_group[g],
+                    self.orthogonality_groupby_keys,
+                    z_shared.device,
+                    z_shared.size(0),
+                )
+                if strata_ids is None:
+                    ortho_group_losses.append(z_shared.sum() * 0.0)
+                    continue
+
+                if self.is_multimodal and "per_modality_private" in inference_outputs:
+                    z_private_by_modality = {
+                        mod: inference_outputs["per_modality_private"][(g, mod)]["log_z"]
+                        for mod in self.group_modalities[g]
+                        if (g, mod) in inference_outputs["per_modality_private"]
+                    }
+                    group_loss = _orthogonality_corr_loss_multimodal(
+                        z_shared,
+                        z_private_by_modality,
+                        strata_ids,
+                        min_cells=self.orthogonality_min_cells_per_stratum,
+                    )
+                else:
+                    z_private = inference_outputs["private_stats"][g]["log_z"]
+                    group_loss = _orthogonality_corr_loss(
+                        z_shared,
+                        z_private,
+                        strata_ids,
+                        min_cells=self.orthogonality_min_cells_per_stratum,
+                    )
+                ortho_group_losses.append(group_loss)
+
+            loss_val = sum(ortho_group_losses) if ortho_group_losses else (
+                inference_outputs["poe_stats"][0]["logtheta_log_z"].sum() * 0.0
+            )
+            disentangle_total = disentangle_total + self.orthogonality_weight * loss_val
+            extra_metrics["orthogonality_loss"] = loss_val.detach() / n_groups
+
         if self.compute_orthogonality_metric:
             ortho_means: list[float] = []
             ortho_worsts: list[float] = []
@@ -1441,19 +1586,14 @@ class spVIPESmultimodule(BaseModuleClass):
 
             for g in range(n_groups):
                 z_shared = inference_outputs["poe_stats"][g]["logtheta_log_z"].detach()
-
-                strata_parts = []
-                for key in self.orthogonality_groupby_keys:
-                    if key in tensors_by_group[g]:
-                        strata_parts.append(_to_1d_tensor(tensors_by_group[g][key], z_shared.device))
-                if not strata_parts:
+                strata_ids = _orthogonality_strata_ids(
+                    tensors_by_group[g],
+                    self.orthogonality_groupby_keys,
+                    z_shared.device,
+                    z_shared.size(0),
+                )
+                if strata_ids is None:
                     continue
-
-                if len(strata_parts) == 1:
-                    strata_ids = strata_parts[0]
-                else:
-                    stacked = torch.stack(strata_parts, dim=1)
-                    _, strata_ids = torch.unique(stacked, dim=0, return_inverse=True)
 
                 if self.is_multimodal and "per_modality_private" in inference_outputs:
                     z_private_by_modality = {

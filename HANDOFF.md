@@ -6,6 +6,23 @@ Read order: HANDOFF.md → PLAN.md → PROGRESS.md → ImplementationPlan.md (re
 
 ---
 
+## Environment Guard (2026-05-13)
+
+- Use the Jupyter kernel `Python (spvm)` for notebooks in this repo. It points at
+  `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/spvm/bin/python`
+  and sets `PYTHONNOUSERSITE=1`.
+- Avoid the default `Python 3 (ipykernel)` kernel here; it points at a global Python
+  3.10 interpreter and can import `scvi`/`lightning`/`torchmetrics`/`torchvision` from
+  `~/.local`, causing `RuntimeError: operator torchvision::nms does not exist`.
+- Repo backstops are now in place:
+  - `src/sitecustomize.py` removes user-site paths when the editable `src` directory is
+    on `sys.path` and propagates `PYTHONNOUSERSITE=1` to child Python processes.
+  - `spVIPESmulti._siteguard` runs before package-level heavy imports and raises a
+    clear restart instruction if risky packages were already loaded from user-site.
+- Escape hatch for intentional debugging only: `SPVIPESMULTI_ALLOW_USER_SITE=1`.
+
+---
+
 ## Performance improvements completed (2026-05-08)
 
 - **P-PERF-1**: `_label_based_poe` reassembly vectorized — eliminates O(n_cells) GPU–CPU syncs.
@@ -55,12 +72,13 @@ a TDD plan and a quantitative go/no-go benchmark.
   overhead `-1.5164%`.
 - Artifacts are under `audits/F1/`.
 
-**F4-lite status — implementation/probe harness landed.**
+**F4-lite status — implemented and audited.**
 
 - Added `condition_key`/`donor_key` registration and default-off donor/batch heads.
 - Added covariate GRL scaling from the existing scvi `kl_weight` warmup and targeted coverage in `tests/test_covariate_heads.py`.
 - Targeted validation: `pytest tests/test_covariate_heads.py tests/test_multimodal_disentangle.py tests/test_regression_fixes.py tests/test_multigroup_multimodal.py -q` -> `64 passed`.
-- Added `scripts/benchmark_f4_covariate_probes.py`; smoke audit wrote `audits/F4/`.
+- Added `scripts/benchmark_f4_covariate_probes.py`; the full 3-seed Kang probe audit
+  wrote `audits/F4/` and rejected preset promotion.
 - Updated `docs/notebooks/kang_ifn_commit_old.ipynb` to use the implemented F1/F4-lite
   APIs: condition/donor registration, opt-in donor heads, orthogonality metric logging,
   reordered latent extraction, and notebook-local held-out probe reporting.
@@ -71,18 +89,54 @@ a TDD plan and a quantitative go/no-go benchmark.
   No technical `batch_key` is known, so the standalone batch-shared rows are skipped
   unless a real technical-batch column is provided; the combined `full_bio` probe still
   runs the available donor heads.
+- Current recommendation: keep F4 heads and `minimal_safe_bio` / `full_bio` available
+  for opt-in/manual experiments only; do not present those presets as recommended.
 
-**Next action — F4 promotion audit.**
+**F2/F10a status — implemented and validated.**
 
-Run the full 3-seed F4 probe matrix on Kang and summarize baseline deltas:
+- `spVIPESmulti.interventions` now provides the additive, single-modal
+  counterfactual API: deterministic posterior-mean encoding, centroid-shift latent
+  edits, direct decoder rollout, OOD/realism flags, diagnostics, and explicit
+  multimodal rejection.
+- F10a internal CellDISECT-style metric helpers live under
+  `spVIPESmulti.interventions.metrics` and cover Pearson, delta-Pearson, top-DE
+  cosine, Wasserstein, CAG, MIG-proxy scores, and skipped-baseline artifact rows.
+- Targeted validation: `pytest tests/test_celldisect_metric_parity.py tests/test_counterfactual_basics.py tests/test_counterfactual_integration.py tests/test_counterfactual_diagnostics.py -q`
+  -> `24 passed`.
 
-```bash
-python scripts/benchmark_f4_covariate_probes.py \
-  --run-id f4_kang_probes_<date> \
-  --kang-h5ad-path docs/notebooks/data/kang_2018.h5ad \
-  --seeds 0,1,2 \
-  --max-epochs 40
-```
+**F10b status — implemented and smoke-audited.**
+
+- Added `scripts/benchmark_kang_celldisect_parity.py` as an optional audit harness
+  that writes `audits/F10/metrics.csv`, `summary.md`, and `recommendation.json`.
+- External CellDISECT is optional; unavailable packages are recorded as explicit
+  skipped rows.
+- Targeted validation: `pytest tests/test_celldisect_metric_parity.py tests/test_celldisect_parity_runner.py -q`
+  -> `10 passed`.
+- Kang smoke wrote `audits/F10/` plus
+  `audits/kang_ifnb/f10b_smoke_20260513_f10b.md`; verdict is informational because
+  `spVIPESmulti` rows are available and external CellDISECT is not installed.
+
+**F3 status — implemented, default-off, smoke-audited.**
+
+- Added `orthogonality_weight` to presets, model/module constructors, and loss
+  aggregation; every existing preset keeps `orthogonality_weight=0.0`.
+- Added differentiable single-modal and multimodal shared/private orthogonality loss
+  plus `orthogonality_loss` logging when the weight is enabled. F1 metrics remain
+  independently controlled by `compute_orthogonality_metric`.
+- Added `tests/test_orthogonality_loss.py`, `tests/test_f3_benchmark.py`, and
+  `scripts/benchmark_f3_orthogonality.py`.
+- Fixed the recurring `spvm`/pytest import crash by normalizing inherited
+  `CONDA_PREFIX` in the repo guards and avoiding duplicate `torchvision::nms`
+  registration in `tests/conftest.py`.
+- Validation: `pytest tests -q` -> `258 passed, 2 skipped`.
+- Smoke audit wrote `audits/F3/smoke/`; verdict was `reject` for the tiny
+  1-seed/2-epoch run, so F3 remains experimental/default-off.
+
+**Next action — decide whether to run a real F3 multi-seed Kang audit.**
+
+Use `scripts/benchmark_f3_orthogonality.py` with at least 3 seeds before recommending
+any nonzero `orthogonality_weight`. Outputs and F10 artifacts remain audit evidence
+only; no causal claims.
 
 ### Previous Context
 - Pilot sweep: See PLAN.md for status

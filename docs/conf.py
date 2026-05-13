@@ -16,6 +16,31 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(HERE / "extensions"))
 
 
+def _ensure_torchvision_nms_schema() -> None:
+    """Keep docs importable when torchvision lacks the optional nms op."""
+    try:
+        import torch
+
+        if torch._C._dispatch_has_kernel_for_dispatch_key("torchvision::nms", "Meta"):
+            return
+    except RuntimeError:
+        pass
+    except Exception:
+        return
+
+    try:
+        from torch.library import Library
+
+        lib = Library("torchvision", "DEF")
+        lib.define("nms(Tensor dets, Tensor scores, float iou_threshold) -> Tensor")
+        globals()["_TORCHVISION_COMPAT_LIB"] = lib
+    except Exception:
+        return
+
+
+_ensure_torchvision_nms_schema()
+
+
 # -- Project information -----------------------------------------------------
 
 # NOTE: If you installed your project in editable mode, this might be stale.

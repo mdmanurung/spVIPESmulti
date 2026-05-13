@@ -39,6 +39,39 @@ Current package capabilities include single-modal and multimodal AnnData prepara
 
 > **scvi-tools 1.x note.** The deprecated `use_gpu=True` kwarg on `model.train(...)` has been removed upstream. Pass GPU settings via `trainer_kwargs`: `model.train(accelerator="gpu", devices=1)`. Several private scvi-tools modules removed in 1.x are now vendored under `spVIPESmulti.data`.
 
+### Notebook and Script Environment Guard
+
+In shared HPC environments, Python can silently mix conda packages with packages from
+`~/.local/lib/python*/site-packages`. For the `torch`/`torchvision`/`scvi-tools` stack,
+that can surface as import-time binary-extension errors such as
+`RuntimeError: operator torchvision::nms does not exist`.
+
+For this workspace, select the Jupyter kernel named `Python (spvm)`. It points at the
+`spvm` conda interpreter and sets `PYTHONNOUSERSITE=1`.
+
+To recreate the kernel:
+
+```bash
+conda run -n spvm python -m ipykernel install --user --name spvm --display-name "Python (spvm)"
+```
+
+For scripts, prefer:
+
+```bash
+PYTHONNOUSERSITE=1 python scripts/<script>.py
+```
+
+or:
+
+```bash
+conda run -n spvm env PYTHONNOUSERSITE=1 python scripts/<script>.py
+```
+
+The editable repo also includes two safeguards: `src/sitecustomize.py` and the
+`import spVIPESmulti` guard. Both remove user-site paths before importing heavy
+scientific dependencies. Set `SPVIPESMULTI_ALLOW_USER_SITE=1` only when
+intentionally debugging user-site packages.
+
 ### Quick Install
 
 ```bash
@@ -224,6 +257,7 @@ spVIPESmulti exposes an optional disentanglement objective inspired by **CellDIS
 -   **Adversarial losses** via gradient reversal (GRL / DANN-style) — to *erase* a covariate from a latent space
 -   **Supervised classification losses** — acting as variational MI lower bounds to *preserve* a covariate
 -   **Prototype InfoNCE** on `z_shared` — pulls same-label cells together across groups
+-   **Optional F3 orthogonality loss** — penalizes aligned-dimension correlation between `z_shared` and `z_private` within configured strata
 
 The core loss components and what they enforce:
 
@@ -237,6 +271,7 @@ The core loss components and what they enforce:
 | 6 | `q_batch_shared` | `z_shared` | erase technical batch | adversarial CE via GRL |
 | 7 | `q_donor_shared` | `z_shared` | erase donor identity | adversarial CE via GRL |
 | 8 | `q_donor_private` | `z_private` | preserve donor identity | supervised CE |
+| 9 | `orthogonality_weight` | `z_shared`, `z_private` | reduce shared/private leakage | differentiable within-stratum correlation penalty |
 
 Together they support the intended split: **`z_shared` captures cross-group biology; `z_private` captures group-specific or donor/private variation**.
 
@@ -258,6 +293,8 @@ Select a preset via `disentangle_preset=` on the model constructor. Individual w
 
 > **Current F4 audit note.** The `"minimal_safe_bio"` and `"full_bio"` presets are retained for reproducibility and manual experiments, but the 3-seed F4 probe audit rejected preset promotion. In the current evidence they are not very useful as recommended defaults; prefer `"off"` plus explicit per-weight overrides when testing covariate heads.
 
+> **F3 orthogonality note.** `orthogonality_weight` is default-off in every preset. Enable it explicitly for experiments, then audit with `scripts/benchmark_f3_orthogonality.py` before treating a weight as recommended.
+
 ```python
 # No disentanglement (default):
 model = spVIPESmulti.model.spVIPESmulti(combined)
@@ -278,6 +315,7 @@ model = spVIPESmulti.model.spVIPESmulti(
     disentangle_batch_shared_weight=0.2,
     disentangle_donor_shared_weight=0.2,
     disentangle_donor_private_weight=0.5,
+    orthogonality_weight=0.05,
     contrastive_weight=0.2,
     contrastive_temperature=0.1,
 )
@@ -657,6 +695,48 @@ model.train(
 
 ---
 
+## Counterfactual Interventions
+
+The `spVIPESmulti.interventions` API exposes a single-modal, diagnostic
+encode/edit/decode workflow for trained models. The first supported biological
+operator is a centroid shift in latent space; arbitrary latent replacement is
+available only as a low-level diagnostic helper.
+
+Counterfactual outputs are associative predictions from the fitted decoder, not
+causal claims. Use the reported OOD flags and external benchmarks before drawing
+biological conclusions.
+
+```python
+import spVIPESmulti.interventions as svi
+
+encoded = svi.encode_cells(model, combined)
+direction = (
+    encoded["shared"][1].mean(axis=0)
+    - encoded["shared"][0].mean(axis=0)
+)
+
+result = svi.predict_counterfactual(
+    model,
+    combined,
+    cells=combined.uns["groups_obs_indices"][0][:100],
+    group_idx=0,
+    intervention="centroid_shift",
+    direction=direction,
+    reject_ood=True,
+)
+
+result.X                    # decoded expression rates in target group gene space
+result.info["ood_flags"]    # Mahalanobis, library-ratio, and likelihood-proxy flags
+result.info["var_names"]    # target decoder gene names
+```
+
+When `condition_key` was registered in `setup_anndata(...)`,
+`svi.transfer_condition(...)` can compute the condition centroid direction from
+the registered obs column and decode selected cells through a source or target
+group decoder.
+
+---
+
 ## Documentation & Tutorials
 
 -   [Enrichment quickstart (ORA/GSEA/ULM)](docs/enrichment_quickstart.md) — Interpretation-first workflow with reporting + plotting helpers
@@ -668,6 +748,7 @@ model.train(
 -   [Malaria B-cell recommended workflow](docs/notebooks/malaria_bcells_recommended.ipynb) — Lightweight end-to-end B-cell workflow from CSV inputs
 -   [Malaria B-cell ablations](docs/notebooks/malaria_bcells_nodisentangle.ipynb) and [hyperparameter exploration](docs/notebooks/malaria_bcells_hparam_explore.ipynb)
 -   [Kang IFN-beta workflow](docs/notebooks/kang_ifn_commit_old.ipynb) — IFN-beta benchmark notebook
+-   [Counterfactual interventions](docs/notebooks/counterfactual_interventions_tutorial.ipynb) — Safe centroid-shift editing with OOD diagnostics
 -   [Multimodal + NF prior](docs/notebooks/multimodal_nf_tutorial.ipynb) — RNA + protein integration with `prepare_multimodal_adatas`
 -   [API Documentation][link-api] — Comprehensive API reference
 

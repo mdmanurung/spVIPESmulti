@@ -9,6 +9,227 @@ How to use:
 
 ---
 
+## 2026-05-13 (F3 orthogonality loss + spvm import hardening)
+
+### Optional shared-private orthogonality regularizer
+Status: completed (default-off implementation + tests + smoke audit harness)
+
+What changed:
+- Added `orthogonality_weight` to disentanglement presets, the public model
+  constructor, and `spVIPESmultimodule`; every existing preset keeps it at `0.0`.
+- Added differentiable F3 shared/private aligned-correlation loss helpers for
+  single-modal and multimodal paths, with `orthogonality_loss` logged only when
+  `orthogonality_weight > 0`.
+- Kept F1 metric logging independent: `compute_orthogonality_metric=False` no longer
+  blocks F3 loss logging, and existing F1 metric names remain unchanged.
+- Added `scripts/benchmark_f3_orthogonality.py`, `tests/test_orthogonality_loss.py`,
+  and `tests/test_f3_benchmark.py`.
+- Hardened the startup guard against inherited conda environment leakage:
+  `src/sitecustomize.py` and `spVIPESmulti._siteguard` now normalize `CONDA_PREFIX`
+  to the running conda interpreter prefix. `tests/conftest.py` now imports
+  `torchvision.extension` before falling back to the `torchvision::nms` shim, avoiding
+  duplicate C++ op registration when torchvision is healthy.
+
+Validation:
+- Direct `spvm/bin/python` with deliberately wrong inherited `CONDA_PREFIX`:
+  `import scvi` and `import spVIPESmulti` both pass, with `~/.local` absent from
+  `sys.path`.
+- `pytest tests/test_siteguard.py tests/test_f3_benchmark.py -q`
+  -> `6 passed`.
+- `pytest tests/test_orthogonality_loss.py tests/test_f3_benchmark.py tests/test_regression_fixes.py::TestDisentanglePresets -q`
+  -> `14 passed`.
+- `pytest tests/test_disentangle_metrics.py tests/test_multimodal_disentangle.py tests/test_regression_fixes.py -q`
+  -> `39 passed`.
+- `pytest tests -q`
+  -> `258 passed, 2 skipped`.
+- `ruff check scripts/benchmark_f3_orthogonality.py tests/test_orthogonality_loss.py tests/test_f3_benchmark.py`
+  -> passed.
+- `python -m py_compile` on touched Python files -> passed.
+- F3 smoke audit:
+  - command: `python scripts/benchmark_f3_orthogonality.py --smoke --seeds 0 --max-epochs 2 --output-dir audits/F3/smoke`
+  - wrote `audits/F3/smoke/metrics.csv`, `summary.md`, and `recommendation.json`.
+  - smoke verdict: `reject` for `orthogonality_weight=0.01` because the tiny
+    1-seed/2-epoch run did not pass quantitative promotion gates. Keep F3
+    default-off pending a real multi-seed audit.
+- Docs build not run: the `spvm` and `scvi-test` environments do not have Sphinx
+  installed.
+
+Files:
+- `src/spVIPESmulti/model/_disentangle_presets.py`
+- `src/spVIPESmulti/model/spvipesmulti.py`
+- `src/spVIPESmulti/module/spVIPESmultimodule.py`
+- `src/sitecustomize.py`
+- `src/spVIPESmulti/_siteguard.py`
+- `tests/conftest.py`
+- `tests/test_orthogonality_loss.py`
+- `tests/test_f3_benchmark.py`
+- `tests/test_regression_fixes.py`
+- `tests/test_siteguard.py`
+- `scripts/benchmark_f3_orthogonality.py`
+- `README.md`
+- `docs/api.md`
+- `CHANGELOG.md`
+- `audits/F3/smoke/`
+
+---
+
+## 2026-05-13 (Notebook/user-site environment guard)
+
+### Conda/Jupyter import isolation
+Status: completed (runtime guard + recurring documentation + focused tests)
+
+What changed:
+- Diagnosed the `RuntimeError: operator torchvision::nms does not exist` import failure
+  as a notebook-kernel/user-site contamination issue: the failing kernel resolved
+  `scvi`, `lightning`, `torchmetrics`, and `torchvision` from `~/.local` Python 3.10,
+  while the `spvm` conda env resolves a consistent Python 3.11 stack.
+- Registered the user-level Jupyter kernel `Python (spvm)` and hardened it with
+  `PYTHONNOUSERSITE=1`.
+- Added `src/sitecustomize.py`, which Python loads automatically when the editable
+  `src` directory is on `sys.path`; it removes user-site paths and propagates
+  `PYTHONNOUSERSITE=1` to child Python processes.
+- Added `spVIPESmulti._siteguard` and call it at package import before the heavy
+  `scvi`/`lightning` dependency chain, so direct `import spVIPESmulti` also strips
+  user-site paths and raises a clear restart instruction if risky packages were already
+  imported from `~/.local`.
+- Documented the recurring notebook/script rule in `README.md`.
+
+Verification:
+- `conda run -n spvm python -m py_compile src/sitecustomize.py src/spVIPESmulti/_siteguard.py src/spVIPESmulti/__init__.py tests/test_siteguard.py`
+  -> passed.
+- `conda run -n spvm python -m pytest tests/test_siteguard.py -q`
+  -> `2 passed`.
+- `conda run -n spvm python -c "import spVIPESmulti; ..."`
+  -> import passed with `ENABLE_USER_SITE False`, `PYTHONNOUSERSITE 1`, and user-site
+  absent from `sys.path`.
+
+Files:
+- `src/sitecustomize.py`
+- `src/spVIPESmulti/_siteguard.py`
+- `src/spVIPESmulti/__init__.py`
+- `tests/test_siteguard.py`
+- `README.md`
+- `PLAN.md`
+- `HANDOFF.md`
+- `PROGRESS.md`
+
+---
+
+## 2026-05-13 (F10b CellDISECT parity runner)
+
+### External parity audit harness
+Status: completed (implementation + targeted tests + Kang smoke artifact)
+
+What changed:
+- Added `scripts/benchmark_kang_celldisect_parity.py`, an optional F10b Kang IFNB
+  audit runner that trains a small `spVIPESmulti` counterfactual split, computes F10a
+  CellDISECT-style metrics, and records explicit skipped rows when external
+  CellDISECT is unavailable.
+- Widened the F10 artifact schema to include run/seed/dataset columns while keeping
+  older row dictionaries backward compatible through blank defaults.
+- Added focused runner tests for metric row completeness, external CellDISECT skip
+  behavior, decoder-prefix gene mapping, and artifact writing.
+- Wrote smoke artifacts under `audits/F10/` and mirrored the run note under
+  `audits/kang_ifnb/`.
+
+Verification:
+- `pytest tests/test_celldisect_metric_parity.py tests/test_counterfactual_basics.py tests/test_counterfactual_integration.py tests/test_counterfactual_diagnostics.py -q`
+  -> `24 passed`.
+- `python -m py_compile src/spVIPESmulti/interventions/metrics.py scripts/benchmark_kang_celldisect_parity.py`
+  -> passed.
+- `pytest tests/test_celldisect_metric_parity.py tests/test_celldisect_parity_runner.py -q`
+  -> `10 passed`.
+- F10b Kang smoke:
+  - command: `python scripts/benchmark_kang_celldisect_parity.py --run-id f10b_smoke_20260513 --kang-h5ad-path docs/notebooks/data/kang_2018.h5ad --seeds 0 --max-epochs 1 --batch-size 64 --max-cells-per-condition 80 --n-top-genes 200 --splits cd14_mono`
+  - wrote `audits/F10/metrics.csv`, `audits/F10/summary.md`,
+    `audits/F10/recommendation.json`, and
+    `audits/kang_ifnb/f10b_smoke_20260513_f10b.md`.
+  - verdict is `informational`: `spVIPESmulti` rows are available, and external
+    CellDISECT rows are skipped because the package is not installed in this
+    environment.
+
+Files:
+- `scripts/benchmark_kang_celldisect_parity.py`
+- `src/spVIPESmulti/interventions/metrics.py`
+- `tests/test_celldisect_parity_runner.py`
+- `tests/test_celldisect_metric_parity.py`
+- `audits/F10/metrics.csv`
+- `audits/F10/summary.md`
+- `audits/F10/recommendation.json`
+- `audits/kang_ifnb/f10b_smoke_20260513_f10b.md`
+- `FEATURE_ROADMAP.md`
+- `PLAN.md`
+- `HANDOFF.md`
+- `PROGRESS.md`
+
+---
+
+## 2026-05-13 (F2 safe counterfactual API and F10a helpers)
+
+### Interventions and audit metric support
+Status: completed (implementation + unit/integration/docs validation)
+
+What changed:
+- Added the additive `spVIPESmulti.interventions` package for single-modal
+  encode/edit/decode counterfactual rollouts using deterministic posterior means.
+- Implemented latent operators, OOD diagnostics, condition transfer, warning/report
+  helpers, and an auditable `CounterfactualResult` return object.
+- Added F10a internal CellDISECT-style metric helpers for Pearson, delta-Pearson,
+  top-DE cosine, Wasserstein summaries, CAG, MIG-shaped scores, and skipped-baseline
+  artifact rows.
+- Documented that intervention outputs are associative decoder predictions, not causal
+  claims, and kept multimodal intervention calls explicitly unsupported for this MVP.
+- Added scoped pytest/Sphinx compatibility shims for the local `torchvision::nms`
+  import issue; package runtime behavior is unchanged.
+
+Verification:
+- `python -m py_compile src/spVIPESmulti/interventions/*.py` -> passed.
+- `pytest tests/test_counterfactual_basics.py tests/test_counterfactual_integration.py tests/test_counterfactual_diagnostics.py tests/test_celldisect_metric_parity.py -q`
+  -> `24 passed`.
+- `pytest tests/test_covariate_heads.py tests/test_disentangle_metrics.py tests/test_multimodal_disentangle.py tests/test_regression_fixes.py -q`
+  -> `53 passed`.
+- `pytest tests/ -q` -> `240 passed, 1 skipped`.
+- `python -m sphinx -b html docs docs/_build/html` -> passed.
+
+Files:
+- `src/spVIPESmulti/interventions/`
+- `src/spVIPESmulti/__init__.py`
+- `tests/test_counterfactual_basics.py`
+- `tests/test_counterfactual_integration.py`
+- `tests/test_counterfactual_diagnostics.py`
+- `tests/test_celldisect_metric_parity.py`
+- `tests/conftest.py`
+- `README.md`
+- `docs/api.md`
+- `docs/index.md`
+- `docs/conf.py`
+- `docs/notebooks/counterfactual_interventions_tutorial.ipynb`
+- `FEATURE_ROADMAP.md`
+- `PROGRESS.md`
+
+---
+
+## 2026-05-13 (F4 audit closeout and F2 activation)
+
+### Planning state refresh
+Status: completed (stale handoff corrected)
+
+What changed:
+- Recorded that the full 3-seed F4 Kang probe audit under `audits/F4/` rejected preset
+  promotion.
+- Marked F2 safe counterfactual interventions as the active implementation slice.
+- Kept F4 heads and `minimal_safe_bio` / `full_bio` available only for opt-in/manual
+  experiments.
+- Noted that F10a internal CellDISECT-style metrics should be hardened alongside F2,
+  while F10b external CellDISECT execution stays deferred until F10a is green.
+
+Files:
+- `PLAN.md`
+- `HANDOFF.md`
+- `PROGRESS.md`
+
+---
+
 ## 2026-05-10 (Kang IFN notebook F1/F4 refresh)
 
 ### Notebook: `docs/notebooks/kang_ifn_commit_old.ipynb`
@@ -211,21 +432,21 @@ Files:
 ### RuntimeError fix for label-based PoE tensor concatenation
 Status: completed (fix applied + unit tests pass + integration tests pass)
 
-**Issue:** `RuntimeError: Tensors must have same number of dimensions: got 3 and 2` 
-in `spVIPESmultimodule._poe_n()` during `get_latent_representation()` when using 
+**Issue:** `RuntimeError: Tensors must have same number of dimensions: got 3 and 2`
+in `spVIPESmultimodule._poe_n()` during `get_latent_representation()` when using
 label-based PoE.
 
-**Root cause:** 
-- Line 492/901/918: Used `shape[1]` to extract latent dimension, which breaks if 
+**Root cause:**
+- Line 492/901/918: Used `shape[1]` to extract latent dimension, which breaks if
   tensor has unexpected shape (3D or higher).
-- Line 899: Mask creation with `.squeeze()` could fail to produce 1D tensor in 
+- Line 899: Mask creation with `.squeeze()` could fail to produce 1D tensor in
   edge cases, causing indexing to produce 3D results.
 
 **Fix applied:**
-1. Replaced `shape[1]` with `shape[-1]` in three locations to robustly extract 
+1. Replaced `shape[1]` with `shape[-1]` in three locations to robustly extract
    the last dimension (latent_dim) regardless of tensor rank.
-2. Changed `mask = (per_group_labels[g] == label).squeeze()` to 
-   `mask = (per_group_labels[g] == label).squeeze().reshape(-1)` 
+2. Changed `mask = (per_group_labels[g] == label).squeeze()` to
+   `mask = (per_group_labels[g] == label).squeeze().reshape(-1)`
    to ensure mask is always 1D before boolean indexing.
 
 **Verification:**
