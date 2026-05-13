@@ -8,7 +8,6 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -460,6 +459,44 @@ def labels_clustered(rng):
     return np.repeat(["A", "B", "C", "D"], 50)
 
 
+def _reference_ilisi(rep, groups, k=30):
+    from sklearn.neighbors import NearestNeighbors
+
+    groups = np.asarray(groups)
+    nn = NearestNeighbors(n_neighbors=k + 1).fit(rep)
+    _, idx = nn.kneighbors(rep)
+    idx = idx[:, 1:]
+    out = np.empty(rep.shape[0])
+    for i in range(rep.shape[0]):
+        _, counts = np.unique(groups[idx[i]], return_counts=True)
+        p = counts / counts.sum()
+        out[i] = 1.0 / float((p * p).sum())
+    return float(out.mean())
+
+
+def _reference_kbet(rep, groups, k=20):
+    from scipy.stats import chi2 as _chi2
+    from sklearn.neighbors import NearestNeighbors
+
+    groups = np.asarray(groups)
+    unique_groups = np.unique(groups)
+    dof = len(unique_groups) - 1
+    if dof < 1:
+        return float("nan")
+    critical = _chi2.ppf(0.95, df=dof)
+
+    nn = NearestNeighbors(n_neighbors=k + 1).fit(rep)
+    _, idx = nn.kneighbors(rep)
+    idx = idx[:, 1:]
+    expected = np.array([(groups == group).mean() for group in unique_groups])
+    chi = np.empty(rep.shape[0])
+    for i in range(rep.shape[0]):
+        observed = np.array([(groups[idx[i]] == group).mean() for group in unique_groups])
+        chi[i] = k * ((observed - expected) ** 2 / (expected + 1e-9)).sum()
+    rejection_rate = float((chi > critical).mean())
+    return 1.0 - rejection_rate
+
+
 class TestIlisi:
     def test_returns_float(self, z_shared_mixed, groups_balanced):
         score = metrics.ilisi(z_shared_mixed, groups_balanced, k=10)
@@ -484,6 +521,18 @@ class TestIlisi:
         groups = np.array(["g0"] * 50 + ["g1"] * 50)
         score = metrics.ilisi(z, groups, k=10)
         assert score < 1.5
+
+    def test_vectorized_matches_reference_for_imbalanced_strings(self, rng):
+        z = rng.standard_normal((13, 4))
+        groups = np.array(["g0"] * 7 + ["g1"] * 4 + ["rare"] * 2)
+        score = metrics.ilisi(z, groups, k=3)
+        expected = _reference_ilisi(z, groups, k=3)
+        assert score == pytest.approx(expected)
+
+    def test_single_category_is_one(self, rng):
+        z = rng.standard_normal((10, 3))
+        groups = np.array(["only"] * 10)
+        assert metrics.ilisi(z, groups, k=2) == pytest.approx(1.0)
 
 
 class TestClisi:
@@ -516,6 +565,18 @@ class TestKbet:
         ])
         g = np.array(["g0"] * 100 + ["g1"] * 100)
         assert metrics.kbet(z_mixed, g, k=10) > metrics.kbet(z_seg, g, k=10)
+
+    def test_vectorized_matches_reference_for_imbalanced_strings(self, rng):
+        z = rng.standard_normal((15, 4))
+        groups = np.array(["g0"] * 8 + ["g1"] * 5 + ["rare"] * 2)
+        score = metrics.kbet(z, groups, k=4)
+        expected = _reference_kbet(z, groups, k=4)
+        assert score == pytest.approx(expected)
+
+    def test_single_group_returns_nan(self, rng):
+        z = rng.standard_normal((12, 3))
+        groups = np.array(["only"] * 12)
+        assert np.isnan(metrics.kbet(z, groups, k=3))
 
 
 class TestKnnPurity:

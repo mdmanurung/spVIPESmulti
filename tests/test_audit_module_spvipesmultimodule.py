@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 import torch
 from scvi import REGISTRY_KEYS
 from torch.distributions import Normal
@@ -38,6 +37,7 @@ def _minimal_uninitialized_module() -> spVIPESmultimodule:
     module.disentangle_warmup = False
     module.use_jeffreys_integ = False
     module._compute_disentangle_losses = lambda *args: torch.zeros((), dtype=torch.float32)
+    module._covariate_grl_lambda = lambda kl_weight: 0.0
     return module
 
 
@@ -58,7 +58,6 @@ def _minimal_constructed_module() -> spVIPESmultimodule:
     )
 
 
-@pytest.mark.xfail(strict=True, reason="INT-004 pending: single-modal all-zero cells produce -inf library")
 def test_single_modal_all_zero_library_is_finite() -> None:
     """All-zero cells should not create non-finite observed library tensors."""
 
@@ -73,7 +72,6 @@ def test_single_modal_all_zero_library_is_finite() -> None:
     assert torch.isfinite(outputs["library"][0]).all()
 
 
-@pytest.mark.xfail(strict=True, reason="INT-003 pending: NB reconstruction uses log1p targets")
 def test_negative_binomial_loss_uses_raw_count_targets() -> None:
     """Negative-binomial reconstruction should evaluate log_prob on raw counts."""
 
@@ -90,6 +88,46 @@ def test_negative_binomial_loss_uses_raw_count_targets() -> None:
             "poe_stats": {0: {"logtheta_qz": qz, "logtheta_log_z": zeros}},
         },
         generative_outputs={"private_poe": {"0": {"px": recorder}}},
+        kl_weight=1.0,
+    )
+
+    assert recorder.value is not None
+    torch.testing.assert_close(recorder.value, x)
+
+
+def test_multimodal_negative_binomial_loss_uses_raw_count_targets() -> None:
+    """Multimodal NB reconstruction should also evaluate log_prob on raw counts."""
+
+    module = object.__new__(spVIPESmultimodule)
+    torch.nn.Module.__init__(module)
+    module.is_multimodal = True
+    module.group_modalities = {0: ["rna"]}
+    module.groups_modality_var_indices = {0: {"rna": [0, 1]}}
+    module.modality_likelihoods = {"rna": "nb"}
+    module.modality_loss_weights = {}
+    module.log_variational_generative = True
+    module.validate_observations = False
+    module.strict_likelihood_support = False
+    module.use_nf_prior = False
+    module.nf_target = "shared"
+    module.group_loss_weights = None
+    module.disentangle_warmup = False
+    module.use_jeffreys_integ = False
+    module._compute_disentangle_losses = lambda *args: torch.zeros((), dtype=torch.float32)
+    module._covariate_grl_lambda = lambda kl_weight: 0.0
+
+    recorder = _RecordingDistribution()
+    x = torch.tensor([[0.0, 1.0], [2.0, 3.0]], dtype=torch.float32)
+    zeros = torch.zeros((2, 2), dtype=torch.float32)
+    qz = Normal(zeros, torch.ones_like(zeros))
+
+    module.loss(
+        tensors_by_group=[{REGISTRY_KEYS.X_KEY: x}],
+        inference_outputs={
+            "per_modality_private": {},
+            "poe_stats": {0: {"logtheta_qz": qz, "logtheta_log_z": zeros}},
+        },
+        generative_outputs={"private_poe": {"0_rna": {"px": recorder}}},
         kl_weight=1.0,
     )
 

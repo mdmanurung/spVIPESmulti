@@ -25,7 +25,6 @@ def _make_registered_shape_adata() -> AnnData:
     return adata
 
 
-@pytest.mark.xfail(strict=True, reason="INT-002 pending: get_latent_representation ignores indices")
 def test_get_latent_representation_indices_subset_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     """The indices argument should restrict the per-group loader indices."""
 
@@ -36,6 +35,7 @@ def test_get_latent_representation_indices_subset_loader(monkeypatch: pytest.Mon
     model = object.__new__(model_cls)
     model._adata_manager = object()
     model._validate_anndata = lambda value: value
+    model.get_anndata_manager = lambda value, required=False: model._adata_manager
     model._warn_group_indices_auto_inferred = lambda caller: None
     model._process_batches = lambda loader, *args: {"indices_list": loader.indices_list}
     model._format_results = lambda results, n_per_group: results
@@ -52,10 +52,6 @@ def test_get_latent_representation_indices_subset_loader(monkeypatch: pytest.Mon
     assert result["indices_list"] == [[1], [4]]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="INT-005 pending: get_latent_representation validates new AnnData but keeps self.adata_manager",
-)
 def test_get_latent_representation_uses_validated_adata_manager(monkeypatch: pytest.MonkeyPatch) -> None:
     """A posterior call with adata should load from that adata's validated manager."""
 
@@ -68,7 +64,7 @@ def test_get_latent_representation_uses_validated_adata_manager(monkeypatch: pyt
     model = object.__new__(model_cls)
     model._adata_manager = original_manager
     model._validate_anndata = lambda value: value
-    model.get_anndata_manager = lambda value: validated_manager
+    model.get_anndata_manager = lambda value, required=False: validated_manager
     model._warn_group_indices_auto_inferred = lambda caller: None
     model._process_batches = lambda loader, *args: {"adata_manager": loader.adata_manager}
     model._format_results = lambda results, n_per_group: results

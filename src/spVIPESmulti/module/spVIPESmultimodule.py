@@ -241,7 +241,9 @@ class spVIPESmultimodule(BaseModuleClass):
     log_variational_inference : bool, default=True
         Whether to log-transform data before encoding for numerical stability.
     log_variational_generative : bool, default=True
-        Whether to log-transform data before decoding for numerical stability.
+        Deprecated legacy option. Negative-binomial reconstruction targets are
+        always evaluated on raw counts; use ``log_variational_inference`` to
+        control encoder-side log transformation.
     dispersion : {"gene", "gene-batch", "gene-cell"}, default="gene"
         Level at which to model the dispersion parameter in the negative binomial distribution.
     encoder_activation : {"silu", "relu", "leakyrelu"}, default="silu"
@@ -779,6 +781,11 @@ class spVIPESmultimodule(BaseModuleClass):
 
         return input_dict
 
+    @staticmethod
+    def _observed_library(x: torch.Tensor) -> torch.Tensor:
+        """Compute finite observed library sizes from raw count-like inputs."""
+        return torch.log(x.sum(1).clamp(min=1e-6)).unsqueeze(1)
+
     @auto_move_data
     def inference(self, x, batch_index, groups, global_indices, **kwargs):
         """Runs the encoder model.
@@ -795,10 +802,10 @@ class spVIPESmultimodule(BaseModuleClass):
             i: xs[:, self.groups_var_indices[i]] for i, xs in x.items()
         }  # update each groups minibatch with its own gene indices
 
+        library = {i: self._observed_library(xs) for i, xs in x.items()}
+
         if self.log_variational_inference:
             x = {i: torch.log(1 + xs) for i, xs in x.items()}  # logvariational
-
-        library = {i: torch.log(xs.sum(1)).unsqueeze(1) for i, xs in x.items()}  # observed library size
 
         private_stats = {}
         shared_stats = {}
@@ -854,8 +861,7 @@ class spVIPESmultimodule(BaseModuleClass):
                 else:
                     x_mod_enc = x_mod  # Gaussian: data already log-normalized
 
-                lib = torch.log(x_mod.sum(1).clamp(min=1e-6)).unsqueeze(1)
-                library[(group, modality)] = lib
+                library[(group, modality)] = self._observed_library(x_mod)
 
                 shared_enc = self.encoders[(group, modality)]["shared"]
                 private_enc = self.encoders[(group, modality)]["private"]
@@ -1705,14 +1711,6 @@ class spVIPESmultimodule(BaseModuleClass):
             )
 
             x_target = x_obs
-            if self.log_variational_generative:
-                x_target = torch.log(1 + x_obs)
-                self._validate_likelihood_observations(
-                    x_target,
-                    likelihood_type="nb",
-                    context=f"group={g}",
-                    transformed_for_nb=True,
-                )
 
             # Reconstruction loss
             recon_loss = -generative_outputs["private_poe"][str(g)]["px"].log_prob(x_target).sum(-1)
@@ -1807,14 +1805,6 @@ class spVIPESmultimodule(BaseModuleClass):
                     context=f"group={g}, modality={modality}",
                     transformed_for_nb=False,
                 )
-                if likelihood_type == "nb" and self.log_variational_generative:
-                    x_mod = torch.log(1 + x_mod)
-                    self._validate_likelihood_observations(
-                        x_mod,
-                        likelihood_type=likelihood_type,
-                        context=f"group={g}, modality={modality}",
-                        transformed_for_nb=True,
-                    )
 
                 recon_loss = -gen_stats["px"].log_prob(x_mod).sum(-1)
                 reconst_losses[f"reconst_loss_group_{g}_{modality}"] = recon_loss.mean()

@@ -427,9 +427,9 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         mc_samples: int = 5000,
         batch_size: Optional[int] = None,
         drop_last: Optional[bool] = None,
-    ) -> np.ndarray:
+    ) -> dict[str, dict]:
         """
-        Return the latent representation for each cell.
+        Return latent representations for each selected cell.
 
         Parameters
         ----------
@@ -455,12 +455,51 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
 
         Returns
         -------
-        Low-dimensional topic for each cell.
+        dict
+            Dictionary of per-group latent arrays. Keys include ``"shared"``,
+            ``"private"``, ``"shared_reordered"``, ``"private_reordered"``,
+            ``"shared_posterior_loc"``, ``"shared_posterior_scale"``, and
+            their reordered posterior variants. In multimodal mode, also
+            includes ``"private_multimodal"`` and
+            ``"private_multimodal_reordered"`` keyed by ``(group, modality)``.
+            Non-reordered arrays follow dataloader order; ``*_reordered``
+            arrays are sorted by the original AnnData observation indices
+            within each group.
         """
         adata = self._validate_anndata(adata)
+        adata_manager = self.get_anndata_manager(adata, required=True)
         group_indices_list, inferred = resolve_group_indices_list(adata, group_indices_list)
         if inferred:
             self._warn_group_indices_auto_inferred("get_latent_representation")
+        if indices is not None:
+            subset = np.asarray(indices)
+            if subset.ndim != 1:
+                raise ValueError(f"indices must be one-dimensional, got shape {subset.shape}.")
+            if subset.dtype == np.dtype("bool"):
+                if subset.size != adata.n_obs:
+                    raise ValueError(
+                        "Boolean indices must have length equal to adata.n_obs "
+                        f"({adata.n_obs}), got {subset.size}."
+                    )
+                subset = np.flatnonzero(subset)
+            if not np.issubdtype(subset.dtype, np.integer):
+                raise ValueError("indices must contain integer observation positions.")
+            if subset.size == 0:
+                raise ValueError("indices must select at least one cell from each group.")
+            if (subset < 0).any() or (subset >= adata.n_obs).any():
+                raise ValueError(f"indices must be within [0, {adata.n_obs}).")
+
+            selected = set(map(int, subset.tolist()))
+            group_indices_list = [
+                [idx for idx in group_indices if idx in selected]
+                for group_indices in group_indices_list
+            ]
+            empty_groups = [g for g, group_indices in enumerate(group_indices_list) if len(group_indices) == 0]
+            if empty_groups:
+                raise ValueError(
+                    "indices must select at least one cell from every group; "
+                    f"empty groups: {empty_groups}."
+                )
 
         n_groups = len(group_indices_list)
         n_per_group = [len(group) for group in group_indices_list]
@@ -473,7 +512,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
 
         # Standard processing
         scdl = ConcatDataLoader(
-            self.adata_manager,
+            adata_manager,
             indices_list=group_indices_list,
             shuffle=False,
             drop_last=drop_last,

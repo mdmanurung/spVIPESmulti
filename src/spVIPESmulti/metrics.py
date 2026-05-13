@@ -77,6 +77,17 @@ def _rbf_kernel(x: np.ndarray, bandwidth: float) -> np.ndarray:
     return np.exp(-dist2 / (2.0 * bandwidth * bandwidth))
 
 
+def _neighbor_label_counts(labels: np.ndarray, neighbor_idx: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Count encoded label occurrences per neighbourhood."""
+    _, codes = np.unique(labels, return_inverse=True)
+    n_labels = int(codes.max()) + 1 if codes.size else 0
+    neighbor_codes = codes[neighbor_idx]
+    counts = np.zeros((neighbor_idx.shape[0], n_labels), dtype=float)
+    rows = np.repeat(np.arange(neighbor_idx.shape[0]), neighbor_idx.shape[1])
+    np.add.at(counts, (rows, neighbor_codes.ravel()), 1.0)
+    return counts, codes
+
+
 def hsic_rbf(
     z_shared: np.ndarray,
     z_private: np.ndarray,
@@ -216,12 +227,9 @@ def ilisi(rep: np.ndarray, groups: np.ndarray, k: int = 30) -> float:
     nn = NearestNeighbors(n_neighbors=k + 1).fit(rep)
     _, idx = nn.kneighbors(rep)
     idx = idx[:, 1:]
-    out = np.empty(rep.shape[0])
-    for i in range(rep.shape[0]):
-        _, c = np.unique(groups[idx[i]], return_counts=True)
-        p = c / c.sum()
-        out[i] = 1.0 / float((p * p).sum())
-    return float(out.mean())
+    counts, _ = _neighbor_label_counts(groups, idx)
+    p = counts / counts.sum(axis=1, keepdims=True)
+    return float((1.0 / (p * p).sum(axis=1)).mean())
 
 
 def clisi(rep: np.ndarray, labels: np.ndarray, k: int = 30) -> float:
@@ -280,8 +288,9 @@ def kbet(rep: np.ndarray, groups: np.ndarray, k: int = 20) -> float:
     from sklearn.neighbors import NearestNeighbors
 
     groups = np.asarray(groups)
-    unique_groups = np.unique(groups)
-    dof = len(unique_groups) - 1
+    _, group_codes = np.unique(groups, return_inverse=True)
+    n_groups = int(group_codes.max()) + 1 if group_codes.size else 0
+    dof = n_groups - 1
     if dof < 1:
         return float("nan")  # only one group — metric undefined
     critical = _chi2.ppf(0.95, df=dof)
@@ -289,21 +298,11 @@ def kbet(rep: np.ndarray, groups: np.ndarray, k: int = 20) -> float:
     nn = NearestNeighbors(n_neighbors=k + 1).fit(rep)
     _, idx = nn.kneighbors(rep)
     idx = idx[:, 1:]
-    expected = (
-        pd.Series(groups)
-        .value_counts(normalize=True)
-        .reindex(unique_groups)
-        .values
-    )
-    chi = np.empty(rep.shape[0])
-    for i in range(rep.shape[0]):
-        observed = (
-            pd.Series(groups[idx[i]])
-            .value_counts(normalize=True)
-            .reindex(unique_groups, fill_value=0)
-            .values
-        )
-        chi[i] = k * ((observed - expected) ** 2 / (expected + 1e-9)).sum()
+    counts, _ = _neighbor_label_counts(groups, idx)
+    expected = np.bincount(group_codes, minlength=n_groups).astype(float)
+    expected = expected / expected.sum()
+    observed = counts / counts.sum(axis=1, keepdims=True)
+    chi = idx.shape[1] * ((observed - expected) ** 2 / (expected + 1e-9)).sum(axis=1)
     rejection_rate = float((chi > critical).mean())
     return 1.0 - rejection_rate
 
