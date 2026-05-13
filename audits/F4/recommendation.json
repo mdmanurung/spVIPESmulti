@@ -1,21 +1,663 @@
 {
-  "run_id": "f4_probe_smoke_20260510",
+  "run_id": "f4_probe_3seed_20260510",
   "feature_id": "F4",
-  "verdict": "informational",
-  "reason": "Probe harness produced metrics; promotion still requires the roadmap 3-seed matrix.",
+  "verdict": "reject",
+  "reason": "One or more F4 probe gates failed.",
+  "promotion": "keep F4 heads opt-in; do not promote presets",
+  "primary_metric": "balanced_accuracy",
+  "seeds_observed": [
+    0,
+    1,
+    2
+  ],
+  "gates": [
+    {
+      "id": "seed_count",
+      "label": "Minimum seed count",
+      "status": "pass",
+      "observed": 3,
+      "required": 3
+    },
+    {
+      "id": "donor_private_retention",
+      "label": "Donor accuracy on z_private improves",
+      "variant": "donor_private",
+      "target": "donor",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "status": "reject",
+      "baseline_mean": 0.13013,
+      "variant_mean": 0.126533,
+      "delta": -0.003597,
+      "pass_rule": "delta >= +0.10",
+      "reject_rule": "delta < +0.02"
+    },
+    {
+      "id": "donor_shared_erasure",
+      "label": "Donor accuracy on z_shared decreases",
+      "variant": "donor_shared",
+      "target": "donor",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "status": "reject",
+      "baseline_mean": 0.125489,
+      "variant_mean": 0.136406,
+      "delta": 0.010917,
+      "pass_rule": "delta <= -0.10",
+      "reject_rule": "delta >= +0.00"
+    },
+    {
+      "id": "full_bio_donor_private_retention",
+      "label": "full_bio preserves donor signal in z_private",
+      "variant": "full_bio",
+      "target": "donor",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "status": "reject",
+      "baseline_mean": 0.13013,
+      "variant_mean": 0.111531,
+      "delta": -0.018599,
+      "pass_rule": "delta >= +0.10",
+      "reject_rule": "delta < +0.02"
+    },
+    {
+      "id": "full_bio_donor_shared_erasure",
+      "label": "full_bio removes donor signal from z_shared",
+      "variant": "full_bio",
+      "target": "donor",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "status": "review",
+      "baseline_mean": 0.125489,
+      "variant_mean": 0.115535,
+      "delta": -0.009954,
+      "pass_rule": "delta <= -0.10",
+      "reject_rule": "delta >= +0.00"
+    },
+    {
+      "id": "condition_shared_reported",
+      "label": "Condition probe on z_shared is reported",
+      "variant": "full_bio",
+      "target": "condition",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "status": "pass",
+      "baseline_mean": 0.494444,
+      "variant_mean": 0.475,
+      "delta": -0.019444,
+      "pass_rule": "baseline and variant metric reported",
+      "reject_rule": "metric missing"
+    },
+    {
+      "id": "full_bio_cell_type_preservation",
+      "label": "full_bio preserves cell-type signal in z_shared",
+      "variant": "full_bio",
+      "target": "cell_type",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "status": "pass",
+      "baseline_mean": 0.179606,
+      "variant_mean": 0.188542,
+      "delta": 0.008936,
+      "pass_rule": "delta >= -0.03",
+      "reject_rule": "delta < -0.05"
+    },
+    {
+      "id": "batch_shared_erasure",
+      "label": "Batch accuracy on z_shared decreases",
+      "status": "skipped",
+      "reason": "no real batch_key was provided"
+    },
+    {
+      "id": "cross_seed_cv",
+      "label": "Cross-seed CV on probe metrics",
+      "status": "reject",
+      "max_cv": 0.368021,
+      "pass_rule": "max CV <= 0.20",
+      "reject_rule": "max CV > 0.30"
+    }
+  ],
+  "aggregates": [
+    {
+      "variant": "baseline",
+      "target": "batch",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "ok; probe=skipped: <2 classes"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "target": "batch",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "ok; probe=skipped: <2 classes"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "target": "cell_type",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": 0.190891,
+      "std": 0.012467,
+      "cv": 0.065307,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "target": "cell_type",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": 0.179606,
+      "std": 0.027999,
+      "cv": 0.155891,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "target": "condition",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": 0.603704,
+      "std": 0.030598,
+      "cv": 0.050683,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "target": "condition",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": 0.494444,
+      "std": 0.005556,
+      "cv": 0.011236,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "target": "donor",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": 0.13013,
+      "std": 0.033908,
+      "cv": 0.26057,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "target": "donor",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": 0.125489,
+      "std": 0.014148,
+      "cv": 0.112746,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "batch_shared",
+      "target": "batch",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "skipped: Kang batch_key not provided"
+      ]
+    },
+    {
+      "variant": "batch_shared",
+      "target": "batch",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "skipped: Kang batch_key not provided"
+      ]
+    },
+    {
+      "variant": "batch_shared",
+      "target": "cell_type",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "skipped: Kang batch_key not provided"
+      ]
+    },
+    {
+      "variant": "batch_shared",
+      "target": "cell_type",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "skipped: Kang batch_key not provided"
+      ]
+    },
+    {
+      "variant": "batch_shared",
+      "target": "condition",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "skipped: Kang batch_key not provided"
+      ]
+    },
+    {
+      "variant": "batch_shared",
+      "target": "condition",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "skipped: Kang batch_key not provided"
+      ]
+    },
+    {
+      "variant": "batch_shared",
+      "target": "donor",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "skipped: Kang batch_key not provided"
+      ]
+    },
+    {
+      "variant": "batch_shared",
+      "target": "donor",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "skipped: Kang batch_key not provided"
+      ]
+    },
+    {
+      "variant": "donor_private",
+      "target": "batch",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "ok; probe=skipped: <2 classes"
+      ]
+    },
+    {
+      "variant": "donor_private",
+      "target": "batch",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "ok; probe=skipped: <2 classes"
+      ]
+    },
+    {
+      "variant": "donor_private",
+      "target": "cell_type",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": 0.180478,
+      "std": 0.037637,
+      "cv": 0.20854,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "donor_private",
+      "target": "cell_type",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": 0.210733,
+      "std": 0.034407,
+      "cv": 0.163275,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "donor_private",
+      "target": "condition",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": 0.587963,
+      "std": 0.083395,
+      "cv": 0.141837,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "donor_private",
+      "target": "condition",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": 0.517593,
+      "std": 0.010516,
+      "cv": 0.020318,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "donor_private",
+      "target": "donor",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": 0.126533,
+      "std": 0.011454,
+      "cv": 0.090523,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "donor_private",
+      "target": "donor",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": 0.132962,
+      "std": 0.016871,
+      "cv": 0.126885,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "donor_shared",
+      "target": "batch",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "ok; probe=skipped: <2 classes"
+      ]
+    },
+    {
+      "variant": "donor_shared",
+      "target": "batch",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "ok; probe=skipped: <2 classes"
+      ]
+    },
+    {
+      "variant": "donor_shared",
+      "target": "cell_type",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": 0.178371,
+      "std": 0.018553,
+      "cv": 0.104015,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "donor_shared",
+      "target": "cell_type",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": 0.19368,
+      "std": 0.054809,
+      "cv": 0.282985,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "donor_shared",
+      "target": "condition",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": 0.623148,
+      "std": 0.044905,
+      "cv": 0.072062,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "donor_shared",
+      "target": "condition",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": 0.466667,
+      "std": 0.040062,
+      "cv": 0.085846,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "donor_shared",
+      "target": "donor",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": 0.116272,
+      "std": 0.014161,
+      "cv": 0.121797,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "donor_shared",
+      "target": "donor",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": 0.136406,
+      "std": 0.01286,
+      "cv": 0.094279,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "full_bio",
+      "target": "batch",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "ok; probe=skipped: <2 classes"
+      ]
+    },
+    {
+      "variant": "full_bio",
+      "target": "batch",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": null,
+      "std": null,
+      "cv": null,
+      "n": 0,
+      "notes": [
+        "ok; probe=skipped: <2 classes"
+      ]
+    },
+    {
+      "variant": "full_bio",
+      "target": "cell_type",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": 0.184172,
+      "std": 0.023617,
+      "cv": 0.128231,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "full_bio",
+      "target": "cell_type",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": 0.188542,
+      "std": 0.069387,
+      "cv": 0.368021,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "full_bio",
+      "target": "condition",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": 0.590741,
+      "std": 0.056678,
+      "cv": 0.095945,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "full_bio",
+      "target": "condition",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": 0.475,
+      "std": 0.024689,
+      "cv": 0.051978,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "full_bio",
+      "target": "donor",
+      "latent": "private",
+      "metric": "balanced_accuracy",
+      "mean": 0.111531,
+      "std": 0.03302,
+      "cv": 0.29606,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    },
+    {
+      "variant": "full_bio",
+      "target": "donor",
+      "latent": "shared",
+      "metric": "balanced_accuracy",
+      "mean": 0.115535,
+      "std": 0.021514,
+      "cv": 0.186214,
+      "n": 3,
+      "notes": [
+        "ok; probe=ok"
+      ]
+    }
+  ],
+  "limitations": [
+    "This script evaluates held-out classifier probes only.",
+    "Reconstruction loss and iLISI/kBET gates must be checked by the broader Kang audit lane before preset promotion."
+  ],
   "config": {
-    "run_id": "f4_probe_smoke_20260510",
+    "run_id": "f4_probe_3seed_20260510",
     "kang_h5ad_path": "docs/notebooks/data/kang_2018.h5ad",
     "seeds": [
-      0
+      0,
+      1,
+      2
     ],
-    "max_epochs": 1,
-    "batch_size": 64,
-    "max_cells_per_condition": 80,
-    "n_top_genes": 200,
-    "n_shared": 8,
-    "n_private": 8,
-    "n_hidden": 32,
+    "max_epochs": 5,
+    "batch_size": 128,
+    "max_cells_per_condition": 600,
+    "n_top_genes": 1000,
+    "n_shared": 16,
+    "n_private": 16,
+    "n_hidden": 64,
     "condition_key": "label",
     "donor_key": "replicate",
     "label_key": "cell_type",

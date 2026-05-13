@@ -42,7 +42,13 @@ from typing import TYPE_CHECKING, Optional, Union
 import numpy as np
 import pandas as pd
 
-from spVIPESmulti.utils import _resolve_loadings, get_top_genes, score_cells_on_factor
+from spVIPESmulti.utils import (
+    _get_group_gene_prefix,
+    _resolve_loadings,
+    _strip_group_gene_prefix,
+    get_top_genes,
+    score_cells_on_factor,
+)
 
 if TYPE_CHECKING:
     import matplotlib.pyplot as plt
@@ -107,7 +113,20 @@ def heatmap_loadings(
     import matplotlib.pyplot as plt
 
     df = _resolve_loadings(loadings_df, model, group_idx, latent_type)
-    top_genes_df = get_top_genes(df, n_top=n_top, signed=False)
+    top_genes_df = get_top_genes(
+        df,
+        latent_type=latent_type,
+        n_top=n_top,
+        signed=False,
+    )
+    gene_prefix = _get_group_gene_prefix(df.index, model, group_idx)
+    display_to_raw = {
+        display: raw
+        for raw, display in zip(
+            df.index.tolist(),
+            _strip_group_gene_prefix(df.index.tolist(), gene_prefix),
+        )
+    }
 
     # Collect unique genes preserving order of first appearance
     seen: dict[str, None] = {}
@@ -115,8 +134,10 @@ def heatmap_loadings(
         for g in genes:
             seen[g] = None
     gene_union = list(seen.keys())
+    raw_gene_union = [display_to_raw.get(g, g) for g in gene_union]
 
-    plot_df = df.loc[gene_union].T  # (n_dims, n_genes_selected)
+    plot_df = df.loc[raw_gene_union].T  # (n_dims, n_genes_selected)
+    plot_df.columns = gene_union
 
     n_dims, n_genes = plot_df.shape
     if ax is None:

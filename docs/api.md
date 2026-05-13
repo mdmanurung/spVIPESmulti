@@ -187,7 +187,7 @@ Returns a dictionary with:
 
 When validation metrics are present, `report["held_out_metrics"]["held_out_nll"]` aliases the latest `reconstruction_loss_validation` value.
 
-`kbet` is the kBET rejection rate, so lower values indicate better group mixing. Other shared-latent diagnostics follow their standard direction: iLISI higher, cLISI lower, kNN purity higher, Leiden ARI higher.
+`kbet` is the kBET acceptance rate, so higher values indicate better group mixing. Other shared-latent diagnostics follow their standard direction: iLISI higher, cLISI lower, kNN purity higher, Leiden ARI higher.
 
 ---
 
@@ -553,6 +553,11 @@ override any weight.
 | `"no_contrastive"` | 1.0 | 1.0 | 1.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 |
 | `"minimal_safe_bio"` | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.5 | 0.0 |
 | `"full_bio"` | 1.0 | 1.0 | 1.0 | 1.0 | 0.5 | 0.5 | 0.5 | 0.5 |
+
+The `"minimal_safe_bio"` and `"full_bio"` presets are retained for reproducibility
+and manual experiments. The current F4 probe audit rejected preset promotion, so
+they should not be treated as generally useful recommended defaults; prefer
+explicit per-weight overrides when testing covariate heads.
 
 Label-dependent components (`disentangle_label_shared_weight`,
 `disentangle_label_private_weight`, `contrastive_weight`) require `label_key`
@@ -1146,7 +1151,7 @@ The `spVIPESmulti.metrics` module provides standalone NumPy/pandas diagnostics.
 |---|---|
 | `ilisi(rep, groups, k=30)` | Group mixing. Higher is better; range is approximately `1..n_groups`. |
 | `clisi(rep, labels, k=30)` | Cell-label neighborhood diversity. Lower is better for label preservation. |
-| `kbet(rep, groups, k=20)` | kBET rejection rate. Lower is better. |
+| `kbet(rep, groups, k=20)` | kBET acceptance rate. Higher is better. |
 | `knn_purity(rep, labels, k=20)` | Fraction of neighbors sharing the query label. Higher is better. |
 | `leiden_ari(rep, labels, resolution=0.8)` | Leiden clustering ARI against labels. Higher is better. |
 | `per_group_silhouette(z_private, groups)` | Group/private separation diagnostic. Higher means stronger separation. |

@@ -438,6 +438,47 @@ def _resolve_loadings(
     return loadings_df
 
 
+def _get_group_gene_prefix(
+    gene_names: pd.Index,
+    model: object = None,
+    group_idx: Union[int, tuple] = 0,
+) -> Optional[str]:
+    """Return the group prefix used in prepared var names, when identifiable."""
+    if model is not None:
+        adata = getattr(model, "adata", None)
+        uns = getattr(adata, "uns", {}) if adata is not None else {}
+        groups_mapping = uns.get("groups_mapping", {}) if hasattr(uns, "get") else {}
+        group_key = group_idx[0] if isinstance(group_idx, tuple) else group_idx
+        group_name = groups_mapping.get(group_key)
+        if group_name is not None:
+            if isinstance(group_idx, tuple) and len(group_idx) > 1:
+                modality = group_idx[1]
+                prefix = f"{group_name}_{modality}_"
+                if any(str(g).startswith(prefix) for g in gene_names):
+                    return prefix
+            prefix = f"{group_name}_"
+            if any(str(g).startswith(prefix) for g in gene_names):
+                return prefix
+
+    names = [str(g) for g in gene_names]
+    if not names or any("_" not in name for name in names):
+        return None
+    prefixes = {name.split("_", 1)[0] for name in names}
+    if len(prefixes) != 1:
+        return None
+    prefix = f"{next(iter(prefixes))}_"
+    stripped = [name[len(prefix):] for name in names]
+    if any(not name for name in stripped) or len(set(stripped)) != len(stripped):
+        return None
+    return prefix
+
+
+def _strip_group_gene_prefix(genes: list[str], prefix: Optional[str]) -> list[str]:
+    if prefix is None:
+        return genes
+    return [gene[len(prefix):] if str(gene).startswith(prefix) else gene for gene in genes]
+
+
 # ---------------------------------------------------------------------------
 # Latent storage
 # ---------------------------------------------------------------------------
@@ -718,21 +759,28 @@ def get_top_genes(
         - ``neg_genes`` — top negative genes (only when ``signed=True``)
         - ``top_genes`` — top genes by absolute value (only when ``signed=False``)
 
+        Gene names are returned without the group prefix added by
+        ``prepare_adatas`` when that prefix can be identified.
+
     Examples
     --------
     >>> top = spVIPESmulti.utils.get_top_genes(model=model, n_top=5)
     >>> print(top[["dim", "pos_genes"]].to_string(index=False))
     """
     df = _resolve_loadings(loadings_df, model, group_idx, latent_type)
+    gene_prefix = _get_group_gene_prefix(df.index, model, group_idx)
     rows = []
     for col in df.columns:
         series = df[col]
         if signed:
             pos = series.nlargest(n_top).index.tolist()
             neg = series.nsmallest(n_top).index.tolist()
+            pos = _strip_group_gene_prefix(pos, gene_prefix)
+            neg = _strip_group_gene_prefix(neg, gene_prefix)
             rows.append({"dim": col, "pos_genes": pos, "neg_genes": neg})
         else:
             top = series.abs().nlargest(n_top).index.tolist()
+            top = _strip_group_gene_prefix(top, gene_prefix)
             rows.append({"dim": col, "top_genes": top})
     cols = ["dim", "pos_genes", "neg_genes"] if signed else ["dim", "top_genes"]
     return pd.DataFrame(rows, columns=cols)

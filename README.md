@@ -256,6 +256,8 @@ Select a preset via `disentangle_preset=` on the model constructor. Individual w
 | `"minimal_safe_bio"` | off | donor-private at 0.5 | off | Preserve donor/private structure without forcing shared biology |
 | `"full_bio"` | all four group/label components at 1.0 | batch-shared, donor-shared, donor-private at 0.5 | 0.5 | Full biological/covariate disentanglement preset |
 
+> **Current F4 audit note.** The `"minimal_safe_bio"` and `"full_bio"` presets are retained for reproducibility and manual experiments, but the 3-seed F4 probe audit rejected preset promotion. In the current evidence they are not very useful as recommended defaults; prefer `"off"` plus explicit per-weight overrides when testing covariate heads.
+
 ```python
 # No disentanglement (default):
 model = spVIPESmulti.model.spVIPESmulti(combined)
@@ -489,7 +491,7 @@ fig = spVIPESmulti.pl.differential_vars_heatmap(traversal)
 | `get_enrichment_scores` | `spVIPESmulti.model.spVIPESmulti` | Run ORA/GSEA/ULM enrichment with optional decoupler backend |
 | `summarize_enrichment` | `spVIPESmulti.model.spVIPESmulti` | Aggregate enrichment scores by any `adata.obs` grouping |
 | `interpretation_report` | `spVIPESmulti.model.spVIPESmulti` | Build compact enrichment + integration summary tables |
-| `evaluate` | `spVIPESmulti.model.spVIPESmulti` | Compute iLISI, cLISI, kBET rejection rate, purity, ARI, and private-latent silhouette diagnostics |
+| `evaluate` | `spVIPESmulti.model.spVIPESmulti` | Compute iLISI, cLISI, kBET acceptance rate, purity, ARI, and private-latent silhouette diagnostics |
 | `integration_report` | `spVIPESmulti.metrics` | Standalone integration metric table from arrays |
 | `latent_dimension_stats` | `spVIPESmulti.metrics` | Per-dimension std, mean absolute activity, KL, and collapsed-dimension flags |
 | `reconstruction_error` | `spVIPESmulti.metrics` | Per-group reconstruction RMSE and Poisson NLL |

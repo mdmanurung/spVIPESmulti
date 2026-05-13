@@ -388,6 +388,25 @@ class TestGetTopGenes:
         result = utils.get_top_genes(loadings_df_shared, n_top=2)
         assert result["dim"].tolist() == loadings_df_shared.columns.tolist()
 
+    def test_removes_group_prefix_from_signed_gene_lists(self, loadings_df_shared):
+        df = loadings_df_shared.copy()
+        df.index = [f"stim_{gene}" for gene in df.index]
+
+        result = utils.get_top_genes(df, n_top=3)
+
+        for _, row in result.iterrows():
+            assert all(not gene.startswith("stim_") for gene in row["pos_genes"])
+            assert all(not gene.startswith("stim_") for gene in row["neg_genes"])
+
+    def test_removes_group_prefix_from_unsigned_gene_lists(self, loadings_df_shared):
+        df = loadings_df_shared.copy()
+        df.index = [f"stim_{gene}" for gene in df.index]
+
+        result = utils.get_top_genes(df, n_top=3, signed=False)
+
+        for genes in result["top_genes"]:
+            assert all(not gene.startswith("stim_") for gene in genes)
+
 
 # ===========================================================================
 # utils.score_cells_on_factor

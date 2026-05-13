@@ -9,7 +9,7 @@ Metric semantics
 Shared latent (z_shared) — you want groups to *mix* and labels to *separate*:
 - ``ilisi``:  higher → better group mixing  (range: 1 → n_groups)
 - ``clisi``:  lower  → better label separation (range: 1 → n_labels)
-- ``kbet``:   lower  → better group mixing  (rejection rate, range: 0 → 1)
+- ``kbet``:   higher → better group mixing  (acceptance rate, range: 0 → 1)
 - ``knn_purity``:  higher → better label preservation (range: 0 → 1)
 - ``leiden_ari``:  higher → better label structure  (range: 0 → 1)
 
@@ -20,7 +20,8 @@ Private latent (z_private) — you want groups to *separate*:
 """
 from __future__ import annotations
 
-from typing import Optional
+from collections.abc import Mapping, Sequence
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -86,20 +87,18 @@ def clisi(rep: np.ndarray, labels: np.ndarray, k: int = 30) -> float:
 
 
 def kbet(rep: np.ndarray, groups: np.ndarray, k: int = 20) -> float:
-    """kBET rejection rate (Büttner et al., 2019) — chi-squared per-cell test.
+    """kBET acceptance rate (Büttner et al., 2019) — chi-squared per-cell test.
 
     For each cell, compares the observed group frequency in its k-NN
     neighbourhood to the global expected frequency via a chi-squared
-    statistic, then returns the **fraction of cells whose neighbourhood
-    rejects H0 at alpha=0.05** (i.e. is *not* well-mixed).
+    statistic, then returns the **fraction of cells whose neighbourhood does
+    not reject H0 at alpha=0.05** (i.e. is well-mixed).
 
-    A *lower* rejection rate means better mixing. In practice callers
-    typically report ``1 - kbet(...)`` so that higher = better.
+    A *higher* acceptance rate means better mixing.
 
     .. note::
         The previous implementation returned ``exp(-mean_chi2)`` which is
-        a monotone transformation, not the rejection rate. The new
-        implementation matches the original paper definition.
+        a monotone transformation, not the chi-squared acceptance rate.
 
     Parameters
     ----------
@@ -113,7 +112,7 @@ def kbet(rep: np.ndarray, groups: np.ndarray, k: int = 20) -> float:
     Returns
     -------
     float
-        kBET rejection rate in [0, 1]. **Lower = better mixing.**
+        kBET acceptance rate in [0, 1]. **Higher = better mixing.**
     """
     from scipy.stats import chi2 as _chi2
     from sklearn.neighbors import NearestNeighbors
@@ -143,7 +142,8 @@ def kbet(rep: np.ndarray, groups: np.ndarray, k: int = 20) -> float:
             .values
         )
         chi[i] = k * ((observed - expected) ** 2 / (expected + 1e-9)).sum()
-    return float((chi > critical).mean())
+    rejection_rate = float((chi > critical).mean())
+    return 1.0 - rejection_rate
 
 
 def knn_purity(rep: np.ndarray, labels: np.ndarray, k: int = 20) -> float:
@@ -295,7 +295,7 @@ def integration_report(
         ``clisi``
             Label cLISI on z_shared (lower = better separation).
         ``kbet``
-            kBET rejection rate on z_shared (lower = better mixing).
+            kBET acceptance rate on z_shared (higher = better mixing).
         ``knn_purity``
             k-NN purity on z_shared (higher = better label preservation).
         ``leiden_ari``

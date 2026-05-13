@@ -67,6 +67,8 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
         Available presets: ``"off"``, ``"full"``, ``"shared_only"``,
         ``"private_only"``, ``"adversarial_only"``, ``"supervised_only"``,
         ``"no_contrastive"``, ``"minimal_safe_bio"``, ``"full_bio"``.
+        The bio presets are retained for reproducibility, but the current F4
+        audit does not support treating them as generally useful defaults.
     disentangle_group_shared_weight : float or None, default=None
         Override the preset's weight for the adversarial group classifier on
         ``z_shared`` (gradient-reversal layer). ``None`` keeps the preset value.
@@ -1252,7 +1254,7 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
               evaluated latent space (columns: ``latent``, ``ilisi``,
               ``clisi``, ``kbet``, ``knn_purity``, ``leiden_ari``,
               ``silhouette``).
-              ``kbet`` is a rejection rate, so lower values indicate better
+              ``kbet`` is an acceptance rate, so higher values indicate better
               group mixing.
             - ``metadata``: dictionary of evaluation configuration values
               (``n_cells``, ``n_groups``, ``k``, ``label_key``,

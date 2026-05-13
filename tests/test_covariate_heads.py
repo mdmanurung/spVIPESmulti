@@ -25,6 +25,7 @@ sys.modules[_BENCHMARK_SPEC.name] = _BENCHMARK_MODULE
 _BENCHMARK_SPEC.loader.exec_module(_BENCHMARK_MODULE)
 Config = _BENCHMARK_MODULE.Config
 _variant_kwargs = _BENCHMARK_MODULE._variant_kwargs
+build_recommendation = _BENCHMARK_MODULE.build_recommendation
 
 
 def _make_covariate_adata(n_per_group=48, n_genes=30):
@@ -232,3 +233,78 @@ def test_f4_benchmark_full_bio_includes_batch_head_when_batch_key_is_set():
     assert kwargs["disentangle_donor_shared_weight"] == 0.5
     assert kwargs["disentangle_donor_private_weight"] == 0.5
     assert kwargs["disentangle_batch_shared_weight"] == 0.5
+
+
+def _probe_row(seed, variant, target, latent, balanced_accuracy, notes="ok; probe=ok"):
+    return {
+        "run_id": "test",
+        "timestamp": "2026-05-10T00:00:00+00:00",
+        "feature_id": "F4",
+        "dataset": "kang_ifnb",
+        "seed": seed,
+        "variant": variant,
+        "n_cells": 100,
+        "n_genes": 50,
+        "train_wall_time_sec": 1.0,
+        "target": target,
+        "latent": latent,
+        "accuracy": balanced_accuracy,
+        "balanced_accuracy": balanced_accuracy,
+        "notes": notes,
+    }
+
+
+def _decision_rows(*, donor_private=0.45, donor_shared=0.28, full_private=0.45, full_shared=0.28, full_cell=0.50):
+    rows = []
+    for seed in (0, 1, 2):
+        rows.extend(
+            [
+                _probe_row(seed, "baseline", "donor", "private", 0.30),
+                _probe_row(seed, "baseline", "donor", "shared", 0.45),
+                _probe_row(seed, "baseline", "condition", "shared", 0.50),
+                _probe_row(seed, "baseline", "cell_type", "shared", 0.50),
+                _probe_row(seed, "donor_private", "donor", "private", donor_private),
+                _probe_row(seed, "donor_shared", "donor", "shared", donor_shared),
+                _probe_row(seed, "full_bio", "donor", "private", full_private),
+                _probe_row(seed, "full_bio", "donor", "shared", full_shared),
+                _probe_row(seed, "full_bio", "condition", "shared", 0.48),
+                _probe_row(seed, "full_bio", "cell_type", "shared", full_cell),
+                _probe_row(seed, "batch_shared", "batch", "shared", None, "skipped: Kang batch_key not provided"),
+            ]
+        )
+    return rows
+
+
+def test_f4_recommendation_passes_probe_gates_with_three_seeds_without_batch():
+    rec = build_recommendation(_decision_rows(), _benchmark_config(batch_key=None))
+
+    assert rec["verdict"] == "pass"
+    assert rec["promotion"].startswith("probe gates support full_bio")
+    gate_status = {g["id"]: g["status"] for g in rec["gates"]}
+    assert gate_status["seed_count"] == "pass"
+    assert gate_status["donor_private_retention"] == "pass"
+    assert gate_status["donor_shared_erasure"] == "pass"
+    assert gate_status["batch_shared_erasure"] == "skipped"
+
+
+def test_f4_recommendation_rejects_failed_donor_private_gate():
+    rows = _decision_rows(donor_private=0.31, full_private=0.31)
+
+    rec = build_recommendation(rows, _benchmark_config(batch_key=None))
+
+    assert rec["verdict"] == "reject"
+    gate_status = {g["id"]: g["status"] for g in rec["gates"]}
+    assert gate_status["donor_private_retention"] == "reject"
+    assert gate_status["full_bio_donor_private_retention"] == "reject"
+    assert rec["promotion"] == "keep F4 heads opt-in; do not promote presets"
+
+
+def test_f4_recommendation_keeps_one_seed_run_informational_without_rejects():
+    rows = [r for r in _decision_rows() if r["seed"] == 0]
+
+    rec = build_recommendation(rows, _benchmark_config(batch_key=None))
+
+    assert rec["verdict"] == "informational"
+    gate_status = {g["id"]: g["status"] for g in rec["gates"]}
+    assert gate_status["seed_count"] == "informational"
+    assert gate_status["donor_private_retention"] == "pass"

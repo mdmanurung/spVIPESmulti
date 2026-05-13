@@ -516,7 +516,9 @@ precondition for credible counterfactual edits.
   (`kl_weight`) and log the effective `lambda_grl` for reproducibility.
 - Preset extensions: `_disentangle_presets.py` gains the three new keys; existing
   presets set them to 0.0. `minimal_safe_bio` enables donor-private only;
-  `full_bio` enables all three at moderate defaults (0.5).
+  `full_bio` enables all three at moderate defaults (0.5). These presets are retained
+  for reproducibility/manual experiments, but current F4 audit evidence does not make
+  them useful as recommended defaults.
 - Logged metrics: `disentangle_batch_shared_loss`, `disentangle_donor_shared_loss`,
   `disentangle_donor_private_loss`.
 - External probe diagnostics train simple held-out classifiers for donor, batch,
@@ -1051,9 +1053,11 @@ A feature is "done" only when **all** are true:
 vs disabled), artifacts were written under `audits/F1/`, and the closeout entry was
 appended to `PROGRESS.md`.
 
-**F4-lite implementation/probe harness is in place.** Next, run the full F4
-3-seed Kang probe matrix and use `audits/F4/` to decide whether any heads should
-move beyond opt-in.
+**F4-lite implementation/probe harness is in place.** The full 3-seed Kang probe
+matrix has run under `audits/F4/` and rejected preset promotion. Keep the F4 heads and
+bio presets available for manual experiments/reproducibility, but do not present
+`minimal_safe_bio` or `full_bio` as recommended; the current evidence says they are not
+very useful.
 
 **Kang IFN notebook integration is in place.** `docs/notebooks/kang_ifn_commit_old.ipynb`
 now registers `condition_key="label"` and `donor_key="replicate"`, enables opt-in
@@ -1061,9 +1065,10 @@ donor covariate heads, logs F1 orthogonality metrics during training, uses reord
 latent outputs, and reports compact held-out probes for condition, donor, and cell type.
 The batch-shared head remains off until a real technical `batch_key` is confirmed.
 
-F2 starts after F4-lite has a passing probe/audit baseline and must ship as a **safe**
+F2 should not start from a promoted F4 preset. If F2 proceeds, it must ship as a **safe**
 counterfactual API: centroid shifts first, OOD/realism filtering on by default, arbitrary
-latent replacement treated as a diagnostic helper only.
+latent replacement treated as a diagnostic helper only, with F4 covariate heads treated
+as optional diagnostics rather than recommended defaults.
 
 F10a remains an early audit harness and should be hardened alongside F4/F2 so Kang
 counterfactual and disentanglement metrics are available before promotion decisions.

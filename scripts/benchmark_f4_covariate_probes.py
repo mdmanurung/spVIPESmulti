@@ -29,6 +29,9 @@ AUDIT_DIR = ROOT / "audits" / "F4"
 METRICS_CSV = AUDIT_DIR / "metrics.csv"
 SUMMARY_MD = AUDIT_DIR / "summary.md"
 RECOMMENDATION_JSON = AUDIT_DIR / "recommendation.json"
+VARIANTS = ["baseline", "donor_private", "donor_shared", "batch_shared", "full_bio"]
+PRIMARY_METRIC = "balanced_accuracy"
+MIN_PROMOTION_SEEDS = 3
 
 
 @dataclass
@@ -280,6 +283,399 @@ def probe_rows(cfg: Config, prepared, latents: dict[str, np.ndarray], variant: s
     return rows
 
 
+def _as_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        val = float(value)
+    except (TypeError, ValueError):
+        return None
+    return val if np.isfinite(val) else None
+
+
+def _aggregate_probe_metrics(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        key = (str(row["variant"]), str(row["target"]), str(row["latent"]))
+        grouped.setdefault(key, []).append(row)
+
+    out: dict[str, dict[str, Any]] = {}
+    for (variant, target, latent), group_rows in sorted(grouped.items()):
+        values = [_as_float(r.get(PRIMARY_METRIC)) for r in group_rows]
+        values = [v for v in values if v is not None]
+        notes = sorted({str(r.get("notes", "")) for r in group_rows if r.get("notes")})
+        key = f"{variant}:{target}:{latent}"
+        if values:
+            arr = np.asarray(values, dtype=float)
+            mean = float(np.mean(arr))
+            std = float(np.std(arr, ddof=1)) if arr.size > 1 else 0.0
+            cv = float(std / abs(mean)) if arr.size > 1 and abs(mean) > 1e-12 else 0.0
+            out[key] = {
+                "variant": variant,
+                "target": target,
+                "latent": latent,
+                "metric": PRIMARY_METRIC,
+                "mean": round(mean, 6),
+                "std": round(std, 6),
+                "cv": round(cv, 6),
+                "n": int(arr.size),
+                "notes": notes,
+            }
+        else:
+            out[key] = {
+                "variant": variant,
+                "target": target,
+                "latent": latent,
+                "metric": PRIMARY_METRIC,
+                "mean": None,
+                "std": None,
+                "cv": None,
+                "n": 0,
+                "notes": notes,
+            }
+    return out
+
+
+def _metric_key(variant: str, target: str, latent: str) -> str:
+    return f"{variant}:{target}:{latent}"
+
+
+def _metric(aggregates: dict[str, dict[str, Any]], variant: str, target: str, latent: str) -> dict[str, Any] | None:
+    stat = aggregates.get(_metric_key(variant, target, latent))
+    if stat is None or stat.get("mean") is None:
+        return None
+    return stat
+
+
+def _compare_gate(
+    aggregates: dict[str, dict[str, Any]],
+    *,
+    gate_id: str,
+    label: str,
+    variant: str,
+    target: str,
+    latent: str,
+    direction: str,
+    pass_delta: float,
+    reject_delta: float,
+) -> dict[str, Any]:
+    baseline = _metric(aggregates, "baseline", target, latent)
+    observed = _metric(aggregates, variant, target, latent)
+    gate = {
+        "id": gate_id,
+        "label": label,
+        "variant": variant,
+        "target": target,
+        "latent": latent,
+        "metric": PRIMARY_METRIC,
+        "status": "missing",
+        "baseline_mean": None if baseline is None else baseline["mean"],
+        "variant_mean": None if observed is None else observed["mean"],
+        "delta": None,
+        "pass_rule": None,
+        "reject_rule": None,
+    }
+    if baseline is None or observed is None:
+        gate["reason"] = "baseline or variant probe metric is missing"
+        return gate
+
+    delta = float(observed["mean"]) - float(baseline["mean"])
+    gate["delta"] = round(delta, 6)
+    if direction == "increase":
+        gate["pass_rule"] = f"delta >= {pass_delta:+.2f}"
+        gate["reject_rule"] = f"delta < {reject_delta:+.2f}"
+        if delta >= pass_delta:
+            gate["status"] = "pass"
+        elif delta < reject_delta:
+            gate["status"] = "reject"
+        else:
+            gate["status"] = "review"
+    elif direction == "decrease":
+        gate["pass_rule"] = f"delta <= {pass_delta:+.2f}"
+        gate["reject_rule"] = f"delta >= {reject_delta:+.2f}"
+        if delta <= pass_delta:
+            gate["status"] = "pass"
+        elif delta >= reject_delta:
+            gate["status"] = "reject"
+        else:
+            gate["status"] = "review"
+    elif direction == "preserve":
+        gate["pass_rule"] = f"delta >= {pass_delta:+.2f}"
+        gate["reject_rule"] = f"delta < {reject_delta:+.2f}"
+        if delta >= pass_delta:
+            gate["status"] = "pass"
+        elif delta < reject_delta:
+            gate["status"] = "reject"
+        else:
+            gate["status"] = "review"
+    else:
+        raise ValueError(f"Unknown gate direction: {direction}")
+    return gate
+
+
+def _reported_gate(
+    aggregates: dict[str, dict[str, Any]],
+    *,
+    gate_id: str,
+    label: str,
+    variant: str,
+    target: str,
+    latent: str,
+) -> dict[str, Any]:
+    baseline = _metric(aggregates, "baseline", target, latent)
+    observed = _metric(aggregates, variant, target, latent)
+    status = "pass" if baseline is not None and observed is not None else "reject"
+    return {
+        "id": gate_id,
+        "label": label,
+        "variant": variant,
+        "target": target,
+        "latent": latent,
+        "metric": PRIMARY_METRIC,
+        "status": status,
+        "baseline_mean": None if baseline is None else baseline["mean"],
+        "variant_mean": None if observed is None else observed["mean"],
+        "delta": None if baseline is None or observed is None else round(observed["mean"] - baseline["mean"], 6),
+        "pass_rule": "baseline and variant metric reported",
+        "reject_rule": "metric missing",
+    }
+
+
+def _skipped_gate(gate_id: str, label: str, reason: str) -> dict[str, Any]:
+    return {
+        "id": gate_id,
+        "label": label,
+        "status": "skipped",
+        "reason": reason,
+    }
+
+
+def _cv_gate(aggregates: dict[str, dict[str, Any]], n_seeds: int) -> dict[str, Any]:
+    if n_seeds < 2:
+        return {
+            "id": "cross_seed_cv",
+            "label": "Cross-seed CV on probe metrics",
+            "status": "informational",
+            "max_cv": None,
+            "pass_rule": "max CV <= 0.20",
+            "reject_rule": "max CV > 0.30",
+            "reason": "requires at least two seeds",
+        }
+    cv_values = [
+        stat["cv"]
+        for stat in aggregates.values()
+        if stat.get("n", 0) >= 2 and stat.get("cv") is not None and stat["variant"] != "batch_shared"
+    ]
+    if not cv_values:
+        return {
+            "id": "cross_seed_cv",
+            "label": "Cross-seed CV on probe metrics",
+            "status": "missing",
+            "max_cv": None,
+            "pass_rule": "max CV <= 0.20",
+            "reject_rule": "max CV > 0.30",
+            "reason": "no replicated probe metrics available",
+        }
+
+    max_cv = max(cv_values)
+    if max_cv <= 0.20:
+        status = "pass"
+    elif max_cv > 0.30:
+        status = "reject"
+    else:
+        status = "review"
+    return {
+        "id": "cross_seed_cv",
+        "label": "Cross-seed CV on probe metrics",
+        "status": status,
+        "max_cv": round(float(max_cv), 6),
+        "pass_rule": "max CV <= 0.20",
+        "reject_rule": "max CV > 0.30",
+    }
+
+
+def build_recommendation(rows: list[dict[str, Any]], cfg: Config) -> dict[str, Any]:
+    aggregates = _aggregate_probe_metrics(rows)
+    seeds_observed = sorted({int(r["seed"]) for r in rows})
+    gates: list[dict[str, Any]] = [
+        {
+            "id": "seed_count",
+            "label": "Minimum seed count",
+            "status": "pass" if len(seeds_observed) >= MIN_PROMOTION_SEEDS else "informational",
+            "observed": len(seeds_observed),
+            "required": MIN_PROMOTION_SEEDS,
+        },
+        _compare_gate(
+            aggregates,
+            gate_id="donor_private_retention",
+            label="Donor accuracy on z_private improves",
+            variant="donor_private",
+            target="donor",
+            latent="private",
+            direction="increase",
+            pass_delta=0.10,
+            reject_delta=0.02,
+        ),
+        _compare_gate(
+            aggregates,
+            gate_id="donor_shared_erasure",
+            label="Donor accuracy on z_shared decreases",
+            variant="donor_shared",
+            target="donor",
+            latent="shared",
+            direction="decrease",
+            pass_delta=-0.10,
+            reject_delta=0.0,
+        ),
+        _compare_gate(
+            aggregates,
+            gate_id="full_bio_donor_private_retention",
+            label="full_bio preserves donor signal in z_private",
+            variant="full_bio",
+            target="donor",
+            latent="private",
+            direction="increase",
+            pass_delta=0.10,
+            reject_delta=0.02,
+        ),
+        _compare_gate(
+            aggregates,
+            gate_id="full_bio_donor_shared_erasure",
+            label="full_bio removes donor signal from z_shared",
+            variant="full_bio",
+            target="donor",
+            latent="shared",
+            direction="decrease",
+            pass_delta=-0.10,
+            reject_delta=0.0,
+        ),
+        _reported_gate(
+            aggregates,
+            gate_id="condition_shared_reported",
+            label="Condition probe on z_shared is reported",
+            variant="full_bio",
+            target="condition",
+            latent="shared",
+        ),
+        _compare_gate(
+            aggregates,
+            gate_id="full_bio_cell_type_preservation",
+            label="full_bio preserves cell-type signal in z_shared",
+            variant="full_bio",
+            target="cell_type",
+            latent="shared",
+            direction="preserve",
+            pass_delta=-0.03,
+            reject_delta=-0.05,
+        ),
+    ]
+
+    if cfg.batch_key is None:
+        gates.append(
+            _skipped_gate(
+                "batch_shared_erasure",
+                "Batch accuracy on z_shared decreases",
+                "no real batch_key was provided",
+            )
+        )
+    else:
+        gates.extend(
+            [
+                _compare_gate(
+                    aggregates,
+                    gate_id="batch_shared_erasure",
+                    label="Batch accuracy on z_shared decreases",
+                    variant="batch_shared",
+                    target="batch",
+                    latent="shared",
+                    direction="decrease",
+                    pass_delta=-0.10,
+                    reject_delta=0.0,
+                ),
+                _compare_gate(
+                    aggregates,
+                    gate_id="full_bio_batch_shared_erasure",
+                    label="full_bio removes batch signal from z_shared",
+                    variant="full_bio",
+                    target="batch",
+                    latent="shared",
+                    direction="decrease",
+                    pass_delta=-0.10,
+                    reject_delta=0.0,
+                ),
+            ]
+        )
+    gates.append(_cv_gate(aggregates, len(seeds_observed)))
+
+    hard_rejects = [g for g in gates if g["status"] == "reject"]
+    undecided = [g for g in gates if g["status"] in {"missing", "review", "informational"}]
+    if hard_rejects:
+        verdict = "reject"
+        reason = "One or more F4 probe gates failed."
+    elif undecided:
+        verdict = "informational"
+        reason = "Probe gates ran, but promotion requires more seeds or manual review."
+    else:
+        verdict = "pass"
+        reason = "All available F4 probe gates passed."
+
+    passing_heads = []
+    if next(g for g in gates if g["id"] == "donor_private_retention")["status"] == "pass":
+        passing_heads.append("donor_private")
+    if next(g for g in gates if g["id"] == "donor_shared_erasure")["status"] == "pass":
+        passing_heads.append("donor_shared")
+    batch_gate = next(g for g in gates if g["id"] == "batch_shared_erasure")
+    if batch_gate["status"] == "pass":
+        passing_heads.append("batch_shared")
+
+    full_bio_gate_ids = {
+        "full_bio_donor_private_retention",
+        "full_bio_donor_shared_erasure",
+        "condition_shared_reported",
+        "full_bio_cell_type_preservation",
+    }
+    if cfg.batch_key is not None:
+        full_bio_gate_ids.add("full_bio_batch_shared_erasure")
+    full_bio_pass = all(g["status"] == "pass" for g in gates if g["id"] in full_bio_gate_ids)
+
+    if verdict == "pass" and full_bio_pass:
+        promotion = "probe gates support full_bio; verify reconstruction and integration gates before preset promotion"
+    elif verdict == "pass" and passing_heads:
+        promotion = f"probe gates support passing opt-in heads: {', '.join(passing_heads)}"
+    elif passing_heads and not hard_rejects:
+        promotion = f"candidate passing heads pending full gates: {', '.join(passing_heads)}"
+    else:
+        promotion = "keep F4 heads opt-in; do not promote presets"
+
+    return {
+        "run_id": cfg.run_id,
+        "feature_id": "F4",
+        "verdict": verdict,
+        "reason": reason,
+        "promotion": promotion,
+        "primary_metric": PRIMARY_METRIC,
+        "seeds_observed": seeds_observed,
+        "gates": gates,
+        "aggregates": list(aggregates.values()),
+        "limitations": [
+            "This script evaluates held-out classifier probes only.",
+            "Reconstruction loss and iLISI/kBET gates must be checked by the broader Kang audit lane before preset promotion.",
+        ],
+        "config": asdict(cfg),
+    }
+
+
+def _format_gate_line(gate: dict[str, Any]) -> str:
+    status = gate["status"]
+    label = gate["label"]
+    delta = gate.get("delta")
+    if delta is None:
+        detail = gate.get("reason", "")
+    else:
+        detail = f"delta={delta:+.3f}, baseline={gate['baseline_mean']}, variant={gate['variant_mean']}"
+    return f"- `{status}` {label}: {detail}".rstrip()
+
+
 def write_artifacts(rows: list[dict[str, Any]], cfg: Config) -> None:
     AUDIT_DIR.mkdir(parents=True, exist_ok=True)
     fieldnames = list(rows[0].keys())
@@ -289,16 +685,11 @@ def write_artifacts(rows: list[dict[str, Any]], cfg: Config) -> None:
         writer.writerows(rows)
 
     df_rows = [r for r in rows if r["balanced_accuracy"] is not None]
-    status = "informational"
-    recommendation = {
-        "run_id": cfg.run_id,
-        "feature_id": "F4",
-        "verdict": status,
-        "reason": "Probe harness produced metrics; promotion still requires the roadmap 3-seed matrix.",
-        "config": asdict(cfg),
-    }
+    recommendation = build_recommendation(rows, cfg)
+    status = recommendation["verdict"]
     RECOMMENDATION_JSON.write_text(json.dumps(recommendation, indent=2) + "\n", encoding="utf-8")
 
+    gate_lines = [_format_gate_line(g) for g in recommendation["gates"]]
     SUMMARY_MD.write_text(
         "\n".join(
             [
@@ -306,6 +697,7 @@ def write_artifacts(rows: list[dict[str, Any]], cfg: Config) -> None:
                 "",
                 f"Run ID: `{cfg.run_id}`",
                 f"Verdict: **{status}**",
+                f"Recommendation: {recommendation['promotion']}",
                 "",
                 "## Scope",
                 "",
@@ -319,6 +711,15 @@ def write_artifacts(rows: list[dict[str, Any]], cfg: Config) -> None:
                 f"- Metrics rows: `{METRICS_CSV.relative_to(ROOT)}`",
                 f"- Non-skipped probe rows: `{len(df_rows)}`",
                 "",
+                "## Probe Gates",
+                "",
+                *gate_lines,
+                "",
+                "## Limitations",
+                "",
+                "- Reconstruction loss and iLISI/kBET gates are not computed by this probe script.",
+                "- Preset promotion still requires those broader Kang audit metrics in addition to these probes.",
+                "",
             ]
         ),
         encoding="utf-8",
@@ -328,11 +729,10 @@ def write_artifacts(rows: list[dict[str, Any]], cfg: Config) -> None:
 def main() -> None:
     cfg = parse_args()
     rows: list[dict[str, Any]] = []
-    variants = ["baseline", "donor_private", "donor_shared", "batch_shared", "full_bio"]
     for seed in cfg.seeds:
         adata = load_kang_subset(cfg, seed)
         prepared, group_indices_list = prepare_model_input(adata, cfg)
-        for variant in variants:
+        for variant in VARIANTS:
             print(f"seed={seed} variant={variant}")
             latents, wall_time, note = train_variant(cfg, prepared, group_indices_list, variant)
             rows.extend(probe_rows(cfg, prepared, latents, variant, seed, wall_time, note))

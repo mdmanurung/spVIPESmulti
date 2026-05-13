@@ -16,7 +16,9 @@ on a per-weight kwarg means "use the preset's value"; a numeric value
 (including ``0.0``) overrides the preset for that component.
 
 The package currently includes group/label components, optional batch and donor
-covariate components, and optional prototype InfoNCE.
+covariate components, and optional prototype InfoNCE. The F4 bio presets are
+retained for reproducibility, but current audit evidence does not support
+promoting them as generally useful defaults.
 """
 
 DISENTANGLE_PRESETS: dict[str, dict[str, float]] = {
