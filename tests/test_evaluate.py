@@ -180,6 +180,14 @@ class TestEvaluateLabelHandling:
         out = _ModelClass.evaluate(model, adata=adata, z_shared_key="X_spvm_shared", label_key="nonexistent_col", k=3)
         assert any("nonexistent_col" in w and "not found" in w for w in out["warnings"])
 
+    def test_missing_label_key_sets_label_metrics_nan(self):
+        adata = _make_adata()
+        model = _make_model(adata)
+        out = _ModelClass.evaluate(model, adata=adata, z_shared_key="X_spvm_shared", label_key="nonexistent_col", k=3)
+        row = out["metrics"][out["metrics"]["latent"] == "z_shared"].iloc[0]
+        for col in ("clisi", "knn_purity", "leiden_ari"):
+            assert np.isnan(row[col]), f"{col} should be nan without a valid label_key"
+
     def test_no_label_key_no_warning(self):
         adata = _make_adata()
         model = _make_model(adata)
@@ -187,6 +195,14 @@ class TestEvaluateLabelHandling:
         # Without label_key, no label-specific warning should be emitted.
         label_warnings = [w for w in out["warnings"] if "label_key" in w and "not found" in w]
         assert len(label_warnings) == 0
+
+    def test_no_label_key_sets_label_metrics_nan(self):
+        adata = _make_adata()
+        model = _make_model(adata)
+        out = _ModelClass.evaluate(model, adata=adata, z_shared_key="X_spvm_shared", k=3)
+        row = out["metrics"][out["metrics"]["latent"] == "z_shared"].iloc[0]
+        for col in ("clisi", "knn_purity", "leiden_ari"):
+            assert np.isnan(row[col]), f"{col} should be nan without label_key"
 
 
 class TestEvaluatePrivateLatents:

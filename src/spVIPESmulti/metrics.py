@@ -88,6 +88,17 @@ def _neighbor_label_counts(labels: np.ndarray, neighbor_idx: np.ndarray) -> tupl
     return counts, codes
 
 
+def _effective_k(rep: np.ndarray, k: int) -> int:
+    """Return a valid neighbourhood size for ``rep``."""
+    k = int(k)
+    if k < 1:
+        raise ValueError(f"k must be >= 1, got {k}.")
+    n_obs = int(np.asarray(rep).shape[0])
+    if n_obs < 2:
+        raise ValueError("At least 2 observations are required to compute nearest-neighbour metrics.")
+    return min(k, n_obs - 1)
+
+
 def hsic_rbf(
     z_shared: np.ndarray,
     z_private: np.ndarray,
@@ -228,7 +239,8 @@ def ilisi(rep: np.ndarray, groups: np.ndarray, k: int = 30) -> float:
     from sklearn.neighbors import NearestNeighbors
 
     groups = np.asarray(groups)
-    nn = NearestNeighbors(n_neighbors=k + 1).fit(rep)
+    k_eff = _effective_k(rep, k)
+    nn = NearestNeighbors(n_neighbors=k_eff + 1).fit(rep)
     _, idx = nn.kneighbors(rep)
     idx = idx[:, 1:]
     counts, _ = _neighbor_label_counts(groups, idx)
@@ -292,6 +304,7 @@ def kbet(rep: np.ndarray, groups: np.ndarray, k: int = 20) -> float:
     from sklearn.neighbors import NearestNeighbors
 
     groups = np.asarray(groups)
+    k_eff = _effective_k(rep, k)
     _, group_codes = np.unique(groups, return_inverse=True)
     n_groups = int(group_codes.max()) + 1 if group_codes.size else 0
     dof = n_groups - 1
@@ -299,7 +312,7 @@ def kbet(rep: np.ndarray, groups: np.ndarray, k: int = 20) -> float:
         return float("nan")  # only one group — metric undefined
     critical = _chi2.ppf(0.95, df=dof)
 
-    nn = NearestNeighbors(n_neighbors=k + 1).fit(rep)
+    nn = NearestNeighbors(n_neighbors=k_eff + 1).fit(rep)
     _, idx = nn.kneighbors(rep)
     idx = idx[:, 1:]
     counts, _ = _neighbor_label_counts(groups, idx)
@@ -331,7 +344,8 @@ def knn_purity(rep: np.ndarray, labels: np.ndarray, k: int = 20) -> float:
     from sklearn.neighbors import NearestNeighbors
 
     labels = np.asarray(labels)
-    nn = NearestNeighbors(n_neighbors=k + 1).fit(rep)
+    k_eff = _effective_k(rep, k)
+    nn = NearestNeighbors(n_neighbors=k_eff + 1).fit(rep)
     _, idx = nn.kneighbors(rep)
     idx = idx[:, 1:]
     return float(np.mean([(labels[idx[i]] == labels[i]).mean() for i in range(len(labels))]))

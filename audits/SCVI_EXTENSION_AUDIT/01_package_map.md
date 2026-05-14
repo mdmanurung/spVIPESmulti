@@ -21,7 +21,7 @@
 
 - `pyproject.toml`: Hatchling build backend, package `spVIPESmulti`, version
   `1.0.0`, Python `>=3.10`.
-- Main dependencies: `anndata>=0.10`, `scvi-tools>=1.0,<2`, `torch`,
+- Main dependencies: `anndata>=0.10`, `scvi-tools>=1.2.2.post2,<2`, `torch`,
   `zuko>=1.0.0`, `scanpy>=1.9.1`, `pandas>=1.5.0`, `numpy>=1.21.0`.
 - Optional extras: `dev`, `enrichment`, `doc`, `test`.
 - Native source inventory: no `.pyx`, `.pxd`, `.c`, `.cpp`, `.cu`, `.h`, or

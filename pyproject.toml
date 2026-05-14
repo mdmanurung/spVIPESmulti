@@ -24,7 +24,7 @@ dependencies = [
     "anndata>=0.10",
     # for debug logging (referenced from the issue template)
     "session-info",
-    "scvi-tools>=1.0,<2",
+    "scvi-tools>=1.2.2.post2,<2",
     "torch",
     "zuko>=1.0.0",
     "scanpy>=1.9.1",

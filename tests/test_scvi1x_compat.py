@@ -250,10 +250,12 @@ class TestPyprojectToml:
         return self.PATH.read_text()
 
     def test_scvi_tools_pin_updated(self):
-        """scvi-tools must be pinned to >=1.0,<2 (not <0.21)."""
+        """scvi-tools must be pinned to the verified 1.x compatibility floor."""
         text = self._text()
-        assert "scvi-tools>=0.20" not in text, "pyproject.toml still pins scvi-tools<0.21 — must be updated to >=1.0,<2"
-        assert "scvi-tools>=1.0" in text, "pyproject.toml must pin 'scvi-tools>=1.0,<2'"
+        assert "scvi-tools>=0.20" not in text, (
+            "pyproject.toml still pins scvi-tools<0.21 — must be updated to a verified 1.x floor"
+        )
+        assert "scvi-tools>=1.2.2.post2,<2" in text, "pyproject.toml must pin 'scvi-tools>=1.2.2.post2,<2'"
 
     def test_requires_python_updated(self):
         """requires-python must not cap at <3.12."""

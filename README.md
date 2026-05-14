@@ -33,7 +33,7 @@ Current package capabilities include single-modal and multimodal AnnData prepara
 ### Requirements
 
 - Python ≥ 3.10
-- scvi-tools ≥ 1.0, < 2 (built on `lightning.pytorch`)
+- scvi-tools ≥ 1.2.2.post2, < 2 (built on `lightning.pytorch`)
 - PyTorch ≥ 2.0 (GPU strongly recommended)
 - zuko ≥ 1.0.0 (normalizing flows prior)
 

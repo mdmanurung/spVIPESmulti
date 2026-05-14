@@ -37,6 +37,12 @@ Logs are under `audits/SCVI_EXTENSION_AUDIT/logs/`.
 - Full suite after fixes:
   - `python -m pytest -p no:cacheprovider -q`: PASS, 294 passed, 3 skipped,
     185 warnings.
+- Lower-bound compatibility:
+  - Disposable environment with `scvi-tools==1.2.2.post2`:
+    `python -m pytest -p no:cacheprovider tests/test_audit_*.py -q`: PASS,
+    6 passed, 1 skipped, 1 warning.
+  - `scvi-tools==1.0.0` and `scvi-tools==1.1.6.post2` failed import under
+    current dependency resolution before spVIPESmulti code was reached.
 - Quality gates after cleanup:
   - `ruff format --check .`: PASS.
   - `ruff check .`: PASS.

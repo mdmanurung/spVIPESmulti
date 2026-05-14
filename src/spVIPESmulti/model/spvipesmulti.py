@@ -925,7 +925,8 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             Long-format network with source/target columns and optional weights.
         adata
             AnnData to score. Defaults to model-registered AnnData.
-        methods
+
+        methods : Sequence[str] or None
             Iterable of decoupler methods to run. Defaults to
             ``("ora", "gsea", "ulm")``.
         source_col
@@ -1323,7 +1324,8 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             eval_warnings.append("adata.obs['groups'] not found; using inferred integer group labels.")
 
         # ── Cell-type labels ─────────────────────────────────────────────────
-        if label_key is not None and label_key in adata.obs:
+        has_label_metrics = label_key is not None and label_key in adata.obs
+        if has_label_metrics:
             cell_labels = adata.obs[label_key].values
         else:
             if label_key is not None:
@@ -1368,6 +1370,9 @@ class spVIPESmulti(MultiGroupTrainingMixin, BaseModelClass):
             k=k,
             leiden_resolution=leiden_resolution,
         )
+        if not has_label_metrics:
+            label_metric_cols = ["clisi", "knn_purity", "leiden_ari"]
+            metrics_df.loc[metrics_df["latent"] == "z_shared", label_metric_cols] = float("nan")
 
         metadata = {
             "n_cells": int(adata.n_obs),

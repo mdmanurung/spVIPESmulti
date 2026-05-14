@@ -206,7 +206,7 @@ def resolve_group_indices_list(
             )
         group_indices_list = adata.uns["groups_obs_indices"]
 
-    if not isinstance(group_indices_list, (list, tuple)) or len(group_indices_list) == 0:
+    if not isinstance(group_indices_list, list | tuple) or len(group_indices_list) == 0:
         raise ValueError("group_indices_list must be a non-empty list of per-group index lists.")
 
     normalized: list[list[int]] = []
@@ -785,7 +785,7 @@ def score_cells_on_factor(
     if obsm_key not in adata.obsm:
         raise KeyError(f"'{obsm_key}' not found in adata.obsm. Available keys: {list(adata.obsm.keys())}")
     arr = adata.obsm[obsm_key]
-    if dim_idx >= arr.shape[1]:
+    if dim_idx < 0 or dim_idx >= arr.shape[1]:
         raise ValueError(f"dim_idx={dim_idx} is out of range for obsm '{obsm_key}' with {arr.shape[1]} dimensions.")
     if col_name is None:
         stripped = obsm_key[2:] if obsm_key.startswith("X_") else obsm_key

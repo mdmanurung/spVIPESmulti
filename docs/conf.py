@@ -6,9 +6,15 @@
 
 # -- Path setup --------------------------------------------------------------
 import sys
+import warnings
 from datetime import datetime
 from importlib.metadata import metadata
 from pathlib import Path
+
+try:
+    from sphinx.deprecation import RemovedInSphinx10Warning
+except ImportError:  # Sphinx < 9; docs metadata allows sphinx>=4.
+    RemovedInSphinx10Warning = DeprecationWarning
 
 HERE = Path(__file__).parent
 ROOT = HERE.parent
@@ -39,6 +45,12 @@ def _ensure_torchvision_nms_schema() -> None:
 
 
 _ensure_torchvision_nms_schema()
+
+warnings.filterwarnings(
+    "ignore",
+    category=RemovedInSphinx10Warning,
+    module=r"sphinx_autodoc_typehints\._parser",
+)
 
 
 # -- Project information -----------------------------------------------------
@@ -189,6 +201,7 @@ napoleon_type_aliases = None
 # Suppress expected warnings from external dependencies and duplicates
 suppress_warnings = [
     "autodoc.import_object",
+    "autodoc.duplicate_object",
     "ref.class",  # Missing external class references (torch, scvi, etc.)
     "ref.func",  # Missing external function references
     "ref.meth",  # Missing external method references
@@ -196,6 +209,7 @@ suppress_warnings = [
     "myst.header",  # Document heading level warnings
     "misc.highlighting_failure",  # Code highlighting issues in docs
     "bibtex.key_not_found",  # Missing bibliography keys
+    "toc.not_included",  # Intentional scratch/data notebooks are excluded from navigation
 ]
 
 

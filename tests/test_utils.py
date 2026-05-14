@@ -444,6 +444,10 @@ class TestScoreCellsOnFactor:
         with pytest.raises(ValueError, match="out of range"):
             utils.score_cells_on_factor(adata, dim_idx=999, obsm_key="X_spVIPESmulti_shared")
 
+    def test_negative_dim_raises(self, adata):
+        with pytest.raises(ValueError, match="out of range"):
+            utils.score_cells_on_factor(adata, dim_idx=-1, obsm_key="X_spVIPESmulti_shared")
+
 
 # ===========================================================================
 # metrics (pure numpy, no scvi dependency)
@@ -542,6 +546,15 @@ class TestIlisi:
         groups = np.array(["only"] * 10)
         assert metrics.ilisi(z, groups, k=2) == pytest.approx(1.0)
 
+    def test_k_larger_than_dataset_is_clamped(self, rng):
+        z = rng.standard_normal((5, 3))
+        groups = np.array(["g0", "g1", "g0", "g1", "g0"])
+
+        score = metrics.ilisi(z, groups, k=30)
+
+        assert isinstance(score, float)
+        assert np.isfinite(score)
+
 
 class TestClisi:
     def test_is_alias_of_ilisi(self, z_shared_mixed, labels_clustered):
@@ -588,6 +601,15 @@ class TestKbet:
         groups = np.array(["only"] * 12)
         assert np.isnan(metrics.kbet(z, groups, k=3))
 
+    def test_k_larger_than_dataset_is_clamped(self, rng):
+        z = rng.standard_normal((5, 3))
+        groups = np.array(["g0", "g1", "g0", "g1", "g0"])
+
+        score = metrics.kbet(z, groups, k=20)
+
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+
 
 class TestKnnPurity:
     def test_returns_float(self, z_shared_mixed, labels_clustered):
@@ -611,6 +633,15 @@ class TestKnnPurity:
         labels = np.repeat(["A", "B", "C", "D"], 50)
         score = metrics.knn_purity(z, labels, k=5)
         assert score == pytest.approx(1.0)
+
+    def test_k_larger_than_dataset_is_clamped(self, rng):
+        z = rng.standard_normal((5, 3))
+        labels = np.array(["A", "B", "A", "B", "A"])
+
+        score = metrics.knn_purity(z, labels, k=20)
+
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
 
 
 class TestPerGroupSilhouette:

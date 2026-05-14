@@ -84,6 +84,7 @@ latents = model.get_latent_representation(batch_size=512)
     model.spvipesmulti.spVIPESmulti
 
 .. autoclass:: spVIPESmulti.model.spvipesmulti.spVIPESmulti
+    :no-index:
     :members:
     :undoc-members:
     :show-inheritance:
@@ -457,6 +458,7 @@ for spVIPESmulti. At least 2 groups are required.
     data.prepare_adatas.prepare_adatas
 
 .. autofunction:: spVIPESmulti.data.prepare_adatas.prepare_adatas
+    :no-index:
 ```
 
 ______________________________________________________________________
@@ -518,6 +520,7 @@ model.train(group_indices_list=group_indices_list, max_epochs=100, batch_size=51
     data.prepare_adatas.prepare_multimodal_adatas
 
 .. autofunction:: spVIPESmulti.data.prepare_adatas.prepare_multimodal_adatas
+    :no-index:
 ```
 
 ______________________________________________________________________
@@ -620,6 +623,7 @@ parameters. Access via `model.module` after construction.
     module.spVIPESmultimodule.spVIPESmultimodule
 
 .. autoclass:: spVIPESmulti.module.spVIPESmultimodule.spVIPESmultimodule
+    :no-index:
     :members:
     :undoc-members:
     :show-inheritance:
@@ -655,6 +659,7 @@ over a latent space. Outputs shared and private latent statistics.
     nn.networks.Encoder
 
 .. autoclass:: spVIPESmulti.nn.networks.Encoder
+    :no-index:
     :members:
     :undoc-members:
     :show-inheritance:
@@ -674,6 +679,7 @@ reconstructions via a learned mixing weight `px_mixing`.
     nn.networks.LinearDecoderSPVIPE
 
 .. autoclass:: spVIPESmulti.nn.networks.LinearDecoderSPVIPE
+    :no-index:
     :members:
     :undoc-members:
     :show-inheritance:
@@ -1213,7 +1219,9 @@ fig = spVIPESmulti.pl.differential_vars_heatmap(traversal)
     traversal.calculate_differential_vars
 
 .. autofunction:: spVIPESmulti.traversal.traverse_latent
+    :no-index:
 .. autofunction:: spVIPESmulti.traversal.calculate_differential_vars
+    :no-index:
 ```
 
 ______________________________________________________________________
@@ -1288,6 +1296,7 @@ registration, data retrieval, and state validation for a registered AnnData.
     data._manager.AnnDataManager
 
 .. autoclass:: spVIPESmulti.data._manager.AnnDataManager
+    :no-index:
     :members:
     :undoc-members:
     :show-inheritance:
@@ -1307,6 +1316,7 @@ groups to match the largest group size within each epoch.
     dataloaders._concat_dataloader.ConcatDataLoader
 
 .. autoclass:: spVIPESmulti.dataloaders._concat_dataloader.ConcatDataLoader
+    :no-index:
     :members:
     :undoc-members:
     :show-inheritance:
@@ -1325,6 +1335,7 @@ Single-group DataLoader wrapping an `AnnDataManager`.
     dataloaders._ann_dataloader.AnnDataLoader
 
 .. autoclass:: spVIPESmulti.dataloaders._ann_dataloader.AnnDataLoader
+    :no-index:
     :members:
     :undoc-members:
     :show-inheritance:

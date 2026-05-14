@@ -75,10 +75,11 @@ fixes are now implemented and guarded by passing regression tests for the
 
 ## Compatibility Window
 
-- Proposed fixes should remain compatible with scvi-tools `>=1.0,<2` unless
-  the posterior-manager fix relies on APIs introduced after 1.0. Verify against
-  the lower bound before release.
-- Current audit evidence is checked only against scvi-tools 1.4.2.
+- Release metadata now declares scvi-tools `>=1.2.2.post2,<2`.
+- scvi-tools 1.0.0 and 1.1.6.post2 failed import in disposable lower-bound
+  environments under current dependency resolution before spVIPESmulti code was
+  reached.
+- The audit regression slice passes against scvi-tools 1.2.2.post2 and 1.4.2.
 
 ## Not Audited
 
@@ -95,6 +96,8 @@ fixes are now implemented and guarded by passing regression tests for the
   tests, not `xfail` placeholders.
 - Audit test slice passes: 6 passed, 1 skipped, 1 warning.
 - Full pytest passes: 294 passed, 3 skipped, 185 warnings.
+- Lower-bound audit slice passes on scvi-tools 1.2.2.post2: 6 passed,
+  1 skipped, 1 warning.
 - Quality gates now pass: ruff, mypy, mdformat on tracked Markdown,
   markdownlint on tracked Markdown, Sphinx, build, and pytest.
 
