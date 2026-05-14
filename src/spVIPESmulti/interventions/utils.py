@@ -37,11 +37,18 @@ def _prepare_adata(model: Any, adata: Any | None):
     return model._validate_anndata(adata) if hasattr(model, "_validate_anndata") else adata
 
 
+def _adata_manager_for(model: Any, adata: Any):
+    if hasattr(model, "get_anndata_manager"):
+        return model.get_anndata_manager(adata, required=True)
+    return model.adata_manager
+
+
 @torch.no_grad()
 def _collect_encoded(model: Any, adata: Any | None = None, batch_size: int | None = None) -> dict[str, Any]:
     """Collect deterministic posterior means/scales in group-local order."""
     _ensure_single_modal(model)
     adata = _prepare_adata(model, adata)
+    adata_manager = _adata_manager_for(model, adata)
     group_indices_list, inferred = resolve_group_indices_list(adata, None)
     if inferred and hasattr(model, "_warn_group_indices_auto_inferred"):
         model._warn_group_indices_auto_inferred("encode_cells")
@@ -51,7 +58,7 @@ def _collect_encoded(model: Any, adata: Any | None = None, batch_size: int | Non
         batch_size = settings.batch_size
 
     dl = ConcatDataLoader(
-        model.adata_manager,
+        adata_manager,
         indices_list=[list(map(int, idxs)) for idxs in group_indices_list],
         shuffle=False,
         batch_size=batch_size,
@@ -178,7 +185,7 @@ def _batch_from_adata(
     global_idx = _cells_to_global_indices(adata, cells)
     if global_idx is None:
         return np.zeros((n_cells, 1), dtype=np.int64)
-    batch = model.adata_manager.get_from_registry(REGISTRY_KEYS.BATCH_KEY)
+    batch = _adata_manager_for(model, adata).get_from_registry(REGISTRY_KEYS.BATCH_KEY)
     return np.asarray(batch)[global_idx].reshape(-1, 1).astype(np.int64, copy=False)
 
 

@@ -533,9 +533,15 @@ def integration_report(
                 rng = np.random.default_rng(0)
                 n_sub = min(2000, n_g)
                 pick = rng.choice(n_g, size=n_sub, replace=False)
-                from sklearn.metrics import silhouette_score
+                sampled_labels = ct_labels[pick]
+                n_sampled_labels = len(np.unique(sampled_labels))
 
-                sil = float(silhouette_score(z_priv[pick], ct_labels[pick]))
+                if 2 <= n_sampled_labels < n_sub:
+                    from sklearn.metrics import silhouette_score
+
+                    sil = float(silhouette_score(z_priv[pick], sampled_labels))
+                else:
+                    sil = float("nan")
             else:
                 sil = float("nan")
             rows.append(

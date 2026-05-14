@@ -32,6 +32,7 @@ def _load(name: str):
 
 utils = _load("utils")
 metrics = _load("metrics")
+pl = _load("pl")
 
 
 # ---------------------------------------------------------------------------
@@ -711,6 +712,20 @@ class TestIntegrationReport:
         # silhouette should be non-nan for private rows
         assert not private_rows["silhouette"].isna().all()
 
+    def test_private_silhouette_tiny_all_unique_labels_returns_nan(self, rng):
+        z = rng.standard_normal((4, 8)).astype(np.float32)
+        groups = np.array(["g0", "g0", "g1", "g1"])
+        labels = np.array(["A", "B", "C", "D"])
+        z_priv = {
+            "g0": rng.standard_normal((2, 4)).astype(np.float32),
+            "g1": rng.standard_normal((2, 4)).astype(np.float32),
+        }
+
+        df = metrics.integration_report(z, groups, labels, z_private_dict=z_priv, k=1)
+
+        private_rows = df[df["latent"].str.startswith("z_private")]
+        assert private_rows["silhouette"].isna().all()
+
     def test_metric_ranges(self, rng):
         z = rng.standard_normal((200, 8)).astype(np.float32)
         groups = np.array(["g0"] * 100 + ["g1"] * 100)
@@ -722,3 +737,31 @@ class TestIntegrationReport:
         assert 0.0 <= row["knn_purity"] <= 1.0
         # leiden_ari is nan when igraph is not installed — that is acceptable
         assert np.isnan(row["leiden_ari"]) or -1.0 <= row["leiden_ari"] <= 1.0
+
+
+class TestPlotLatentDimensionStats:
+    def test_accepts_is_collapsed_column(self):
+        stats = pd.DataFrame(
+            {
+                "dim": [0, 1, 2],
+                "std": [0.2, 0.01, 0.3],
+                "is_collapsed": [False, True, False],
+            }
+        )
+
+        fig = pl.plot_latent_dimension_stats(stats)
+
+        assert fig.axes
+
+    def test_accepts_legacy_is_vanished_column(self):
+        stats = pd.DataFrame(
+            {
+                "dim": [0, 1],
+                "std": [0.2, 0.01],
+                "is_vanished": [False, True],
+            }
+        )
+
+        fig = pl.plot_latent_dimension_stats(stats)
+
+        assert fig.axes

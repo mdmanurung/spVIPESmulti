@@ -896,14 +896,14 @@ def plot_latent_dimension_stats(
     highlight_vanished: bool = True,
     figsize: tuple[float, float] | None = None,
 ) -> plt.Figure:
-    """Barplot of per-dimension standard deviation, flagging vanished dims.
+    """Barplot of per-dimension standard deviation, flagging collapsed dims.
 
     Parameters
     ----------
     dim_stats_df:
         Output of :func:`~spVIPESmulti.metrics.latent_dimension_stats`.
     highlight_vanished:
-        If ``True``, bars for vanished dimensions are colored red.
+        If ``True``, bars for collapsed/vanished dimensions are colored red.
     figsize:
         Figure size. Defaults to auto-scaled by number of dimensions.
 
@@ -923,16 +923,26 @@ def plot_latent_dimension_stats(
         figsize = (max(6, 0.35 * n_dims), 3.5)
 
     fig, ax = plt.subplots(figsize=figsize)
-    colors = ["firebrick" if (highlight_vanished and v) else "steelblue" for v in dim_stats_df["is_vanished"]]
+    if "is_collapsed" in dim_stats_df:
+        flag_col = "is_collapsed"
+        flag_label = "collapsed threshold"
+    elif "is_vanished" in dim_stats_df:
+        flag_col = "is_vanished"
+        flag_label = "vanished threshold"
+    else:
+        raise KeyError("dim_stats_df must contain either 'is_collapsed' or 'is_vanished'.")
+
+    flagged = dim_stats_df[flag_col].astype(bool)
+    colors = ["firebrick" if (highlight_vanished and v) else "steelblue" for v in flagged]
     ax.bar(dim_stats_df["dim"], dim_stats_df["std"], color=colors, width=0.7)
-    if highlight_vanished and dim_stats_df["is_vanished"].any():
+    if highlight_vanished and flagged.any():
         ax.axhline(
-            y=dim_stats_df["std"][dim_stats_df["is_vanished"]].max(),
+            y=dim_stats_df.loc[flagged, "std"].max(),
             color="firebrick",
             linestyle="--",
             linewidth=1,
             alpha=0.7,
-            label="vanished threshold",
+            label=flag_label,
         )
         ax.legend(fontsize=8)
 
